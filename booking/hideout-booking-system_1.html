@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Hideout — Table Booking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1b1815;
+  --surface:#242019;
+  --surface-2:#2d2822;
+  --surface-3:#37312a;
+  --border:#40392f;
+  --text:#f2ece1;
+  --text-dim:#a89a86;
+  --text-faint:#75695a;
+  --accent:#c1793f;
+  --accent-soft:#3a2c1c;
+  --confirmed:#8ea883;
+  --confirmed-soft:#26301f;
+  --pending:#d9a441;
+  --pending-soft:#332c17;
+  --danger:#c1583f;
+  --danger-soft:#331f19;
+  --clean:#8ba0c1;
+  --clean-soft:#1f2733;
+  --blocked:#5c534a;
+  --radius:10px;
+  --radius-sm:6px;
+  --shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+.app{max-width:1280px;margin:0 auto;padding:20px 24px 80px;}
+
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap;}
+.brand{display:flex;align-items:baseline;gap:12px;}
+.brand h1{font-family:'Fraunces',serif;font-weight:600;font-size:26px;margin:0;letter-spacing:.2px;}
+.brand .tag{font-size:12px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.14em;}
+.store-switch{display:flex;gap:6px;background:var(--surface);padding:4px;border-radius:999px;border:1px solid var(--border);}
+.store-switch button{border:none;background:transparent;color:var(--text-dim);padding:8px 16px;border-radius:999px;font-family:inherit;font-size:13px;cursor:pointer;transition:.15s;font-weight:500;}
+.store-switch button.active{background:var(--accent);color:#1b1509;}
+.store-switch button:not(.active):hover{color:var(--text);}
+
+nav.tabs{display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--border);}
+nav.tabs button{background:none;border:none;color:var(--text-faint);font-family:inherit;font-size:14px;font-weight:500;padding:10px 4px;margin-right:22px;cursor:pointer;position:relative;top:1px;border-bottom:2px solid transparent;transition:.15s;}
+nav.tabs button:hover{color:var(--text-dim);}
+nav.tabs button.active{color:var(--text);border-bottom-color:var(--accent);}
+
+.view{display:none;}
+.view.active{display:block;animation:fade .18s ease;}
+@keyframes fade{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:translateY(0);}}
+
+.grid{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;}
+.panel h2{font-family:'Fraunces',serif;font-weight:500;font-size:17px;margin:0 0 14px;}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.spacer{flex:1;}
+label.field{display:block;font-size:12px;color:var(--text-faint);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em;}
+input,select,textarea{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:var(--radius-sm);font-family:inherit;font-size:13.5px;outline:none;transition:.12s;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+.field-group{margin-bottom:12px;}
+button.btn{background:var(--accent);color:#1b1509;border:none;padding:10px 16px;border-radius:var(--radius-sm);font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;transition:.12s;}
+button.btn:hover{filter:brightness(1.08);}
+button.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim);font-weight:500;}
+button.btn.ghost:hover{border-color:var(--accent);color:var(--text);}
+button.btn.danger{background:var(--danger-soft);color:#e8a394;}
+button.btn.small{padding:6px 11px;font-size:12.5px;}
+button.icon-btn{background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim);width:30px;height:30px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px;line-height:1;}
+button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
+
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:600;letter-spacing:.02em;}
+.badge.confirmed{background:var(--confirmed-soft);color:var(--confirmed);}
+.badge.pending{background:var(--pending-soft);color:var(--pending);}
+.badge.cancelled{background:var(--danger-soft);color:#c98d80;}
+.badge.seated{background:var(--accent-soft);color:var(--accent);}
+.badge.completed{background:var(--surface-3);color:var(--text-faint);}
+.badge.needs_cleaning{background:var(--clean-soft);color:var(--clean);}
+.badge.noshow{background:var(--danger-soft);color:#c98d80;}
+
+.editor-toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.floor-canvas-wrap{background:linear-gradient(var(--surface-2) 1px, transparent 1px),linear-gradient(90deg, var(--surface-2) 1px, transparent 1px);background-size:24px 24px;background-color:var(--surface);border:1px solid var(--border);border-radius:var(--radius);position:relative;height:560px;overflow:hidden;}
+.table-el{position:absolute;background:var(--surface-3);border:1.5px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:grab;user-select:none;color:var(--text);font-size:12px;font-weight:600;transition:box-shadow .12s, border-color .12s;}
+.table-el:active{cursor:grabbing;}
+.table-el.circle{border-radius:50%;}
+.table-el.rect{border-radius:8px;}
+.table-el.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+.table-el .seats{font-size:10px;color:var(--text-faint);font-weight:500;}
+.table-el .type-dot{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;}
+.table-el.status-confirmed{border-color:var(--confirmed);}
+.table-el.status-pending{border-color:var(--pending);}
+.table-el.status-seated{background:var(--accent-soft);border-color:var(--accent);}
+.table-el.status-needs_cleaning{background:var(--clean-soft);border-color:var(--clean);}
+.table-el.status-blocked{background:var(--blocked);opacity:.6;border-style:dashed;}
+.table-el.status-empty{opacity:.55;}
+.resize-handle{position:absolute;bottom:-4px;right:-4px;width:12px;height:12px;background:var(--accent);border-radius:3px;cursor:nwse-resize;}
+
+.props-panel .field-group:last-child{margin-bottom:0;}
+.empty-hint{color:var(--text-faint);font-size:13px;padding:20px 4px;text-align:center;}
+
+.booking-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:.12s;}
+.booking-card:hover{border-color:var(--accent);}
+.booking-card .top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.booking-card .name{font-weight:600;font-size:14px;}
+.booking-card .meta{font-size:12.5px;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap;}
+.booking-card .meta span{display:flex;align-items:center;gap:4px;}
+.section-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-faint);margin:18px 0 8px;font-weight:600;}
+.section-label:first-child{margin-top:0;}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(10,8,6,.6);display:none;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(2px);}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;width:440px;max-width:92vw;max-height:88vh;overflow:auto;box-shadow:var(--shadow);}
+.modal h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 14px;font-weight:500;}
+.modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap;}
+
+.floor-legend{display:flex;gap:14px;margin-bottom:12px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;}
+.floor-legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;}
+
+.wl-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;}
+.wl-row .n{font-weight:600;font-size:13.5px;}
+.wl-row .sub{font-size:12px;color:var(--text-faint);}
+
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface-3);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow);z-index:99;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.mono{font-family:'JetBrains Mono',monospace;}
+.hint{font-size:12px;color:var(--text-faint);line-height:1.5;margin-top:8px;}
+.count-pill{background:var(--surface-3);color:var(--text-dim);border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;}
+.suggest-box{background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;margin-top:6px;}
+.suggest-box .opt{display:flex;justify-content:space-between;align-items:center;padding:4px 0;cursor:pointer;}
+.suggest-box .opt:hover{color:var(--accent);}
+.timeline-row{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.timeline-row:last-child{border-bottom:none;}
+.timeline-row .t{font-family:'JetBrains Mono',monospace;color:var(--text-faint);width:52px;flex-shrink:0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <h1>The Hideout</h1>
+      <span class="tag">Table Booking</span>
+    </div>
+    <div class="store-switch" id="storeSwitch"></div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-view="floorplan" class="active">Floor Plan</button>
+    <button data-view="bookings">Bookings</button>
+    <button data-view="floorview">Today's Floor</button>
+    <button data-view="waitlist">Waitlist</button>
+    <button data-view="settings">Integrations</button>
+  </nav>
+
+  <!-- FLOOR PLAN EDITOR -->
+  <section class="view active" id="view-floorplan">
+    <div class="grid">
+      <div>
+        <div class="editor-toolbar">
+          <button class="btn" id="addRect">+ Rectangular table</button>
+          <button class="btn ghost" id="addCircle">+ Round table</button>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="clearSelection">Deselect</button>
+        </div>
+        <div class="floor-canvas-wrap" id="canvas"></div>
+        <p class="hint">Drag a table to reposition it, use the bottom-right handle to resize. Click a table to edit its seats, type, and name on the right — or view its schedule for the day.</p>
+      </div>
+      <div class="panel props-panel" id="propsPanel">
+        <h2>Table properties</h2>
+        <div class="empty-hint">Select a table</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOOKINGS -->
+  <section class="view" id="view-bookings">
+    <div class="grid">
+      <div class="panel">
+        <div class="row" style="margin-bottom:14px;">
+          <h2 style="margin:0;">Bookings</h2>
+          <span class="spacer"></span>
+          <input type="date" id="bookingsDate" style="width:auto;">
+          <button class="btn" id="newBookingBtn">+ New booking</button>
+        </div>
+        <div id="bookingsList"></div>
+      </div>
+      <div class="panel">
+        <h2>Quick stats</h2>
+        <div id="quickStats" style="font-size:13.5px;color:var(--text-dim);line-height:2;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLOOR VIEW -->
+  <section class="view" id="view-floorview">
+    <div class="row" style="margin-bottom:12px;">
+      <input type="date" id="floorviewDate" style="width:auto;">
+      <span class="spacer"></span>
+      <div class="floor-legend">
+        <span><span class="dot" style="background:var(--surface-3);"></span>Available</span>
+        <span><span class="dot" style="background:var(--pending);"></span>Needs confirmation</span>
+        <span><span class="dot" style="background:var(--confirmed);"></span>Reserved</span>
+        <span><span class="dot" style="background:var(--accent);"></span>Seated</span>
+        <span><span class="dot" style="background:var(--clean);"></span>Needs cleaning</span>
+        <span><span class="dot" style="background:var(--blocked);"></span>Blocked</span>
+      </div>
+    </div>
+    <div class="floor-canvas-wrap" id="floorviewCanvas" style="height:520px;"></div>
+    <p class="hint">Click any table to see its full schedule for the selected day and take action (seat, finish, cancel).</p>
+  </section>
+
+  <!-- WAITLIST -->
+  <section class="view" id="view-waitlist">
+    <div class="grid">
+      <div class="panel">
+        <h2>Waitlist</h2>
+        <div id="waitlistList"></div>
+      </div>
+      <div class="panel">
+        <h2>Add to waitlist</h2>
+        <div class="field-group"><label class="field">Name</label><input id="wlName"></div>
+        <div class="field-group"><label class="field">Phone</label><input id="wlPhone"></div>
+        <div class="field-group"><label class="field">Party size</label><input type="number" id="wlParty" value="2" min="1"></div>
+        <div class="field-group"><label class="field">Quoted wait (auto-estimated, editable)</label><input type="number" id="wlWait" value="15" min="0"></div>
+        <button class="btn" id="wlAddBtn" style="width:100%;">Add to waitlist</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="view-settings">
+    <div class="panel" style="max-width:640px;">
+      <h2>Google integration</h2>
+      <div class="field-group">
+        <label class="field">Apps Script Web App URL</label>
+        <input id="scriptUrl" placeholder="https://script.google.com/macros/s/xxxx/exec">
+      </div>
+      <div class="field-group">
+        <label class="field">Linked account</label>
+        <input id="scriptAccount" placeholder="juannara1169@gmail.com" value="juannara1169@gmail.com">
+      </div>
+      <div class="row">
+        <button class="btn" id="saveSettingsBtn">Save settings</button>
+        <button class="btn ghost" id="syncNowBtn">Sync now</button>
+        <span id="syncStatus" style="font-size:12.5px;color:var(--text-faint);"></span>
+      </div>
+      <p class="hint">
+        Once the Apps Script backend is deployed, paste its URL here to enable automatic Gmail parsing, Google Calendar sync, and confirmation emails.
+        For now this is linked to <span class="mono">juannara1169@gmail.com</span> — when ready to switch to the company account, just redeploy the same script and swap the URL here.
+        Until connected, all data stays in this browser's local storage.
+      </p>
+      <div class="hint" style="margin-top:14px;">
+        Paste the accompanying <span class="mono">hideout-booking-backend.gs</span> file into an Apps Script project and deploy it as a Web App.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="modal-backdrop" id="bookingModalBackdrop">
+  <div class="modal">
+    <h3 id="bookingModalTitle">New booking</h3>
+    <div class="field-group"><label class="field">Name</label><input id="bkName"></div>
+    <div class="row" style="gap:10px;">
+      <div class="field-group" style="flex:1;"><label class="field">Phone</label><input id="bkPhone"></div>
+      <div class="field-group" style="flex:1;"><label class="field">Email</label><input id="bkEmail"></div>
+    </div>
+    <div class="row" style="gap:10px;">
+      <div class="field-group" style="flex:1;"><label class="field">Date</label><input type="date" id="bkDate"></div>
+      <div class="field-group" style="flex:1;"><label class="field">Time</label><input type="time" id="bkTime"></div>
+    </div>
+    <div class="row" style="gap:10px;">
+      <div class="field-group" style="flex:1;"><label class="field">Party size</label><input type="number" id="bkParty" min="1" value="2"></div>
+      <div class="field-group" style="flex:1;"><label class="field">Indoor / Outdoor</label>
+        <select id="bkIndoor"><option value="inside">Indoor</option><option value="outside">Outdoor</option></select>
+      </div>
+      <div class="field-group" style="flex:1;"><label class="field">Duration (min)</label><input type="number" id="bkDuration" min="30" step="15" value="90"></div>
+    </div>
+    <div class="field-group">
+      <label class="field">Table assignment</label>
+      <div id="bkSuggestBox" class="suggest-box" style="display:none;"></div>
+      <select id="bkTable" style="margin-top:8px;"></select>
+    </div>
+    <div class="field-group"><label class="field">Notes</label><textarea id="bkNotes" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="bkCancelBtn">Cancel</button>
+      <button class="btn" id="bkSaveBtn">Save booking</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="detailModalBackdrop">
+  <div class="modal" id="detailModal"></div>
+</div>
+
+<div class="modal-backdrop" id="scheduleModalBackdrop">
+  <div class="modal" id="scheduleModal"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============ DATA LAYER ============ */
+const STORES = [
+  {id:'valley', name:'Fortitude Valley'},
+  {id:'city', name:'Brisbane City'},
+  {id:'adelaide', name:'Adelaide Street'},
+];
+let currentStore = STORES[0].id;
+let selectedTableId = null;
+const CLEAN_BUFFER_MIN = 15; // gap required between bookings on the same table
+
+function loadAll(){
+  try { return JSON.parse(localStorage.getItem('hideout_booking_db')) || {}; }
+  catch(e){ return {}; }
+}
+function saveAll(d){ localStorage.setItem('hideout_booking_db', JSON.stringify(d)); }
+function db(){ return loadAll(); }
+function storeData(storeId){
+  const d = db();
+  if(!d[storeId]) d[storeId] = { tables: [], bookings: [], waitlist: [] };
+  d[storeId].tables.forEach(t=>{ if(t.blocked===undefined) t.blocked=false; });
+  d[storeId].bookings.forEach(b=>{ if(!b.durationMin) b.durationMin=90; });
+  return d[storeId];
+}
+function saveStoreData(storeId, data){ const d = db(); d[storeId] = data; saveAll(d); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 2400);
+}
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function timeToMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+function minToTime(m){ m=((m%1440)+1440)%1440; const h=Math.floor(m/60), mm=m%60; return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0'); }
+
+/* ============ ALGORITHM: overlap + auto table assignment ============ */
+const ACTIVE_STATUSES = ['pending','confirmed','seated'];
+
+function bookingsForTable(data, tableId, date){
+  return data.bookings.filter(b => b.tableId===tableId && b.date===date && ACTIVE_STATUSES.includes(b.status));
+}
+function hasOverlap(data, tableId, date, start, end, excludeId){
+  return bookingsForTable(data, tableId, date).some(b=>{
+    if(b.id===excludeId) return false;
+    const bs = timeToMin(b.time) - CLEAN_BUFFER_MIN;
+    const be = timeToMin(b.time) + (b.durationMin||90) + CLEAN_BUFFER_MIN;
+    return bs < end && start < be;
+  });
+}
+// Returns { type:'single', table } | { type:'combo', tables:[t1,t2] } | null
+function findBestTable(data, {party, type, date, time, durationMin, excludeId}){
+  const start = timeToMin(time);
+  const end = start + (durationMin||90);
+  const free = data.tables.filter(t => !t.blocked && !hasOverlap(data, t.id, date, start, end, excludeId));
+
+  // single-table candidates: capacity fits, minimise wasted seats, prefer matching type
+  const singles = free.filter(t => t.seats >= party)
+    .sort((a,b)=>{
+      const at = a.type===type?0:1, bt = b.type===type?0:1;
+      if(at!==bt) return at-bt;
+      return (a.seats-party) - (b.seats-party);
+    });
+  if(singles.length) return { type:'single', tables:[singles[0]] };
+
+  // combo: two free tables (same type if possible) whose combined capacity covers the party
+  const pool = free.slice().sort((a,b)=>b.seats-a.seats);
+  for(let i=0;i<pool.length;i++){
+    for(let j=i+1;j<pool.length;j++){
+      const a=pool[i], b=pool[j];
+      if(a.seats+b.seats>=party){
+        return { type:'combo', tables:[a,b] };
+      }
+    }
+  }
+  return null;
+}
+
+/* ============ STORE SWITCH & TABS ============ */
+function renderStoreSwitch(){
+  const el = document.getElementById('storeSwitch');
+  el.innerHTML = '';
+  STORES.forEach(s=>{
+    const b = document.createElement('button');
+    b.textContent = s.name;
+    b.className = s.id===currentStore ? 'active' : '';
+    b.onclick = ()=>{ currentStore = s.id; selectedTableId=null; renderStoreSwitch(); refreshCurrentView(); };
+    el.appendChild(b);
+  });
+}
+document.getElementById('tabs').addEventListener('click', e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  const view = e.target.dataset.view;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  refreshCurrentView(view);
+});
+function refreshCurrentView(view){
+  view = view || document.querySelector('nav.tabs button.active').dataset.view;
+  if(view==='floorplan') renderFloorPlan();
+  if(view==='bookings') renderBookings();
+  if(view==='floorview') renderFloorView();
+  if(view==='waitlist') renderWaitlist();
+}
+
+/* ============ FLOOR PLAN EDITOR ============ */
+const canvas = document.getElementById('canvas');
+const TYPE_COLORS = {indoor:'#c1793f', outdoor:'#8ea883', bar:'#7f9bc1'};
+const TYPE_LABEL = {indoor:'Indoor', outdoor:'Outdoor', bar:'Bar'};
+
+function renderFloorPlan(){
+  const data = storeData(currentStore);
+  canvas.innerHTML = '';
+  data.tables.forEach(t => canvas.appendChild(buildTableEl(t, data, false)));
+  renderProps();
+}
+function buildTableEl(t, data, forFloorView, statusOverride, label2){
+  const el = document.createElement('div');
+  const statusClass = statusOverride ? ' status-'+statusOverride : '';
+  el.className = 'table-el ' + t.shape + (t.id===selectedTableId && !forFloorView?' selected':'') + statusClass;
+  el.style.left = t.x+'px'; el.style.top = t.y+'px';
+  el.style.width = t.w+'px'; el.style.height = t.h+'px';
+  el.innerHTML = `<div>${t.label||'T'+t.num}</div><div class="seats">${label2 || t.seats+' seats'}</div>
+    ${forFloorView?'':`<div class="type-dot" style="background:${TYPE_COLORS[t.type]||'#888'}"></div><div class="resize-handle"></div>`}`;
+  if(!forFloorView){
+    el.onmousedown = (e)=>startDrag(e, t, el, data);
+    el.querySelector('.resize-handle').onmousedown = (e)=>{ e.stopPropagation(); startResize(e, t, el, data); };
+    el.onclick = (e)=>{ e.stopPropagation(); selectedTableId=t.id; renderFloorPlan(); };
+  } else {
+    el.style.cursor='pointer';
+    el.onclick = ()=> openTableSchedule(t.id);
+  }
+  return el;
+}
+function startDrag(e, t, el, data){
+  e.preventDefault();
+  const canvasRect = canvas.getBoundingClientRect();
+  const startX = e.clientX, startY = e.clientY, origX = t.x, origY = t.y;
+  let moved=false;
+  function onMove(ev){
+    moved=true;
+    let nx = origX + (ev.clientX-startX), ny = origY + (ev.clientY-startY);
+    nx = Math.max(0, Math.min(nx, canvasRect.width - t.w));
+    ny = Math.max(0, Math.min(ny, canvasRect.height - t.h));
+    nx = Math.round(nx/8)*8; ny = Math.round(ny/8)*8;
+    t.x=nx; t.y=ny; el.style.left=nx+'px'; el.style.top=ny+'px';
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+    if(moved) saveStoreData(currentStore, data);
+  }
+  document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+}
+function startResize(e, t, el, data){
+  e.preventDefault();
+  const startX=e.clientX, startY=e.clientY, origW=t.w, origH=t.h;
+  function onMove(ev){
+    let nw = Math.max(48, origW + (ev.clientX-startX)), nh = Math.max(48, origH + (ev.clientY-startY));
+    t.w=Math.round(nw/8)*8; t.h=Math.round(nh/8)*8;
+    el.style.width=t.w+'px'; el.style.height=t.h+'px';
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+    saveStoreData(currentStore, data); renderFloorPlan();
+  }
+  document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+}
+canvas.onclick = ()=>{ selectedTableId=null; renderProps(); document.querySelectorAll('.table-el').forEach(e=>e.classList.remove('selected')); };
+document.getElementById('clearSelection').onclick = ()=>{ selectedTableId=null; renderFloorPlan(); };
+document.getElementById('addRect').onclick = ()=> addTable('rect');
+document.getElementById('addCircle').onclick = ()=> addTable('circle');
+function addTable(shape){
+  const data = storeData(currentStore);
+  const num = data.tables.length + 1;
+  const t = { id: uid(), num, shape, x: 20, y: 20, w: shape==='circle'?80:100, h: shape==='circle'?80:70, seats: 4, type:'indoor', label:'T'+num, blocked:false };
+  data.tables.push(t);
+  saveStoreData(currentStore, data);
+  selectedTableId = t.id;
+  renderFloorPlan();
+}
+function renderProps(){
+  const panel = document.getElementById('propsPanel');
+  const data = storeData(currentStore);
+  const t = data.tables.find(x=>x.id===selectedTableId);
+  if(!t){ panel.innerHTML = '<h2>Table properties</h2><div class="empty-hint">Select a table</div>'; return; }
+  panel.innerHTML = `
+    <h2>Table properties</h2>
+    <div class="field-group"><label class="field">Name</label><input id="pLabel" value="${t.label}"></div>
+    <div class="field-group"><label class="field">Seats</label><input type="number" id="pSeats" min="1" value="${t.seats}"></div>
+    <div class="field-group"><label class="field">Type</label>
+      <select id="pType">
+        <option value="indoor" ${t.type==='indoor'?'selected':''}>Indoor</option>
+        <option value="outdoor" ${t.type==='outdoor'?'selected':''}>Outdoor</option>
+        <option value="bar" ${t.type==='bar'?'selected':''}>Bar</option>
+      </select>
+    </div>
+    <div class="field-group row" style="justify-content:space-between;">
+      <label class="field" style="margin:0;">Blocked (out of service)</label>
+      <input type="checkbox" id="pBlocked" style="width:auto;" ${t.blocked?'checked':''}>
+    </div>
+    <button class="btn ghost" id="pSchedule" style="width:100%;margin-top:6px;">View today's schedule</button>
+    <button class="btn danger" id="pDelete" style="width:100%;margin-top:8px;">Delete table</button>
+  `;
+  document.getElementById('pLabel').oninput = e=>{ t.label=e.target.value; saveStoreData(currentStore,data); renderFloorPlan(); };
+  document.getElementById('pSeats').oninput = e=>{ t.seats=parseInt(e.target.value)||1; saveStoreData(currentStore,data); renderFloorPlan(); };
+  document.getElementById('pType').onchange = e=>{ t.type=e.target.value; saveStoreData(currentStore,data); renderFloorPlan(); };
+  document.getElementById('pBlocked').onchange = e=>{ t.blocked=e.target.checked; saveStoreData(currentStore,data); renderFloorPlan(); };
+  document.getElementById('pSchedule').onclick = ()=> openTableSchedule(t.id);
+  document.getElementById('pDelete').onclick = ()=>{
+    data.tables = data.tables.filter(x=>x.id!==t.id);
+    saveStoreData(currentStore,data); selectedTableId=null; renderFloorPlan();
+    toast('Table deleted');
+  };
+}
+
+/* ============ TABLE SCHEDULE (click a table -> see its bookings) ============ */
+function openTableSchedule(tableId){
+  const data = storeData(currentStore);
+  const t = data.tables.find(x=>x.id===tableId);
+  const date = document.getElementById('floorviewDate') && document.getElementById('view-floorview').classList.contains('active')
+    ? (document.getElementById('floorviewDate').value || todayStr())
+    : todayStr();
+  const items = data.bookings.filter(b=>b.tableId===t.id && b.date===date && b.status!=='cancelled')
+    .sort((a,b)=>a.time.localeCompare(b.time));
+  const modal = document.getElementById('scheduleModal');
+  modal.innerHTML = `
+    <h3>${t.label} — Schedule</h3>
+    <div class="row" style="margin-bottom:10px;color:var(--text-dim);font-size:12.5px;">
+      ${t.seats} seats · ${TYPE_LABEL[t.type]} · ${date}
+    </div>
+    <div id="schedList">${items.length ? '' : '<div class="empty-hint">No bookings for this table on this day</div>'}</div>
+    <div class="modal-actions"><button class="btn ghost" id="schedCloseBtn">Close</button></div>
+  `;
+  const list = document.getElementById('schedList');
+  items.forEach(b=>{
+    const row = document.createElement('div');
+    row.className = 'timeline-row';
+    row.style.cursor='pointer';
+    row.innerHTML = `<span class="t">${b.time}</span><span style="flex:1;">${b.name} · ${b.party} guests</span><span class="badge ${b.status}">${statusLabel(b.status)}</span>`;
+    row.onclick = ()=>{ document.getElementById('scheduleModalBackdrop').classList.remove('open'); openBookingDetail(b.id); };
+    list.appendChild(row);
+  });
+  document.getElementById('schedCloseBtn').onclick = ()=> document.getElementById('scheduleModalBackdrop').classList.remove('open');
+  document.getElementById('scheduleModalBackdrop').classList.add('open');
+}
+
+/* ============ BOOKINGS ============ */
+let editingBookingId = null;
+document.getElementById('bookingsDate').valueAsDate = new Date();
+
+function renderBookings(){
+  const data = storeData(currentStore);
+  const date = document.getElementById('bookingsDate').value || todayStr();
+  const list = document.getElementById('bookingsList');
+  const items = data.bookings.filter(b=>b.date===date).sort((a,b)=>a.time.localeCompare(b.time));
+  list.innerHTML = '';
+  if(items.length===0){ list.innerHTML = '<div class="empty-hint">No bookings on this date</div>'; }
+  items.forEach(b=>{
+    const card = document.createElement('div');
+    card.className = 'booking-card';
+    const table = data.tables.find(t=>t.id===b.tableId);
+    const table2 = data.tables.find(t=>t.id===b.tableId2);
+    card.innerHTML = `
+      <div class="top-row">
+        <span class="name">${b.name} · ${b.party} guests</span>
+        <span class="badge ${b.status}">${statusLabel(b.status)}</span>
+      </div>
+      <div class="meta">
+        <span>🕒 ${b.time} (${b.durationMin||90}m)</span>
+        <span>${table ? table.label + (table2?' + '+table2.label:'') : 'Unassigned'}</span>
+        <span>${b.indoor==='outside'?'Outdoor':'Indoor'}</span>
+        ${b.source==='square' ? '<span>📩 Auto-received (Square)</span>' : ''}
+      </div>`;
+    card.onclick = ()=> openBookingDetail(b.id);
+    list.appendChild(card);
+  });
+  renderQuickStats(items, data);
+}
+function renderQuickStats(items, data){
+  const total = items.reduce((s,b)=>s + (b.party||0), 0);
+  const pending = items.filter(b=>b.status==='pending').length;
+  const confirmed = items.filter(b=>b.status==='confirmed').length;
+  document.getElementById('quickStats').innerHTML = `
+    Total bookings <b>${items.length}</b> · Guests <b>${total}</b><br>
+    Needs confirmation <span style="color:var(--pending)">${pending}</span> ·
+    Confirmed <span style="color:var(--confirmed)">${confirmed}</span><br>
+    Tables set up <b>${data.tables.length}</b>
+  `;
+}
+function statusLabel(s){
+  return {pending:'Needs confirmation', confirmed:'Confirmed', seated:'Seated', completed:'Completed', cancelled:'Cancelled', noshow:'No-show'}[s] || s;
+}
+document.getElementById('bookingsDate').onchange = renderBookings;
+document.getElementById('newBookingBtn').onclick = ()=> openBookingModal();
+
+function openBookingModal(booking){
+  editingBookingId = booking && booking.id ? booking.id : null;
+  document.getElementById('bookingModalTitle').textContent = editingBookingId ? 'Edit booking' : 'New booking';
+  document.getElementById('bkName').value = booking?.name || '';
+  document.getElementById('bkPhone').value = booking?.phone || '';
+  document.getElementById('bkEmail').value = booking?.email || '';
+  document.getElementById('bkDate').value = booking?.date || document.getElementById('bookingsDate').value || todayStr();
+  document.getElementById('bkTime').value = booking?.time || '18:00';
+  document.getElementById('bkParty').value = booking?.party || 2;
+  document.getElementById('bkIndoor').value = booking?.indoor || 'inside';
+  document.getElementById('bkDuration').value = booking?.durationMin || 90;
+  document.getElementById('bkNotes').value = booking?.notes || '';
+  populateTableSelect(booking);
+  document.getElementById('bookingModalBackdrop').classList.add('open');
+}
+function populateTableSelect(booking){
+  const data = storeData(currentStore);
+  const sel = document.getElementById('bkTable');
+  sel.innerHTML = '<option value="">Unassigned</option>';
+  data.tables.forEach(t=>{
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = `${t.label} · ${t.seats} seats · ${TYPE_LABEL[t.type]}${t.blocked?' (blocked)':''}`;
+    if(booking && (t.id===booking.tableId)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  runAutoAssign(booking?.tableId2);
+}
+function currentBkFields(){
+  return {
+    party: parseInt(document.getElementById('bkParty').value)||1,
+    type: document.getElementById('bkIndoor').value==='outside' ? 'outdoor' : 'indoor',
+    date: document.getElementById('bkDate').value || todayStr(),
+    time: document.getElementById('bkTime').value || '18:00',
+    durationMin: parseInt(document.getElementById('bkDuration').value)||90,
+    excludeId: editingBookingId,
+  };
+}
+let pendingComboTableId2 = null;
+function runAutoAssign(presetCombo){
+  const data = storeData(currentStore);
+  const fields = currentBkFields();
+  const result = findBestTable(data, fields);
+  const box = document.getElementById('bkSuggestBox');
+  pendingComboTableId2 = presetCombo || null;
+  if(!result){
+    box.style.display='block';
+    box.innerHTML = `<b>No table available</b> for this time & party size — try a different time or add to the waitlist.`;
+    return;
+  }
+  box.style.display='block';
+  if(result.type==='single'){
+    const t = result.tables[0];
+    box.innerHTML = `<div class="opt" id="applySuggest"><span>✓ Recommended: <b>${t.label}</b> (${t.seats} seats, ${TYPE_LABEL[t.type]})</span><span>Use</span></div>`;
+    document.getElementById('applySuggest').onclick = ()=>{
+      document.getElementById('bkTable').value = t.id;
+      pendingComboTableId2 = null;
+      toast('Table assigned: '+t.label);
+    };
+  } else {
+    const [a,b] = result.tables;
+    box.innerHTML = `<div class="opt" id="applySuggest"><span>✓ Recommended combo: <b>${a.label} + ${b.label}</b> (${a.seats+b.seats} seats total)</span><span>Use</span></div>`;
+    document.getElementById('applySuggest').onclick = ()=>{
+      document.getElementById('bkTable').value = a.id;
+      pendingComboTableId2 = b.id;
+      toast('Combo assigned: '+a.label+' + '+b.label);
+    };
+  }
+}
+['bkParty','bkIndoor','bkDate','bkTime','bkDuration'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=> runAutoAssign());
+  document.getElementById(id).addEventListener('change', ()=> runAutoAssign());
+});
+document.getElementById('bkTable').addEventListener('change', ()=>{ pendingComboTableId2=null; });
+document.getElementById('bkCancelBtn').onclick = ()=> document.getElementById('bookingModalBackdrop').classList.remove('open');
+
+document.getElementById('bkSaveBtn').onclick = ()=>{
+  const data = storeData(currentStore);
+  const name = document.getElementById('bkName').value.trim();
+  if(!name){ toast('Please enter a name'); return; }
+  const payload = {
+    name,
+    phone: document.getElementById('bkPhone').value.trim(),
+    email: document.getElementById('bkEmail').value.trim(),
+    date: document.getElementById('bkDate').value,
+    time: document.getElementById('bkTime').value,
+    party: parseInt(document.getElementById('bkParty').value)||1,
+    indoor: document.getElementById('bkIndoor').value,
+    durationMin: parseInt(document.getElementById('bkDuration').value)||90,
+    tableId: document.getElementById('bkTable').value || null,
+    tableId2: document.getElementById('bkTable').value ? pendingComboTableId2 : null,
+    notes: document.getElementById('bkNotes').value.trim(),
+  };
+  payload.customerKey = (name+':'+payload.phone).toLowerCase().replace(/\s+/g,'');
+  if(editingBookingId){
+    const b = data.bookings.find(x=>x.id===editingBookingId);
+    Object.assign(b, payload);
+  } else {
+    data.bookings.push({ id: uid(), status:'pending', source:'manual', createdAt: Date.now(), ...payload });
+  }
+  saveStoreData(currentStore, data);
+  document.getElementById('bookingModalBackdrop').classList.remove('open');
+  renderBookings();
+  toast('Booking saved');
+};
+
+function openBookingDetail(id){
+  const data = storeData(currentStore);
+  const b = data.bookings.find(x=>x.id===id);
+  const table = data.tables.find(t=>t.id===b.tableId);
+  const table2 = data.tables.find(t=>t.id===b.tableId2);
+  const modal = document.getElementById('detailModal');
+  modal.innerHTML = `
+    <h3>${b.name}</h3>
+    <div class="row" style="margin-bottom:10px;"><span class="badge ${b.status}">${statusLabel(b.status)}</span>
+      ${b.source==='square' ? '<span class="badge" style="background:var(--surface-3);color:var(--text-dim);">Auto-received (Square)</span>' : ''}
+    </div>
+    <div class="hint" style="font-size:13px;color:var(--text-dim);line-height:1.9;">
+      📞 ${b.phone||'-'}　✉️ ${b.email||'-'}<br>
+      📅 ${b.date}　🕒 ${b.time}　👥 ${b.party} guests　${b.indoor==='outside'?'Outdoor':'Indoor'}<br>
+      ⏱ ${b.durationMin||90} min hold<br>
+      🪑 ${table? table.label + (table2?' + '+table2.label:'') + ' ('+table.seats+(table2?'+'+table2.seats:'')+' seats)' : 'Unassigned'}<br>
+      ${b.notes ? '📝 '+b.notes : ''}
+    </div>
+    <div class="modal-actions">
+      ${b.status==='pending' ? '<button class="btn" id="confirmBtn">Confirm</button>' : ''}
+      ${b.status==='confirmed' ? '<button class="btn" id="seatBtn">Seat now</button>' : ''}
+      ${b.status==='seated' ? '<button class="btn" id="finishBtn">Finish (needs cleaning)</button>' : ''}
+      <button class="btn ghost" id="editBtn">Edit</button>
+      ${!['cancelled','completed','noshow'].includes(b.status) ? '<button class="btn danger" id="cancelBookingBtn">Cancel</button>' : ''}
+      <button class="btn ghost" id="closeDetailBtn">Close</button>
+    </div>
+  `;
+  document.getElementById('closeDetailBtn').onclick = ()=> document.getElementById('detailModalBackdrop').classList.remove('open');
+  const confirmBtn = document.getElementById('confirmBtn');
+  if(confirmBtn) confirmBtn.onclick = ()=>{ b.status='confirmed'; saveStoreData(currentStore,data); closeAllModals(); refreshCurrentView(); toast('Booking confirmed — calendar & email sync pending'); };
+  const seatBtn = document.getElementById('seatBtn');
+  if(seatBtn) seatBtn.onclick = ()=>{ b.status='seated'; b.actualStart=new Date().toISOString(); saveStoreData(currentStore,data); closeAllModals(); refreshCurrentView(); toast('Guests seated'); };
+  const finishBtn = document.getElementById('finishBtn');
+  if(finishBtn) finishBtn.onclick = ()=>{ b.status='completed'; b.actualEnd=new Date().toISOString(); saveStoreData(currentStore,data); closeAllModals(); refreshCurrentView(); toast('Table marked as needs cleaning'); };
+  document.getElementById('editBtn').onclick = ()=>{ closeAllModals(); openBookingModal(b); };
+  const cancelBtn = document.getElementById('cancelBookingBtn');
+  if(cancelBtn) cancelBtn.onclick = ()=>{ b.status='cancelled'; saveStoreData(currentStore,data); closeAllModals(); refreshCurrentView(); toast('Booking cancelled'); };
+  document.getElementById('detailModalBackdrop').classList.add('open');
+}
+function closeAllModals(){
+  document.getElementById('detailModalBackdrop').classList.remove('open');
+  document.getElementById('bookingModalBackdrop').classList.remove('open');
+  document.getElementById('scheduleModalBackdrop').classList.remove('open');
+}
+
+/* ============ FLOOR VIEW ============ */
+document.getElementById('floorviewDate').valueAsDate = new Date();
+document.getElementById('floorviewDate').onchange = renderFloorView;
+function deriveTableStatus(t, data, date){
+  if(t.blocked) return { status:'blocked', label: t.seats+' seats' };
+  const items = data.bookings.filter(b=>(b.tableId===t.id||b.tableId2===t.id) && b.date===date && b.status!=='cancelled')
+    .sort((a,b)=>a.time.localeCompare(b.time));
+  const isToday = date===todayStr();
+  const nowMin = timeToMin(new Date().toTimeString().slice(0,5));
+  if(isToday){
+    for(const b of items){
+      const start = timeToMin(b.time), end = start+(b.durationMin||90);
+      if(b.status==='seated') return { status:'seated', label:b.name+' · '+b.time };
+      if(b.status==='completed' && nowMin < end+CLEAN_BUFFER_MIN) return { status:'needs_cleaning', label:'Needs cleaning' };
+      if((b.status==='confirmed'||b.status==='pending') && nowMin>=start-30 && nowMin<end) return { status:b.status, label:b.name+' · '+b.time };
+    }
+  }
+  const next = items.find(b=>['pending','confirmed'].includes(b.status));
+  if(next) return { status: next.status, label: next.name+' · '+next.time };
+  return { status:'empty', label: t.seats+' seats' };
+}
+function renderFloorView(){
+  const data = storeData(currentStore);
+  const date = document.getElementById('floorviewDate').value || todayStr();
+  const cv = document.getElementById('floorviewCanvas');
+  cv.innerHTML = '';
+  if(data.tables.length===0){ cv.innerHTML = '<div class="empty-hint" style="padding-top:220px;">Set up tables in the Floor Plan tab first</div>'; return; }
+  data.tables.forEach(t=>{
+    const d = deriveTableStatus(t, data, date);
+    cv.appendChild(buildTableEl(t, data, true, d.status, d.label));
+  });
+}
+
+/* ============ WAITLIST ============ */
+function estimateWait(data){
+  // naive: base 10 min + 5 min per active pending/confirmed party already ahead today
+  const todays = data.bookings.filter(b=>b.date===todayStr() && ['pending','confirmed','seated'].includes(b.status));
+  return Math.min(60, 10 + todays.length*3);
+}
+document.getElementById('wlParty').addEventListener('input', ()=>{
+  document.getElementById('wlWait').value = estimateWait(storeData(currentStore));
+});
+function renderWaitlist(){
+  const data = storeData(currentStore);
+  document.getElementById('wlWait').value = estimateWait(data);
+  const list = document.getElementById('waitlistList');
+  list.innerHTML = '';
+  if(data.waitlist.length===0){ list.innerHTML = '<div class="empty-hint">No one on the waitlist</div>'; return; }
+  data.waitlist.forEach(w=>{
+    const row = document.createElement('div');
+    row.className = 'wl-row';
+    row.innerHTML = `
+      <div style="flex:1;">
+        <div class="n">${w.name} · ${w.party} guests</div>
+        <div class="sub">${w.phone||'-'} · Quoted ${w.wait} min · added ${new Date(w.createdAt).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+      <button class="btn small" data-act="seat">Seat</button>
+      <button class="btn ghost small" data-act="remove">Remove</button>
+    `;
+    row.querySelector('[data-act="seat"]').onclick = ()=>{
+      data.waitlist = data.waitlist.filter(x=>x.id!==w.id);
+      saveStoreData(currentStore,data);
+      openBookingModal({name:w.name, phone:w.phone, party:w.party, date:todayStr(), time:new Date().toTimeString().slice(0,5)});
+      renderWaitlist();
+    };
+    row.querySelector('[data-act="remove"]').onclick = ()=>{
+      data.waitlist = data.waitlist.filter(x=>x.id!==w.id);
+      saveStoreData(currentStore,data);
+      renderWaitlist();
+    };
+    list.appendChild(row);
+  });
+}
+document.getElementById('wlAddBtn').onclick = ()=>{
+  const name = document.getElementById('wlName').value.trim();
+  if(!name){ toast('Please enter a name'); return; }
+  const data = storeData(currentStore);
+  data.waitlist.push({
+    id: uid(), name, phone: document.getElementById('wlPhone').value.trim(),
+    party: parseInt(document.getElementById('wlParty').value)||1,
+    wait: parseInt(document.getElementById('wlWait').value)||10,
+    createdAt: Date.now(),
+  });
+  saveStoreData(currentStore, data);
+  document.getElementById('wlName').value=''; document.getElementById('wlPhone').value='';
+  renderWaitlist();
+  toast('Added to waitlist');
+};
+
+/* ============ SETTINGS / SYNC ============ */
+function loadSettings(){ try { return JSON.parse(localStorage.getItem('hideout_booking_settings'))||{}; } catch(e){ return {}; } }
+function saveSettings(s){ localStorage.setItem('hideout_booking_settings', JSON.stringify(s)); }
+(function initSettings(){
+  const s = loadSettings();
+  if(s.scriptUrl) document.getElementById('scriptUrl').value = s.scriptUrl;
+  if(s.scriptAccount) document.getElementById('scriptAccount').value = s.scriptAccount;
+})();
+document.getElementById('saveSettingsBtn').onclick = ()=>{
+  saveSettings({ scriptUrl: document.getElementById('scriptUrl').value.trim(), scriptAccount: document.getElementById('scriptAccount').value.trim() });
+  toast('Settings saved');
+};
+document.getElementById('syncNowBtn').onclick = async ()=>{
+  const s = loadSettings();
+  const statusEl = document.getElementById('syncStatus');
+  if(!s.scriptUrl){ statusEl.textContent = 'Save the Web App URL first'; return; }
+  statusEl.textContent = 'Syncing...';
+  try{
+    const res = await fetch(s.scriptUrl + '?action=pull&store=' + currentStore);
+    const json = await res.json();
+    if(json.bookings){
+      const data = storeData(currentStore);
+      json.bookings.forEach(nb=>{ if(!data.bookings.find(b=>b.id===nb.id)) data.bookings.push(nb); });
+      saveStoreData(currentStore, data);
+      renderBookings();
+    }
+    statusEl.textContent = 'Synced · ' + new Date().toLocaleTimeString('en-AU');
+  }catch(e){
+    statusEl.textContent = 'Sync failed — check the URL / deployment';
+  }
+};
+
+/* ============ INIT ============ */
+renderStoreSwitch();
+renderFloorPlan();
+</script>
+</body>
+</html>

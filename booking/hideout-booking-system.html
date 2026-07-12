@@ -1351,7 +1351,7 @@ function runAutoAssign(presetCombo){
 document.getElementById('bkTable').addEventListener('change', ()=>{ pendingComboTableId2=null; });
 document.getElementById('bkCancelBtn').onclick = ()=> document.getElementById('bookingModalBackdrop').classList.remove('open');
 
-document.getElementById('bkSaveBtn').onclick = ()=>{
+document.getElementById('bkSaveBtn').onclick = async ()=>{
   const data = storeData(currentStore);
   const name = document.getElementById('bkName').value.trim();
   if(!name){ toast('Please enter a name'); return; }
@@ -1394,11 +1394,30 @@ document.getElementById('bkSaveBtn').onclick = ()=>{
     savedBooking = { id: uid(), status:'pending', source:'manual', createdAt: Date.now(), history: [], ...payload };
     data.bookings.push(savedBooking);
   }
-  saveStoreData(currentStore, data);
+  saveStoreData(currentStore, data); // saves to this device instantly either way
   upsertCustomerFromBooking(savedBooking);
-  document.getElementById('bookingModalBackdrop').classList.remove('open');
   renderBookings();
-  toast('Booking saved');
+
+  const btn = document.getElementById('bkSaveBtn');
+  const hasBackend = !!loadSettings().scriptUrl;
+  if(!hasBackend){
+    document.getElementById('bookingModalBackdrop').classList.remove('open');
+    toast('Saved on this device — connect a backend in Settings to sync it elsewhere');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  if(floorPlanPushTimer){ clearTimeout(floorPlanPushTimer); floorPlanPushTimer = null; }
+  const ok = await pushFloorPlanNow(currentStore);
+  btn.disabled = false;
+  if(ok){
+    btn.textContent = 'Saved ✓';
+    toast('Saved ✓ — synced to the backend');
+    setTimeout(()=>{ document.getElementById('bookingModalBackdrop').classList.remove('open'); btn.textContent='Save booking'; }, 400);
+  } else {
+    btn.textContent = '✗ Save Failed — Tap to Retry';
+    toast('Saved on this device, but sync failed — tap Save again or check Settings');
+  }
 };
 
 function openBookingDetail(id){
@@ -1813,6 +1832,11 @@ function deserializeBooking(b){
   if(b.durationMin) b.durationMin = parseInt(b.durationMin)||90;
   b.date = normalizeDateStr(b.date);
   b.time = normalizeTimeStr(b.time);
+  // Sheets can silently type-convert any text-looking cell (phone numbers especially) —
+  // force these back to plain strings so nothing downstream breaks calling .replace/.trim on them.
+  ['phone','email','name','notes','occasion','id','storeId','tableId','tableId2','status','indoor','source','customerKey'].forEach(f=>{
+    if(b[f]!==undefined && b[f]!==null) b[f] = String(b[f]);
+  });
   return b;
 }
 function deserializeCustomer(c){
@@ -1820,6 +1844,9 @@ function deserializeCustomer(c){
   if(!Array.isArray(c.allergens)) c.allergens = [];
   if(typeof c.visits === 'string'){ try{ c.visits = c.visits ? JSON.parse(c.visits) : []; }catch(e){ c.visits=[]; } }
   if(!Array.isArray(c.visits)) c.visits = [];
+  ['key','name','phone','email','notes'].forEach(f=>{
+    if(c[f]!==undefined && c[f]!==null) c[f] = String(c[f]);
+  });
   return c;
 }
 
@@ -1864,12 +1891,17 @@ async function pushCustomersNow(){
 }
 document.getElementById('saveFloorPlanBtn').onclick = async ()=>{
   const statusEl = document.getElementById('floorPlanSaveStatus');
+  const btn = document.getElementById('saveFloorPlanBtn');
   const s = loadSettings();
   if(!s.scriptUrl){ statusEl.textContent = 'Not connected to a backend yet — see Settings.'; return; }
   if(floorPlanPushTimer){ clearTimeout(floorPlanPushTimer); floorPlanPushTimer = null; }
+  btn.disabled = true; btn.textContent = 'Saving...';
   statusEl.textContent = 'Saving...';
   const ok = await pushFloorPlanNow(currentStore);
-  statusEl.textContent = ok ? 'Saved — other devices will see this the next time they sync.' : 'Save failed — check the backend connection in Settings.';
+  btn.disabled = false;
+  btn.textContent = ok ? 'Saved ✓' : '✗ Save Failed — Tap to Retry';
+  statusEl.textContent = ok ? 'Saved ✓ — other devices will see this within a few seconds.' : '✗ Save failed — check the backend connection in Settings, then tap Save again.';
+  if(ok) setTimeout(()=>{ btn.textContent = 'Save floor plan'; }, 1500);
 };
 async function pushAllFloorPlansNow(){
   const s = loadSettings();
@@ -2035,12 +2067,12 @@ document.getElementById('saveEmailSettingsBtn').onclick = async ()=>{
 };
 
 /* ============ CUSTOMER CRM (recognise returning guests) ============ */
-function normalizePhone(p){ return (p||'').replace(/[^0-9]/g,''); }
+function normalizePhone(p){ return String(p||'').replace(/[^0-9]/g,''); }
 function customerKeyFor(b){
   const phone = normalizePhone(b.phone);
   if(phone) return 'p:'+phone;
-  if(b.email) return 'e:'+b.email.trim().toLowerCase();
-  return 'n:'+(b.name||'').trim().toLowerCase();
+  if(b.email) return 'e:'+String(b.email).trim().toLowerCase();
+  return 'n:'+String(b.name||'').trim().toLowerCase();
 }
 function getCustomers(){ const d = db(); if(!d.customers) d.customers = {}; return d.customers; }
 function saveCustomers(customers){ const d = db(); d.customers = customers; saveAll(d); schedulePushCustomers(); }
@@ -2048,7 +2080,7 @@ function lookupCustomer(phone, email){
   const customers = getCustomers();
   const pk = 'p:'+normalizePhone(phone);
   if(phone && customers[pk]) return customers[pk];
-  const ek = 'e:'+(email||'').trim().toLowerCase();
+  const ek = 'e:'+String(email||'').trim().toLowerCase();
   if(email && customers[ek]) return customers[ek];
   return null;
 }
@@ -2077,6 +2109,20 @@ document.getElementById('headerLogo').src = LOGO_DATA_URI;
 renderStoreSwitch();
 refreshCurrentView('floorview');
 if(loadSettings().scriptUrl) syncNow();
+
+// Auto-sync every 5 seconds so changes from other devices show up without pressing Sync now.
+// Skipped while any modal is open so it can't overwrite a field mid-edit, and skipped if a
+// sync is already running so calls never pile up.
+let autoSyncRunning = false;
+setInterval(async ()=>{
+  if(!loadSettings().scriptUrl) return;
+  if(autoSyncRunning) return;
+  const anyModalOpen = document.querySelector('.modal-backdrop.open');
+  if(anyModalOpen) return;
+  autoSyncRunning = true;
+  try{ await syncNow(); } finally { autoSyncRunning = false; }
+}, 5000);
+
 setTimeout(()=>{
   document.getElementById('loadingOverlay').classList.add('hide');
   setTimeout(()=> document.getElementById('loadingOverlay').remove(), 400);

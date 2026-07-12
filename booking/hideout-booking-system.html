@@ -109,6 +109,14 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
 .stat-strip{display:flex;gap:20px;margin-bottom:12px;font-size:13px;color:var(--text-dim);}
 .stat-strip b{color:var(--text);font-size:16px;}
 .change-log{font-size:12px;color:var(--text-faint);border-top:1px solid var(--border);margin-top:10px;padding-top:10px;max-height:120px;overflow:auto;}
+.allergen-tag{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 10px 5px 8px;font-size:12px;cursor:pointer;user-select:none;}
+.allergen-tag input{width:14px;height:14px;margin:0;accent-color:var(--accent);}
+.allergen-tag.checked{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);}
+.badge.tag{background:var(--surface-3);color:var(--text-dim);}
+.type-pill-row{display:flex;gap:6px;background:var(--surface-2);border-radius:999px;padding:4px;margin-right:14px;}
+.type-pill-row .type-pill-label{font-size:13px;font-weight:700;color:var(--text);padding:6px 14px;border-radius:999px;}
+.type-pill-row.indoor .type-pill-label{background:var(--accent-soft);color:var(--accent);}
+.type-pill-row.outdoor .type-pill-label{background:var(--confirmed-soft);color:var(--confirmed);}
 .table-el .type-dot{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;}
 .table-el.status-confirmed{background:var(--confirmed-soft);border-color:var(--confirmed);border-width:2px;}
 .table-el.status-pending{background:var(--pending-soft);border-color:var(--pending);border-width:2px;}
@@ -199,6 +207,7 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
     <button data-view="floorplan">Floor Plan</button>
     <button data-view="bookings">Bookings</button>
     <button data-view="waitlist">Waitlist</button>
+    <button data-view="customers">Customers</button>
     <button data-view="settings">Settings</button>
   </nav>
 
@@ -207,10 +216,10 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
     <div class="grid">
       <div>
         <div class="editor-toolbar">
-          <span class="hint" style="margin:0;align-self:center;">Indoor:</span>
+          <div class="type-pill-row indoor"><span class="type-pill-label">Indoor</span></div>
           <button class="btn" id="addIndoorRect">+ Rectangular</button>
           <button class="btn ghost" id="addIndoorRound">+ Round</button>
-          <span class="hint" style="margin:0 0 0 10px;align-self:center;">Outdoor:</span>
+          <div class="type-pill-row outdoor" style="margin-left:10px;"><span class="type-pill-label">Outdoor</span></div>
           <button class="btn" id="addOutdoorRect">+ Rectangular</button>
           <button class="btn ghost" id="addOutdoorRound">+ Round</button>
           <button class="btn ghost" id="addZone">+ Add zone</button>
@@ -288,6 +297,27 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
         <div class="field-group"><label class="field">Party size</label><input type="number" id="wlParty" value="2" min="1"></div>
         <div class="field-group"><label class="field">Quoted wait (auto-estimated, editable)</label><input type="number" id="wlWait" value="15" min="0"></div>
         <button class="btn" id="wlAddBtn" style="width:100%;">Add to waitlist</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CUSTOMERS -->
+  <section class="view" id="view-customers">
+    <div class="grid">
+      <div class="panel">
+        <div class="row" style="margin-bottom:14px;">
+          <h2 style="margin:0;">Customers</h2>
+          <span class="spacer"></span>
+          <input id="custSearch" placeholder="Search name, phone, or email..." style="width:auto;min-width:240px;">
+        </div>
+        <div id="customerList"></div>
+      </div>
+      <div class="panel">
+        <h2>Import customers</h2>
+        <p class="hint" style="margin-top:0;">Paste one customer per line: <span class="mono">Name, Phone, Email, Notes</span> (Notes optional). Existing customers are matched by phone or email and updated rather than duplicated.</p>
+        <textarea id="custImportText" rows="8" placeholder="Jane Smith, 0412345678, jane@email.com, Peanut allergy"></textarea>
+        <button class="btn" id="custImportBtn" style="width:100%;margin-top:10px;">Import</button>
+        <div id="custImportStatus" class="hint"></div>
       </div>
     </div>
   </section>
@@ -400,6 +430,28 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
       <div id="bkSuggestBox" class="suggest-box" style="display:none;"></div>
       <select id="bkTable" style="margin-top:8px;"></select>
     </div>
+    <div class="field-group">
+      <label class="field">Allergens / dietary</label>
+      <div class="swatch-row" id="bkAllergenList" style="flex-wrap:wrap;"></div>
+    </div>
+    <div class="row" style="gap:10px;">
+      <div class="field-group" style="flex:1;">
+        <label class="field">Special occasion</label>
+        <select id="bkOccasion">
+          <option value="">None</option>
+          <option value="Birthday">Birthday</option>
+          <option value="Anniversary">Anniversary</option>
+          <option value="Engagement">Engagement</option>
+          <option value="Business">Business</option>
+          <option value="Date">Date</option>
+          <option value="Other">Other...</option>
+        </select>
+      </div>
+      <div class="field-group" style="flex:1;display:none;" id="bkOccasionOtherWrap">
+        <label class="field">Occasion (other)</label>
+        <input id="bkOccasionOther">
+      </div>
+    </div>
     <div class="field-group"><label class="field">Notes</label><textarea id="bkNotes" rows="2"></textarea></div>
     <div class="modal-actions">
       <button class="btn ghost" id="bkCancelBtn">Cancel</button>
@@ -450,6 +502,7 @@ let currentStore = loadDefaultStoreId();
 let selectedTableId = null;
 let selectedZoneId = null;
 const ZONE_COLORS = ['#8ea883','#c1793f','#7f9bc1','#a883c1','#d9a441','#75695a'];
+const ALLERGEN_OPTIONS = ['Eggs','Gelatine','Nuts','Alcohol','Soy','Seeds','Dairy','Traces of almonds','Corn','HALAL','Gluten Free'];
 const CLEAN_BUFFER_MIN = 15; // gap required between bookings on the same table
 
 function loadAll(){
@@ -554,6 +607,7 @@ function refreshCurrentView(view){
   if(view==='bookings') renderBookings();
   if(view==='floorview') renderFloorView();
   if(view==='waitlist') renderWaitlist();
+  if(view==='customers') renderCustomerList();
   if(view==='settings'){ renderStoreList(); renderZoneSettings(); renderEmailSettings(); }
 }
 
@@ -941,6 +995,7 @@ function openTableSchedule(tableId){
     </div>
     <div class="modal-actions">
       <button class="btn" id="schedMakeBookingBtn">+ Make a booking</button>
+      ${t.mergedFrom ? '<button class="btn ghost" id="schedUnmergeBtn">Unmerge tables</button>' : ''}
       <button class="btn ghost" id="schedBlockBtn">${isBlockedToday ? 'Clear block' : 'Block table'}</button>
       <button class="btn ghost" id="schedCloseBtn">Close</button>
     </div>
@@ -948,6 +1003,12 @@ function openTableSchedule(tableId){
   document.getElementById('schedMakeBookingBtn').onclick = ()=>{
     document.getElementById('scheduleModalBackdrop').classList.remove('open');
     openBookingModal({ tableId: t.id, date, party: Math.min(t.seats, 8) });
+  };
+  const unmergeBtn2 = document.getElementById('schedUnmergeBtn');
+  if(unmergeBtn2) unmergeBtn2.onclick = ()=>{
+    unmergeTable(t, data);
+    document.getElementById('scheduleModalBackdrop').classList.remove('open');
+    renderFloorView();
   };
   document.getElementById('schedBlockBtn').onclick = ()=>{
     if(isBlockedToday){
@@ -1036,6 +1097,8 @@ function renderBookings(){
         <span>${table ? table.label + (table2?' + '+table2.label:'') : 'Unassigned'}</span>
         <span>${b.indoor==='outside'?'Outdoor':'Indoor'}</span>
         ${b.source==='square' ? '<span>📩 Auto-received (Square)</span>' : ''}
+        ${b.occasion ? `<span class="badge tag">🎉 ${b.occasion}</span>` : ''}
+        ${b.allergens && b.allergens.length ? `<span class="badge tag">⚠️ ${b.allergens.join(', ')}</span>` : ''}
       </div>`;
     card.onclick = ()=> openBookingDetail(b.id);
     list.appendChild(card);
@@ -1072,10 +1135,36 @@ function openBookingModal(booking){
   document.getElementById('bkDuration').value = booking?.durationMin || 90;
   document.getElementById('bkNotes').value = booking?.notes || '';
   document.getElementById('bkCustomerBadge').style.display = 'none';
+  populateAllergenChecklist(booking?.allergens || []);
+  const knownOccasions = ['','Birthday','Anniversary','Engagement','Business','Date'];
+  const occ = booking?.occasion || '';
+  if(occ && !knownOccasions.includes(occ)){
+    document.getElementById('bkOccasion').value = 'Other';
+    document.getElementById('bkOccasionOtherWrap').style.display = 'block';
+    document.getElementById('bkOccasionOther').value = occ;
+  } else {
+    document.getElementById('bkOccasion').value = occ;
+    document.getElementById('bkOccasionOtherWrap').style.display = 'none';
+    document.getElementById('bkOccasionOther').value = '';
+  }
   populateTableSelect(booking);
   document.getElementById('bookingModalBackdrop').classList.add('open');
   if(booking && booking.phone) checkReturningCustomer();
 }
+function populateAllergenChecklist(selected){
+  const el = document.getElementById('bkAllergenList');
+  el.innerHTML = '';
+  ALLERGEN_OPTIONS.forEach(a=>{
+    const label = document.createElement('label');
+    label.className = 'allergen-tag' + (selected.includes(a)?' checked':'');
+    label.innerHTML = `<input type="checkbox" value="${a}" ${selected.includes(a)?'checked':''}> ${a}`;
+    label.querySelector('input').onchange = (e)=> label.classList.toggle('checked', e.target.checked);
+    el.appendChild(label);
+  });
+}
+document.getElementById('bkOccasion').onchange = (e)=>{
+  document.getElementById('bkOccasionOtherWrap').style.display = e.target.value==='Other' ? 'block' : 'none';
+};
 function checkReturningCustomer(){
   const phone = document.getElementById('bkPhone').value.trim();
   const email = document.getElementById('bkEmail').value.trim();
@@ -1088,6 +1177,7 @@ function checkReturningCustomer(){
   if(!editingBookingId){
     if(!nameField.value.trim()) nameField.value = c.name;
     if(!notesField.value.trim() && c.notes) notesField.value = c.notes;
+    if(c.allergens && c.allergens.length) populateAllergenChecklist(c.allergens);
   }
   const last = c.visits[c.visits.length-1];
   badge.style.display = 'block';
@@ -1167,6 +1257,9 @@ document.getElementById('bkSaveBtn').onclick = ()=>{
   const data = storeData(currentStore);
   const name = document.getElementById('bkName').value.trim();
   if(!name){ toast('Please enter a name'); return; }
+  const occasionVal = document.getElementById('bkOccasion').value === 'Other'
+    ? document.getElementById('bkOccasionOther').value.trim()
+    : document.getElementById('bkOccasion').value;
   const payload = {
     name,
     phone: document.getElementById('bkPhone').value.trim(),
@@ -1179,10 +1272,12 @@ document.getElementById('bkSaveBtn').onclick = ()=>{
     tableId: document.getElementById('bkTable').value || null,
     tableId2: document.getElementById('bkTable').value ? pendingComboTableId2 : null,
     notes: document.getElementById('bkNotes').value.trim(),
+    allergens: Array.from(document.querySelectorAll('#bkAllergenList input:checked')).map(i=>i.value),
+    occasion: occasionVal,
   };
   payload.customerKey = customerKeyFor(payload);
   let savedBooking;
-  const FIELD_LABELS = { name:'Name', phone:'Phone', email:'Email', date:'Date', time:'Time', party:'Party size', indoor:'Seating', durationMin:'Duration', tableId:'Table', notes:'Notes' };
+  const FIELD_LABELS = { name:'Name', phone:'Phone', email:'Email', date:'Date', time:'Time', party:'Party size', indoor:'Seating', durationMin:'Duration', tableId:'Table', notes:'Notes', occasion:'Occasion' };
   if(editingBookingId){
     const b = data.bookings.find(x=>x.id===editingBookingId);
     const changes = [];
@@ -1226,6 +1321,8 @@ function openBookingDetail(id){
       📅 ${b.date}　🕒 ${b.time}　👥 ${b.party} guests　${b.indoor==='outside'?'Outdoor':'Indoor'}<br>
       ⏱ ${b.durationMin||90} min hold<br>
       🪑 ${table? table.label + (table2?' + '+table2.label:'') + ' ('+table.seats+(table2?'+'+table2.seats:'')+' seats)' : 'Unassigned'}<br>
+      ${b.occasion ? '🎉 '+b.occasion+'<br>' : ''}
+      ${b.allergens && b.allergens.length ? '⚠️ '+b.allergens.join(', ')+'<br>' : ''}
       ${b.notes ? '📝 '+b.notes : ''}
     </div>
     ${cust && cust.visits.length>1 ? `<button class="btn ghost small" id="viewHistoryFromDetail" style="margin-top:2px;">View visit history (${cust.visits.length})</button>` : ''}
@@ -1284,6 +1381,66 @@ function openCustomerHistory(c){
   document.getElementById('histCloseBtn').onclick = ()=> document.getElementById('scheduleModalBackdrop').classList.remove('open');
   document.getElementById('scheduleModalBackdrop').classList.add('open');
 }
+
+/* ============ CUSTOMERS DB (search + import) ============ */
+function renderCustomerList(){
+  const customers = Object.values(getCustomers());
+  const q = (document.getElementById('custSearch').value||'').trim().toLowerCase();
+  const filtered = q
+    ? customers.filter(c => (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q))
+    : customers;
+  filtered.sort((a,b)=> b.visits.length - a.visits.length);
+  const el = document.getElementById('customerList');
+  el.innerHTML = '';
+  if(filtered.length===0){ el.innerHTML = '<div class="empty-hint">No customers found</div>'; return; }
+  filtered.forEach(c=>{
+    const last = c.visits[c.visits.length-1];
+    const card = document.createElement('div');
+    card.className = 'booking-card';
+    card.innerHTML = `
+      <div class="top-row">
+        <span class="name">${c.name||'(no name)'}</span>
+        <span class="count-pill">${c.visits.length} visit${c.visits.length===1?'':'s'}</span>
+      </div>
+      <div class="meta">
+        <span>📞 ${c.phone||'-'}</span>
+        <span>✉️ ${c.email||'-'}</span>
+        ${last ? `<span>Last visit ${last.date}</span>` : ''}
+        ${c.allergens && c.allergens.length ? `<span class="badge tag">⚠️ ${c.allergens.join(', ')}</span>` : ''}
+      </div>`;
+    card.onclick = ()=> openCustomerHistory(c);
+    el.appendChild(card);
+  });
+}
+document.getElementById('custSearch').addEventListener('input', renderCustomerList);
+document.getElementById('custImportBtn').onclick = ()=>{
+  const text = document.getElementById('custImportText').value;
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('Paste some rows first'); return; }
+  const customers = getCustomers();
+  let added = 0, updated = 0;
+  lines.forEach(line=>{
+    const parts = line.split(',').map(p=>p.trim());
+    const [name, phone, email, ...rest] = parts;
+    if(!name && !phone && !email) return;
+    const notes = rest.join(', ');
+    const fakeBooking = { name: name||'', phone: phone||'', email: email||'' };
+    const key = customerKeyFor(fakeBooking);
+    const existed = !!customers[key];
+    let c = customers[key] || { key, name, phone, email, notes: '', allergens: [], visits: [] };
+    c.name = name || c.name;
+    c.phone = phone || c.phone;
+    c.email = email || c.email;
+    if(notes) c.notes = notes;
+    customers[key] = c;
+    if(existed) updated++; else added++;
+  });
+  saveCustomers(customers);
+  document.getElementById('custImportStatus').textContent = `Imported: ${added} new, ${updated} updated.`;
+  document.getElementById('custImportText').value = '';
+  renderCustomerList();
+  toast('Customers imported');
+};
 
 /* ============ FLOOR VIEW ============ */
 document.getElementById('floorviewDate').valueAsDate = new Date();
@@ -1445,11 +1602,42 @@ document.getElementById('wlAddBtn').onclick = ()=>{
 };
 
 /* ============ SETTINGS / SYNC ============ */
-/* ============ FLOOR PLAN SYNC (keeps tables/zones in sync across devices) ============ */
+/* ============ FULL SYNC (tables, zones, bookings, customers -> backend) ============ */
+function serializeForSheet(obj){
+  const copy = {};
+  Object.keys(obj).forEach(k=>{
+    const v = obj[k];
+    copy[k] = (v && typeof v === 'object') ? JSON.stringify(v) : v;
+  });
+  return copy;
+}
+function deserializeTable(t){
+  if(typeof t.mergedFrom === 'string' && t.mergedFrom){ try{ t.mergedFrom = JSON.parse(t.mergedFrom); }catch(e){ delete t.mergedFrom; } }
+  else if(!t.mergedFrom) delete t.mergedFrom;
+  if(t.blocked==='TRUE'||t.blocked===true) t.blocked=true; else t.blocked=false;
+  return t;
+}
+function deserializeBooking(b){
+  if(typeof b.allergens === 'string'){ try{ b.allergens = b.allergens ? JSON.parse(b.allergens) : []; }catch(e){ b.allergens=[]; } }
+  if(!Array.isArray(b.allergens)) b.allergens = [];
+  if(typeof b.history === 'string'){ try{ b.history = b.history ? JSON.parse(b.history) : []; }catch(e){ b.history=[]; } }
+  if(!Array.isArray(b.history)) b.history = [];
+  if(b.party) b.party = parseInt(b.party)||1;
+  if(b.durationMin) b.durationMin = parseInt(b.durationMin)||90;
+  return b;
+}
+function deserializeCustomer(c){
+  if(typeof c.allergens === 'string'){ try{ c.allergens = c.allergens ? JSON.parse(c.allergens) : []; }catch(e){ c.allergens=[]; } }
+  if(!Array.isArray(c.allergens)) c.allergens = [];
+  if(typeof c.visits === 'string'){ try{ c.visits = c.visits ? JSON.parse(c.visits) : []; }catch(e){ c.visits=[]; } }
+  if(!Array.isArray(c.visits)) c.visits = [];
+  return c;
+}
+
 let floorPlanPushTimer = null;
 function schedulePushFloorPlan(){
   if(floorPlanPushTimer) clearTimeout(floorPlanPushTimer);
-  floorPlanPushTimer = setTimeout(pushFloorPlanNow, 900);
+  floorPlanPushTimer = setTimeout(()=>pushFloorPlanNow(), 900);
 }
 async function pushFloorPlanNow(storeId){
   storeId = storeId || currentStore;
@@ -1457,7 +1645,30 @@ async function pushFloorPlanNow(storeId){
   if(!s.scriptUrl) return false;
   const data = storeData(storeId);
   try{
-    const res = await fetch(s.scriptUrl, { method:'POST', body: JSON.stringify({ action:'saveFloorPlan', storeId: storeId, tables: data.tables, zones: data.zones }) });
+    const res1 = await fetch(s.scriptUrl, { method:'POST', body: JSON.stringify({
+      action:'saveFloorPlan', storeId: storeId,
+      tables: data.tables.map(serializeForSheet), zones: data.zones.map(serializeForSheet),
+    }) });
+    const json1 = await res1.json();
+    const res2 = await fetch(s.scriptUrl, { method:'POST', body: JSON.stringify({
+      action:'saveBookings', storeId: storeId,
+      bookings: data.bookings.map(serializeForSheet),
+    }) });
+    const json2 = await res2.json();
+    return !!(json1 && json1.ok) && !!(json2 && json2.ok);
+  }catch(e){ return false; }
+}
+let customerPushTimer = null;
+function schedulePushCustomers(){
+  if(customerPushTimer) clearTimeout(customerPushTimer);
+  customerPushTimer = setTimeout(pushCustomersNow, 900);
+}
+async function pushCustomersNow(){
+  const s = loadSettings();
+  if(!s.scriptUrl) return false;
+  try{
+    const customers = Object.values(getCustomers()).map(serializeForSheet);
+    const res = await fetch(s.scriptUrl, { method:'POST', body: JSON.stringify({ action:'saveCustomers', customers }) });
     const json = await res.json();
     return !!(json && json.ok);
   }catch(e){ return false; }
@@ -1479,7 +1690,8 @@ async function pushAllFloorPlansNow(){
     const ok = await pushFloorPlanNow(store.id);
     if(ok) count++;
   }
-  return { ok: count===STORES.length, count };
+  const custOk = await pushCustomersNow();
+  return { ok: count===STORES.length && custOk, count };
 }
 document.getElementById('pushAllBtn').onclick = async ()=>{
   const statusEl = document.getElementById('pushAllStatus');
@@ -1488,7 +1700,7 @@ document.getElementById('pushAllBtn').onclick = async ()=>{
   statusEl.textContent = 'Pushing all locations...';
   const result = await pushAllFloorPlansNow();
   statusEl.textContent = result.ok
-    ? `Pushed ${result.count}/${STORES.length} locations — other devices will see this on their next Sync.`
+    ? `Pushed ${result.count}/${STORES.length} locations + customer DB — other devices will see this on their next Sync.`
     : `Pushed ${result.count}/${STORES.length} locations — check connection and try again.`;
 };
 
@@ -1520,19 +1732,27 @@ async function syncNow(){
     const json = await res.json();
     const data = storeData(currentStore);
     if(json.bookings){
-      json.bookings.forEach(nb=>{
-        if(!data.bookings.find(b=>b.id===nb.id)){
-          data.bookings.push(nb);
-          upsertCustomerFromBooking(nb);
-        }
+      json.bookings.forEach(rawB=>{
+        const nb = deserializeBooking(rawB);
+        const idx = data.bookings.findIndex(b=>b.id===nb.id);
+        if(idx>=0) data.bookings[idx] = nb; else { data.bookings.push(nb); upsertCustomerFromBooking(nb); }
       });
     }
-    if(json.tables) data.tables = json.tables;
+    if(json.tables) data.tables = json.tables.map(deserializeTable);
     if(json.zones) data.zones = json.zones;
     saveStoreData(currentStore, data);
+    if(json.customers){
+      const customers = getCustomers();
+      json.customers.forEach(rawC=>{
+        const nc = deserializeCustomer(rawC);
+        customers[nc.key] = nc;
+      });
+      const d = db(); d.customers = customers; saveAll(d); // save without re-triggering a push loop
+    }
     renderBookings();
     if(document.getElementById('view-floorplan').classList.contains('active')) renderFloorPlan();
     if(document.getElementById('view-floorview').classList.contains('active')) renderFloorView();
+    if(document.getElementById('view-customers').classList.contains('active')) renderCustomerList();
     if(json.settings) applyBackendSettings(json.settings);
     if(statusEl) statusEl.textContent = 'Synced · ' + new Date().toLocaleTimeString('en-AU');
   }catch(e){
@@ -1624,7 +1844,7 @@ function customerKeyFor(b){
   return 'n:'+(b.name||'').trim().toLowerCase();
 }
 function getCustomers(){ const d = db(); if(!d.customers) d.customers = {}; return d.customers; }
-function saveCustomers(customers){ const d = db(); d.customers = customers; saveAll(d); }
+function saveCustomers(customers){ const d = db(); d.customers = customers; saveAll(d); schedulePushCustomers(); }
 function lookupCustomer(phone, email){
   const customers = getCustomers();
   const pk = 'p:'+normalizePhone(phone);
@@ -1637,12 +1857,13 @@ function upsertCustomerFromBooking(b){
   if(!b.phone && !b.email && !b.name) return null;
   const customers = getCustomers();
   const key = customerKeyFor(b);
-  let c = customers[key] || { key, name: b.name, phone: b.phone, email: b.email, notes: '', visits: [] };
+  let c = customers[key] || { key, name: b.name, phone: b.phone, email: b.email, notes: '', allergens: [], visits: [] };
   c.name = b.name || c.name;
   c.phone = b.phone || c.phone;
   c.email = b.email || c.email;
   if(b.notes) c.notes = b.notes; // current/latest note shown on the booking, not overwritten in history
-  const visit = { bookingId: b.id, date: b.date, time: b.time, party: b.party, storeId: b.storeId, notes: b.notes||'' };
+  if(b.allergens && b.allergens.length) c.allergens = b.allergens;
+  const visit = { bookingId: b.id, date: b.date, time: b.time, party: b.party, storeId: b.storeId, notes: b.notes||'', occasion: b.occasion||'' };
   const idx = c.visits.findIndex(v=>v.bookingId===b.id);
   if(idx>=0) c.visits[idx] = visit; else c.visits.push(visit);
   c.visits.sort((a,b2)=> (a.date+a.time).localeCompare(b2.date+b2.time));

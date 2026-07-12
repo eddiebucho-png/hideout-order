@@ -601,7 +601,7 @@ function hasOverlap(data, tableId, date, start, end, excludeId){
 function findBestTable(data, {party, type, date, time, durationMin, excludeId}){
   const start = timeToMin(time);
   const end = start + (durationMin||90);
-  const free = data.tables.filter(t => !t.blocked && !hasOverlap(data, t.id, date, start, end, excludeId));
+  const free = data.tables.filter(t => !t.deleted && !t.blocked && !hasOverlap(data, t.id, date, start, end, excludeId));
 
   // single-table candidates: capacity fits, minimise wasted seats, prefer matching type
   const singles = free.filter(t => t.seats >= party)
@@ -726,8 +726,9 @@ function renderZoneSettings(){
   const data = storeData(currentStore);
   const el = document.getElementById('zoneSettingsList');
   el.innerHTML = '';
-  if(data.zones.length===0){ el.innerHTML = '<div class="empty-hint">No zones yet for this location</div>'; return; }
-  data.zones.forEach(z=>{
+  const liveZones = data.zones.filter(z=>!z.deleted);
+  if(liveZones.length===0){ el.innerHTML = '<div class="empty-hint">No zones yet for this location</div>'; return; }
+  liveZones.forEach(z=>{
     const row = document.createElement('div');
     row.className = 'row';
     row.style.marginBottom = '8px';
@@ -797,8 +798,8 @@ const TYPE_LABEL = {indoor:'Indoor', outdoor:'Outdoor', bar:'Bar'};
 function renderFloorPlan(){
   const data = storeData(currentStore);
   canvas.innerHTML = '';
-  data.zones.forEach(z => canvas.appendChild(buildZoneEl(z, data)));
-  data.tables.forEach(t => canvas.appendChild(buildTableEl(t, data, false)));
+  data.zones.filter(z=>!z.deleted).forEach(z => canvas.appendChild(buildZoneEl(z, data)));
+  data.tables.filter(t=>!t.deleted).forEach(t => canvas.appendChild(buildTableEl(t, data, false)));
   renderProps();
 }
 function buildZoneEl(z, data){
@@ -967,13 +968,13 @@ function renderProps(){
   const unmergeBtn = document.getElementById('pUnmerge');
   if(unmergeBtn) unmergeBtn.onclick = ()=>{ unmergeTable(t, data); };
   document.getElementById('pDelete').onclick = ()=>{
-    data.tables = data.tables.filter(x=>x.id!==t.id);
+    t.deleted = true; // soft delete: keeps a record on the backend so auto-sync can't resurrect it
     saveStoreData(currentStore,data); selectedTableId=null; renderFloorPlan();
     toast('Table deleted');
   };
 }
 function renderZoneProps(panel, z, data){
-  const tablesInZone = data.tables.filter(t=>tableCenterInZone(t, z));
+  const tablesInZone = data.tables.filter(t=>!t.deleted && tableCenterInZone(t, z));
   panel.innerHTML = `
     <h2>Zone properties</h2>
     <div class="field-group"><label class="field">Name</label><input id="zName" value="${z.name}"></div>
@@ -997,7 +998,7 @@ function renderZoneProps(panel, z, data){
     if(el){ const label = el.querySelector('.zone-label'); if(label) label.textContent = z.name; }
   };
   document.getElementById('zDelete').onclick = ()=>{
-    data.zones = data.zones.filter(x=>x.id!==z.id);
+    z.deleted = true; // soft delete, same reasoning as tables above
     saveStoreData(currentStore,data); selectedZoneId=null; renderFloorPlan();
     toast('Zone deleted');
   };
@@ -1013,7 +1014,7 @@ function tableCenterInZone(t, z){
 // for that party, on the day, rather than a fixed zone-wide grouping.
 function mergeTables(storeId, tableIds){
   const data = storeData(storeId);
-  const chosen = data.tables.filter(t=>tableIds.includes(t.id) && !t.mergedFrom);
+  const chosen = data.tables.filter(t=>tableIds.includes(t.id) && !t.mergedFrom && !t.deleted);
   if(chosen.length<2){ toast('Select at least 2 tables to merge'); return null; }
   const minX = Math.min(...chosen.map(t=>t.x)), minY = Math.min(...chosen.map(t=>t.y));
   const maxX = Math.max(...chosen.map(t=>t.x+t.w)), maxY = Math.max(...chosen.map(t=>t.y+t.h));
@@ -1295,7 +1296,7 @@ function populateTableSelect(booking){
   const data = storeData(currentStore);
   const sel = document.getElementById('bkTable');
   sel.innerHTML = '<option value="">Unassigned</option>';
-  data.tables.forEach(t=>{
+  data.tables.filter(t=>!t.deleted).forEach(t=>{
     const opt = document.createElement('option');
     opt.value = t.id;
     opt.textContent = `${t.label} · ${t.seats} seats · ${TYPE_LABEL[t.type]}${t.blocked?' (blocked)':''}`;
@@ -1699,14 +1700,16 @@ function renderFloorView(){
   const date = document.getElementById('floorviewDate').value || todayStr();
   const cv = document.getElementById('floorviewCanvas');
   cv.innerHTML = '';
-  data.zones.forEach(z=>{
+  const liveZones = data.zones.filter(z=>!z.deleted);
+  const liveTables = data.tables.filter(t=>!t.deleted);
+  liveZones.forEach(z=>{
     const el = buildZoneEl(z, data);
     el.onmousedown = null; el.onclick = null; el.style.cursor = 'default';
     const handle = el.querySelector('.resize-handle'); if(handle) handle.remove();
     cv.appendChild(el);
   });
-  if(data.tables.length===0){ cv.innerHTML += '<div class="empty-hint" style="padding-top:220px;">Set up tables in the Floor Plan tab first</div>'; }
-  data.tables.forEach(t=>{
+  if(liveTables.length===0){ cv.innerHTML += '<div class="empty-hint" style="padding-top:220px;">Set up tables in the Floor Plan tab first</div>'; }
+  liveTables.forEach(t=>{
     const d = deriveTableStatus(t, data, date);
     cv.appendChild(buildTableEl(t, data, true, d.status, d.label));
   });
@@ -1811,7 +1814,8 @@ function serializeForSheet(obj){
 function deserializeTable(t){
   if(typeof t.mergedFrom === 'string' && t.mergedFrom){ try{ t.mergedFrom = JSON.parse(t.mergedFrom); }catch(e){ delete t.mergedFrom; } }
   else if(!t.mergedFrom) delete t.mergedFrom;
-  if(t.blocked==='TRUE'||t.blocked===true) t.blocked=true; else t.blocked=false;
+  if(t.blocked===true || String(t.blocked).toUpperCase()==='TRUE') t.blocked=true; else t.blocked=false;
+  t.deleted = (t.deleted===true || String(t.deleted).toUpperCase()==='TRUE');
   return t;
 }
 function normalizeDateStr(v){
@@ -1973,6 +1977,7 @@ async function syncNow(){
     }
     if(json.zones){
       json.zones.forEach(nz=>{
+        nz.deleted = (nz.deleted===true || String(nz.deleted).toUpperCase()==='TRUE');
         const idx = data.zones.findIndex(z=>z.id===nz.id);
         if(idx>=0) data.zones[idx] = nz; else data.zones.push(nz);
       });

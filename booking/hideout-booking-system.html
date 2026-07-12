@@ -1874,8 +1874,18 @@ async function syncNow(){
         if(idx>=0) data.bookings[idx] = nb; else { data.bookings.push(nb); upsertCustomerFromBooking(nb); }
       });
     }
-    if(json.tables) data.tables = json.tables.map(deserializeTable);
-    if(json.zones) data.zones = json.zones;
+    if(json.tables){
+      json.tables.map(deserializeTable).forEach(nt=>{
+        const idx = data.tables.findIndex(t=>t.id===nt.id);
+        if(idx>=0) data.tables[idx] = nt; else data.tables.push(nt);
+      });
+    }
+    if(json.zones){
+      json.zones.forEach(nz=>{
+        const idx = data.zones.findIndex(z=>z.id===nz.id);
+        if(idx>=0) data.zones[idx] = nz; else data.zones.push(nz);
+      });
+    }
     saveStoreData(currentStore, data);
     if(json.customers){
       const customers = getCustomers();

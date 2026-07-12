@@ -2117,14 +2117,18 @@ refreshCurrentView('floorview');
 if(loadSettings().scriptUrl) syncNow();
 
 // Auto-sync every 5 seconds so changes from other devices show up without pressing Sync now.
-// Skipped while any modal is open so it can't overwrite a field mid-edit, and skipped if a
-// sync is already running so calls never pile up.
+// Skipped while any modal is open OR while typing/focused in any field anywhere in the app
+// (e.g. the table name box on Floor Plan isn't a modal, but re-rendering mid-keystroke would
+// still wipe out what's being typed) — and skipped if a sync is already running.
 let autoSyncRunning = false;
 setInterval(async ()=>{
   if(!loadSettings().scriptUrl) return;
   if(autoSyncRunning) return;
   const anyModalOpen = document.querySelector('.modal-backdrop.open');
   if(anyModalOpen) return;
+  const active = document.activeElement;
+  const isTyping = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
+  if(isTyping) return;
   autoSyncRunning = true;
   try{ await syncNow(); } finally { autoSyncRunning = false; }
 }, 5000);

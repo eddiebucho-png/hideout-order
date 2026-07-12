@@ -105,6 +105,8 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
 .settings-subtabs button.active{color:var(--text);border-bottom-color:var(--accent);}
 .settings-panel{display:none;}
 .settings-panel.active{display:block;}
+.customer-subpanel{display:none;}
+.customer-subpanel.active{display:block;}
 .duration-quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
 .stat-strip{display:flex;gap:20px;margin-bottom:12px;font-size:13px;color:var(--text-dim);}
 .stat-strip b{color:var(--text);font-size:16px;}
@@ -112,6 +114,9 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
 .allergen-tag{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 10px 5px 8px;font-size:12px;cursor:pointer;user-select:none;}
 .allergen-tag input{width:14px;height:14px;margin:0;accent-color:var(--accent);}
 .allergen-tag.checked{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);}
+.tag-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 8px 5px 12px;font-size:12.5px;}
+.tag-chip button{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+.tag-chip button:hover{color:var(--danger);}
 .badge.tag{background:var(--surface-3);color:var(--text-dim);}
 .type-pill-row{display:flex;gap:6px;background:var(--surface-2);border-radius:999px;padding:4px;margin-right:14px;}
 .type-pill-row .type-pill-label{font-size:13px;font-weight:700;color:var(--text);padding:6px 14px;border-radius:999px;}
@@ -307,16 +312,30 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
       <div class="panel">
         <div class="row" style="margin-bottom:14px;">
           <h2 style="margin:0;">Customers</h2>
-          <span class="spacer"></span>
-          <input id="custSearch" placeholder="Search name, phone, or email..." style="width:auto;min-width:240px;">
         </div>
-        <div id="customerList"></div>
+        <div class="settings-subtabs" id="customerSubtabs">
+          <button data-custsub="all">All list</button>
+          <button data-custsub="search" class="active">Search</button>
+        </div>
+        <div class="customer-subpanel active" data-custsub="search">
+          <input id="custSearch" placeholder="Search name, phone, or email..." style="margin-bottom:12px;">
+          <div id="customerSearchList"></div>
+        </div>
+        <div class="customer-subpanel" data-custsub="all">
+          <div id="customerAllList"></div>
+        </div>
       </div>
       <div class="panel">
-        <h2>Import customers</h2>
-        <p class="hint" style="margin-top:0;">Paste one customer per line: <span class="mono">Name, Phone, Email, Notes</span> (Notes optional). Existing customers are matched by phone or email and updated rather than duplicated.</p>
-        <textarea id="custImportText" rows="8" placeholder="Jane Smith, 0412345678, jane@email.com, Peanut allergy"></textarea>
-        <button class="btn" id="custImportBtn" style="width:100%;margin-top:10px;">Import</button>
+        <h2>Import / Export</h2>
+        <p class="hint" style="margin-top:0;">CSV format (like OpenTable's guest export): <span class="mono">First Name, Last Name, Phone, Email, Allergens, Notes</span>. Existing customers are matched by phone or email and updated, not duplicated.</p>
+        <div class="row">
+          <button class="btn ghost" id="custExportBtn">Export all as CSV</button>
+          <input type="file" id="custImportFile" accept=".csv,.txt" style="display:none;">
+          <button class="btn ghost" id="custImportFileBtn">Import CSV file</button>
+        </div>
+        <p class="hint">Or paste rows directly:</p>
+        <textarea id="custImportText" rows="6" placeholder="Jane, Smith, 0412345678, jane@email.com, Peanut allergy, VIP regular"></textarea>
+        <button class="btn" id="custImportBtn" style="width:100%;margin-top:10px;">Import pasted rows</button>
         <div id="custImportStatus" class="hint"></div>
       </div>
     </div>
@@ -327,6 +346,7 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
     <div class="settings-subtabs" id="settingsSubtabs">
       <button data-subtab="locations" class="active">Locations</button>
       <button data-subtab="zones">Zones</button>
+      <button data-subtab="tags">Tags</button>
       <button data-subtab="integration">Google integration</button>
       <button data-subtab="email">Booking email</button>
     </div>
@@ -346,6 +366,15 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
         <button class="btn" id="addZoneFromSettings">+ Add zone</button>
       </div>
       <p class="hint">Zones are named background areas (e.g. Outdoor, Function Room) you can draw on the Floor Plan tab. Rename or recolor them here, or add a new one and position it in Floor Plan.</p>
+    </div>
+    <div class="panel settings-panel" data-subtab="tags" style="max-width:640px;margin-bottom:20px;">
+      <h2>Allergen / dietary tags</h2>
+      <p class="hint" style="margin-top:0;">These are the options staff can tick on a booking. Add or remove tags to match your menu — not every café needs the full food-allergen list.</p>
+      <div class="swatch-row" id="allergenTagList" style="margin-top:6px;"></div>
+      <div class="row" style="margin-top:12px;gap:10px;">
+        <input id="newAllergenTag" placeholder="New tag (e.g. Shellfish)" style="flex:1;">
+        <button class="btn" id="addAllergenTagBtn">Add tag</button>
+      </div>
     </div>
     <div class="panel settings-panel" data-subtab="integration" style="max-width:640px;">
       <h2>Google integration</h2>
@@ -502,7 +531,15 @@ let currentStore = loadDefaultStoreId();
 let selectedTableId = null;
 let selectedZoneId = null;
 const ZONE_COLORS = ['#8ea883','#c1793f','#7f9bc1','#a883c1','#d9a441','#75695a'];
-const ALLERGEN_OPTIONS = ['Eggs','Gelatine','Nuts','Alcohol','Soy','Seeds','Dairy','Traces of almonds','Corn','HALAL','Gluten Free'];
+function loadAllergenOptions(){
+  try{
+    const s = JSON.parse(localStorage.getItem('hideout_allergen_options'));
+    if(Array.isArray(s) && s.length) return s;
+  }catch(e){}
+  return ['Eggs','Gelatine','Nuts','Alcohol','Soy','Seeds','Dairy','Traces of almonds','Corn','HALAL','Gluten Free'];
+}
+function saveAllergenOptions(list){ localStorage.setItem('hideout_allergen_options', JSON.stringify(list)); }
+let ALLERGEN_OPTIONS = loadAllergenOptions();
 const CLEAN_BUFFER_MIN = 15; // gap required between bookings on the same table
 
 function loadAll(){
@@ -608,7 +645,7 @@ function refreshCurrentView(view){
   if(view==='floorview') renderFloorView();
   if(view==='waitlist') renderWaitlist();
   if(view==='customers') renderCustomerList();
-  if(view==='settings'){ renderStoreList(); renderZoneSettings(); renderEmailSettings(); }
+  if(view==='settings'){ renderStoreList(); renderZoneSettings(); renderEmailSettings(); renderAllergenTagSettings(); }
 }
 
 /* ============ STORE LOCATIONS (settings) ============ */
@@ -705,6 +742,35 @@ document.getElementById('addZoneFromSettings').onclick = ()=>{
   addZone('New Zone');
   renderZoneSettings();
   toast('Zone added — position it on the Floor Plan tab');
+};
+
+/* ============ ALLERGEN / DIETARY TAG SETTINGS ============ */
+function renderAllergenTagSettings(){
+  const el = document.getElementById('allergenTagList');
+  el.innerHTML = '';
+  ALLERGEN_OPTIONS.forEach(tag=>{
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${tag} <button title="Remove">×</button>`;
+    chip.querySelector('button').onclick = ()=>{
+      ALLERGEN_OPTIONS = ALLERGEN_OPTIONS.filter(t=>t!==tag);
+      saveAllergenOptions(ALLERGEN_OPTIONS);
+      renderAllergenTagSettings();
+      toast(`Removed "${tag}"`);
+    };
+    el.appendChild(chip);
+  });
+}
+document.getElementById('addAllergenTagBtn').onclick = ()=>{
+  const input = document.getElementById('newAllergenTag');
+  const val = input.value.trim();
+  if(!val){ toast('Enter a tag name'); return; }
+  if(ALLERGEN_OPTIONS.includes(val)){ toast('That tag already exists'); return; }
+  ALLERGEN_OPTIONS.push(val);
+  saveAllergenOptions(ALLERGEN_OPTIONS);
+  input.value = '';
+  renderAllergenTagSettings();
+  toast(`Added "${val}"`);
 };
 
 /* ============ FLOOR PLAN EDITOR ============ */
@@ -1382,49 +1448,70 @@ function openCustomerHistory(c){
   document.getElementById('scheduleModalBackdrop').classList.add('open');
 }
 
-/* ============ CUSTOMERS DB (search + import) ============ */
+/* ============ CUSTOMERS DB (search + import/export) ============ */
+document.getElementById('customerSubtabs').addEventListener('click', e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  document.querySelectorAll('#customerSubtabs button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  const sub = e.target.dataset.custsub;
+  document.querySelectorAll('.customer-subpanel').forEach(p=>p.classList.remove('active'));
+  document.querySelector(`.customer-subpanel[data-custsub="${sub}"]`).classList.add('active');
+  if(sub==='all') renderCustomerAllList();
+});
 function renderCustomerList(){
-  const customers = Object.values(getCustomers());
-  const q = (document.getElementById('custSearch').value||'').trim().toLowerCase();
-  const filtered = q
-    ? customers.filter(c => (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q))
-    : customers;
-  filtered.sort((a,b)=> b.visits.length - a.visits.length);
-  const el = document.getElementById('customerList');
-  el.innerHTML = '';
-  if(filtered.length===0){ el.innerHTML = '<div class="empty-hint">No customers found</div>'; return; }
-  filtered.forEach(c=>{
-    const last = c.visits[c.visits.length-1];
-    const card = document.createElement('div');
-    card.className = 'booking-card';
-    card.innerHTML = `
-      <div class="top-row">
-        <span class="name">${c.name||'(no name)'}</span>
-        <span class="count-pill">${c.visits.length} visit${c.visits.length===1?'':'s'}</span>
-      </div>
-      <div class="meta">
-        <span>📞 ${c.phone||'-'}</span>
-        <span>✉️ ${c.email||'-'}</span>
-        ${last ? `<span>Last visit ${last.date}</span>` : ''}
-        ${c.allergens && c.allergens.length ? `<span class="badge tag">⚠️ ${c.allergens.join(', ')}</span>` : ''}
-      </div>`;
-    card.onclick = ()=> openCustomerHistory(c);
-    el.appendChild(card);
-  });
+  // Called after sync/import — refresh whichever sub-view is currently visible. Nothing is
+  // shown by default when the tab is first opened, so guests' details aren't just sitting on screen.
+  if(document.querySelector('.customer-subpanel[data-custsub="all"]').classList.contains('active')) renderCustomerAllList();
+  else renderCustomerSearchList();
 }
-document.getElementById('custSearch').addEventListener('input', renderCustomerList);
-document.getElementById('custImportBtn').onclick = ()=>{
-  const text = document.getElementById('custImportText').value;
-  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
-  if(!lines.length){ toast('Paste some rows first'); return; }
+function customerCard(c){
+  const last = c.visits[c.visits.length-1];
+  const card = document.createElement('div');
+  card.className = 'booking-card';
+  card.innerHTML = `
+    <div class="top-row">
+      <span class="name">${c.name||'(no name)'}</span>
+      <span class="count-pill">${c.visits.length} visit${c.visits.length===1?'':'s'}</span>
+    </div>
+    <div class="meta">
+      <span>📞 ${c.phone||'-'}</span>
+      <span>✉️ ${c.email||'-'}</span>
+      ${last ? `<span>Last visit ${last.date}</span>` : ''}
+      ${c.allergens && c.allergens.length ? `<span class="badge tag">⚠️ ${c.allergens.join(', ')}</span>` : ''}
+    </div>`;
+  card.onclick = ()=> openCustomerHistory(c);
+  return card;
+}
+function renderCustomerAllList(){
+  const customers = Object.values(getCustomers()).sort((a,b)=> b.visits.length - a.visits.length);
+  const el = document.getElementById('customerAllList');
+  el.innerHTML = '';
+  if(customers.length===0){ el.innerHTML = '<div class="empty-hint">No customers yet</div>'; return; }
+  customers.forEach(c=> el.appendChild(customerCard(c)));
+}
+function renderCustomerSearchList(){
+  const q = (document.getElementById('custSearch').value||'').trim().toLowerCase();
+  const el = document.getElementById('customerSearchList');
+  el.innerHTML = '';
+  if(!q){ el.innerHTML = '<div class="empty-hint">Type a name, phone, or email to search</div>'; return; }
+  const matches = Object.values(getCustomers()).filter(c =>
+    (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q));
+  if(matches.length===0){ el.innerHTML = '<div class="empty-hint">No matches</div>'; return; }
+  matches.forEach(c=> el.appendChild(customerCard(c)));
+}
+document.getElementById('custSearch').addEventListener('input', renderCustomerSearchList);
+
+/* ---- Import (paste or CSV file) ---- */
+function importCustomerRows(rows){
+  // rows: array of arrays, e.g. [firstName,lastName,phone,email,allergens,notes]
   const customers = getCustomers();
   let added = 0, updated = 0;
-  lines.forEach(line=>{
-    const parts = line.split(',').map(p=>p.trim());
-    const [name, phone, email, ...rest] = parts;
+  rows.forEach(parts=>{
+    if(!parts || parts.every(p=>!p)) return;
+    const [firstName, lastName, phone, email, allergensStr, notes] = parts.map(p=>(p||'').trim());
+    const name = [firstName, lastName].filter(Boolean).join(' ');
     if(!name && !phone && !email) return;
-    const notes = rest.join(', ');
-    const fakeBooking = { name: name||'', phone: phone||'', email: email||'' };
+    const fakeBooking = { name, phone, email };
     const key = customerKeyFor(fakeBooking);
     const existed = !!customers[key];
     let c = customers[key] || { key, name, phone, email, notes: '', allergens: [], visits: [] };
@@ -1432,14 +1519,63 @@ document.getElementById('custImportBtn').onclick = ()=>{
     c.phone = phone || c.phone;
     c.email = email || c.email;
     if(notes) c.notes = notes;
+    if(allergensStr) c.allergens = allergensStr.split(/[|;]/).map(s=>s.trim()).filter(Boolean);
     customers[key] = c;
     if(existed) updated++; else added++;
   });
   saveCustomers(customers);
-  document.getElementById('custImportStatus').textContent = `Imported: ${added} new, ${updated} updated.`;
+  return { added, updated };
+}
+function parseCsvText(text){
+  return text.split('\n').map(l=>l.trim()).filter(Boolean)
+    .filter(l => !/^first name/i.test(l)) // skip a header row if present
+    .map(line => line.split(',').map(p=>p.trim().replace(/^"|"$/g,'')));
+}
+document.getElementById('custImportBtn').onclick = ()=>{
+  const text = document.getElementById('custImportText').value;
+  const rows = parseCsvText(text);
+  if(!rows.length){ toast('Paste some rows first'); return; }
+  const result = importCustomerRows(rows);
+  document.getElementById('custImportStatus').textContent = `Imported: ${result.added} new, ${result.updated} updated.`;
   document.getElementById('custImportText').value = '';
   renderCustomerList();
   toast('Customers imported');
+};
+document.getElementById('custImportFileBtn').onclick = ()=> document.getElementById('custImportFile').click();
+document.getElementById('custImportFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const rows = parseCsvText(reader.result);
+    const result = importCustomerRows(rows);
+    document.getElementById('custImportStatus').textContent = `Imported from ${file.name}: ${result.added} new, ${result.updated} updated.`;
+    renderCustomerList();
+    toast('Customers imported');
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+/* ---- Export (OpenTable-style CSV: separate First/Last name columns) ---- */
+document.getElementById('custExportBtn').onclick = ()=>{
+  const customers = Object.values(getCustomers());
+  const header = ['First Name','Last Name','Phone','Email','Allergens','Notes','Total Visits','Last Visit'];
+  const rows = customers.map(c=>{
+    const nameParts = (c.name||'').trim().split(/\s+/);
+    const firstName = nameParts[0]||'';
+    const lastName = nameParts.slice(1).join(' ')||'.'; // OpenTable requires a last name; "." if unknown
+    const last = c.visits[c.visits.length-1];
+    return [firstName, lastName, c.phone||'', c.email||'', (c.allergens||[]).join('|'), c.notes||'', c.visits.length, last?last.date:''];
+  });
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'hideout-customers.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Exported '+customers.length+' customers');
 };
 
 /* ============ FLOOR VIEW ============ */

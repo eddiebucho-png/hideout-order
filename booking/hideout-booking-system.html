@@ -1404,6 +1404,10 @@ document.getElementById('bkSaveBtn').onclick = ()=>{
 function openBookingDetail(id){
   const data = storeData(currentStore);
   const b = data.bookings.find(x=>x.id===id);
+  if(!b){
+    toast('Could not find that booking — try Sync now, then refresh this list');
+    return;
+  }
   const table = data.tables.find(t=>t.id===b.tableId);
   const table2 = data.tables.find(t=>t.id===b.tableId2);
   const cust = lookupCustomer(b.phone, b.email);
@@ -1785,6 +1789,21 @@ function deserializeTable(t){
   if(t.blocked==='TRUE'||t.blocked===true) t.blocked=true; else t.blocked=false;
   return t;
 }
+function normalizeDateStr(v){
+  if(!v) return v;
+  const s = String(v);
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : s;
+}
+function normalizeTimeStr(v){
+  if(!v) return v;
+  const s = String(v);
+  // "yyyy-MM-dd HH:mm:ss" (from the backend's Date-cell repair) or ISO "...THH:MM..."
+  const m = s.match(/[ T](\d{2}):(\d{2})/);
+  if(m) return m[1]+':'+m[2];
+  const m2 = s.match(/^(\d{1,2}):(\d{2})$/);
+  return m2 ? s : s;
+}
 function deserializeBooking(b){
   if(typeof b.allergens === 'string'){ try{ b.allergens = b.allergens ? JSON.parse(b.allergens) : []; }catch(e){ b.allergens=[]; } }
   if(!Array.isArray(b.allergens)) b.allergens = [];
@@ -1792,6 +1811,8 @@ function deserializeBooking(b){
   if(!Array.isArray(b.history)) b.history = [];
   if(b.party) b.party = parseInt(b.party)||1;
   if(b.durationMin) b.durationMin = parseInt(b.durationMin)||90;
+  b.date = normalizeDateStr(b.date);
+  b.time = normalizeTimeStr(b.time);
   return b;
 }
 function deserializeCustomer(c){

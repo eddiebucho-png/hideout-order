@@ -250,10 +250,20 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
         <div class="row" style="margin-bottom:14px;">
           <h2 style="margin:0;">Bookings</h2>
           <span class="spacer"></span>
-          <input type="date" id="bookingsDate" style="width:auto;">
           <button class="btn" id="newBookingBtn">+ New booking</button>
         </div>
-        <div id="bookingsList"></div>
+        <div class="settings-subtabs" id="bookingsSubtabs">
+          <button data-bsub="bydate" class="active">Bookings</button>
+          <button data-bsub="future">Future (unconfirmed)</button>
+        </div>
+        <div class="customer-subpanel active" data-bsub="bydate">
+          <input type="date" id="bookingsDate" style="margin-bottom:12px;">
+          <div id="bookingsList"></div>
+        </div>
+        <div class="customer-subpanel" data-bsub="future">
+          <p class="hint" style="margin-top:0;">Every upcoming booking that still needs confirming, across all dates — so nothing slips through waiting for a specific day to come up.</p>
+          <div id="bookingsListFuture"></div>
+        </div>
       </div>
       <div class="panel">
         <h2>Quick stats</h2>
@@ -1141,34 +1151,56 @@ function openTableSchedule(tableId){
 let editingBookingId = null;
 document.getElementById('bookingsDate').valueAsDate = new Date();
 
+document.getElementById('bookingsSubtabs').addEventListener('click', e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  document.querySelectorAll('#bookingsSubtabs button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  const sub = e.target.dataset.bsub;
+  document.querySelectorAll('#view-bookings .customer-subpanel').forEach(p=>p.classList.remove('active'));
+  document.querySelector(`#view-bookings .customer-subpanel[data-bsub="${sub}"]`).classList.add('active');
+  renderBookings();
+});
+function bookingCard(b, data){
+  const card = document.createElement('div');
+  card.className = 'booking-card';
+  const table = data.tables.find(t=>t.id===b.tableId);
+  const table2 = data.tables.find(t=>t.id===b.tableId2);
+  card.innerHTML = `
+    <div class="top-row">
+      <span class="name">${b.date} · ${b.time} · ${b.name} · ${b.party} guests</span>
+      <span class="badge ${b.status}">${statusLabel(b.status)}</span>
+    </div>
+    <div class="meta">
+      <span>🕒 ${b.time} (${b.durationMin||90}m)</span>
+      <span>${table ? table.label + (table2?' + '+table2.label:'') : 'Unassigned'}</span>
+      <span>${b.indoor==='outside'?'Outdoor':'Indoor'}</span>
+      ${b.source==='square' ? '<span>📩 Auto-received (Square)</span>' : ''}
+      ${b.occasion ? `<span class="badge tag">🎉 ${b.occasion}</span>` : ''}
+      ${b.allergens && b.allergens.length ? `<span class="badge tag">⚠️ ${b.allergens.join(', ')}</span>` : ''}
+    </div>`;
+  card.onclick = ()=> openBookingDetail(b.id, b.date);
+  return card;
+}
 function renderBookings(){
   const data = storeData(currentStore);
-  const date = document.getElementById('bookingsDate').value || todayStr();
-  const list = document.getElementById('bookingsList');
-  const items = data.bookings.filter(b=>b.date===date).sort((a,b)=>a.time.localeCompare(b.time));
-  list.innerHTML = '';
-  if(items.length===0){ list.innerHTML = '<div class="empty-hint">No bookings on this date</div>'; }
-  items.forEach(b=>{
-    const card = document.createElement('div');
-    card.className = 'booking-card';
-    const table = data.tables.find(t=>t.id===b.tableId);
-    const table2 = data.tables.find(t=>t.id===b.tableId2);
-    card.innerHTML = `
-      <div class="top-row">
-        <span class="name">${b.name} · ${b.party} guests</span>
-        <span class="badge ${b.status}">${statusLabel(b.status)}</span>
-      </div>
-      <div class="meta">
-        <span>🕒 ${b.time} (${b.durationMin||90}m)</span>
-        <span>${table ? table.label + (table2?' + '+table2.label:'') : 'Unassigned'}</span>
-        <span>${b.indoor==='outside'?'Outdoor':'Indoor'}</span>
-        ${b.source==='square' ? '<span>📩 Auto-received (Square)</span>' : ''}
-        ${b.occasion ? `<span class="badge tag">🎉 ${b.occasion}</span>` : ''}
-        ${b.allergens && b.allergens.length ? `<span class="badge tag">⚠️ ${b.allergens.join(', ')}</span>` : ''}
-      </div>`;
-    card.onclick = ()=> openBookingDetail(b.id);
-    list.appendChild(card);
-  });
+  const activeSub = document.querySelector('#bookingsSubtabs button.active').dataset.bsub;
+  let items;
+
+  if(activeSub==='future'){
+    const today = todayStr();
+    items = data.bookings.filter(b=>b.date>=today && b.status==='pending').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+    const list = document.getElementById('bookingsListFuture');
+    list.innerHTML = '';
+    if(items.length===0){ list.innerHTML = '<div class="empty-hint">Nothing waiting on confirmation</div>'; }
+    items.forEach(b=> list.appendChild(bookingCard(b, data)));
+  } else {
+    const date = document.getElementById('bookingsDate').value || todayStr();
+    items = data.bookings.filter(b=>b.date===date).sort((a,b)=>a.time.localeCompare(b.time));
+    const list = document.getElementById('bookingsList');
+    list.innerHTML = '';
+    if(items.length===0){ list.innerHTML = '<div class="empty-hint">No bookings on this date</div>'; }
+    items.forEach(b=> list.appendChild(bookingCard(b, data)));
+  }
   renderQuickStats(items, data);
 }
 function renderQuickStats(items, data){

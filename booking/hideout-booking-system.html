@@ -118,10 +118,12 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
 .tag-chip button{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
 .tag-chip button:hover{color:var(--danger);}
 .badge.tag{background:var(--surface-3);color:var(--text-dim);}
-.type-pill-row{display:flex;gap:6px;background:var(--surface-2);border-radius:999px;padding:4px;margin-right:14px;}
-.type-pill-row .type-pill-label{font-size:13px;font-weight:700;color:var(--text);padding:6px 14px;border-radius:999px;}
-.type-pill-row.indoor .type-pill-label{background:var(--accent-soft);color:var(--accent);}
-.type-pill-row.outdoor .type-pill-label{background:var(--confirmed-soft);color:var(--confirmed);}
+.add-table-group{display:inline-flex;align-items:center;gap:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:3px;}
+.add-table-group .add-table-label{font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;}
+.add-table-group.indoor .add-table-label{background:var(--accent-soft);color:var(--accent);}
+.add-table-group.outdoor .add-table-label{background:var(--confirmed-soft);color:var(--confirmed);}
+.add-table-group button{padding:6px 11px;font-size:12px;border-radius:999px;background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-family:inherit;font-weight:500;transition:.12s;}
+.add-table-group button:hover{background:var(--surface-3);color:var(--text);}
 .table-el .type-dot{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;}
 .table-el.status-confirmed{background:var(--confirmed-soft);border-color:var(--confirmed);border-width:2px;}
 .table-el.status-pending{background:var(--pending-soft);border-color:var(--pending);border-width:2px;}
@@ -221,16 +223,20 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
     <div class="grid">
       <div>
         <div class="editor-toolbar">
-          <div class="type-pill-row indoor"><span class="type-pill-label">Indoor</span></div>
-          <button class="btn" id="addIndoorRect">+ Rectangular</button>
-          <button class="btn ghost" id="addIndoorRound">+ Round</button>
-          <div class="type-pill-row outdoor" style="margin-left:10px;"><span class="type-pill-label">Outdoor</span></div>
-          <button class="btn" id="addOutdoorRect">+ Rectangular</button>
-          <button class="btn ghost" id="addOutdoorRound">+ Round</button>
-          <button class="btn ghost" id="addZone">+ Add zone</button>
+          <div class="add-table-group indoor">
+            <span class="add-table-label">Indoor</span>
+            <button id="addIndoorRect">+ Rect</button>
+            <button id="addIndoorRound">+ Round</button>
+          </div>
+          <div class="add-table-group outdoor">
+            <span class="add-table-label">Outdoor</span>
+            <button id="addOutdoorRect">+ Rect</button>
+            <button id="addOutdoorRound">+ Round</button>
+          </div>
+          <button class="btn ghost small" id="addZone">+ Zone</button>
           <span class="spacer"></span>
-          <button class="btn ghost" id="clearSelection">Deselect</button>
-          <button class="btn" id="saveFloorPlanBtn">Save floor plan</button>
+          <button class="btn ghost small" id="clearSelection">Deselect</button>
+          <button class="btn small" id="saveFloorPlanBtn">Save floor plan</button>
         </div>
         <div id="floorPlanSaveStatus" class="hint" style="margin-top:-6px;margin-bottom:10px;min-height:16px;"></div>
         <div class="floor-canvas-wrap" id="canvas"></div>

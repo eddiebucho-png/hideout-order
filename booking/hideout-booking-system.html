@@ -476,6 +476,11 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
       <select id="bkTable" style="margin-top:8px;"></select>
     </div>
     <div class="field-group">
+      <label class="field">Second table (optional — combine seating for just this booking)</label>
+      <select id="bkTable2"><option value="">None</option></select>
+      <p class="hint">Use this for a one-off big party — it seats them across two tables for this date and time only. The floor plan itself doesn't change, so every other day is unaffected.</p>
+    </div>
+    <div class="field-group">
       <label class="field">Allergens / dietary</label>
       <div class="swatch-row" id="bkAllergenList" style="flex-wrap:wrap;"></div>
     </div>
@@ -1295,15 +1300,21 @@ document.getElementById('bkEmail').addEventListener('input', checkReturningCusto
 function populateTableSelect(booking){
   const data = storeData(currentStore);
   const sel = document.getElementById('bkTable');
+  const sel2 = document.getElementById('bkTable2');
   sel.innerHTML = '<option value="">Unassigned</option>';
+  sel2.innerHTML = '<option value="">None</option>';
   data.tables.filter(t=>!t.deleted).forEach(t=>{
+    const label = `${t.label} · ${t.seats} seats · ${TYPE_LABEL[t.type]}${t.blocked?' (blocked)':''}`;
     const opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = `${t.label} · ${t.seats} seats · ${TYPE_LABEL[t.type]}${t.blocked?' (blocked)':''}`;
+    opt.value = t.id; opt.textContent = label;
     if(booking && (t.id===booking.tableId)) opt.selected = true;
     sel.appendChild(opt);
+    const opt2 = document.createElement('option');
+    opt2.value = t.id; opt2.textContent = label;
+    if(booking && (t.id===booking.tableId2)) opt2.selected = true;
+    sel2.appendChild(opt2);
   });
-  runAutoAssign(booking?.tableId2);
+  runAutoAssign();
 }
 function currentBkFields(){
   return {
@@ -1315,15 +1326,13 @@ function currentBkFields(){
     excludeId: editingBookingId,
   };
 }
-let pendingComboTableId2 = null;
-function runAutoAssign(presetCombo){
+function runAutoAssign(){
   const data = storeData(currentStore);
   const fields = currentBkFields();
   const box = document.getElementById('bkSuggestBox');
-  pendingComboTableId2 = presetCombo || null;
   if(fields.party>=8){
     box.style.display='block';
-    box.innerHTML = `<b>Large party (8+)</b> — auto-assignment is off for groups this size. Go to Today's Floor, use "Select tables to merge" to combine the tables you want, then pick the merged table below.`;
+    box.innerHTML = `<b>Large party (8+)</b> — auto-assignment is off for groups this size. Pick a "Table assignment" below and, if needed, a "Second table" to seat them across two tables for just this booking — the floor plan itself won't change.`;
     return;
   }
   const result = findBestTable(data, fields);
@@ -1338,7 +1347,7 @@ function runAutoAssign(presetCombo){
     box.innerHTML = `<div class="opt" id="applySuggest"><span>✓ Recommended: <b>${t.label}</b> (${t.seats} seats, ${TYPE_LABEL[t.type]})</span><span>Use</span></div>`;
     document.getElementById('applySuggest').onclick = ()=>{
       document.getElementById('bkTable').value = t.id;
-      pendingComboTableId2 = null;
+      document.getElementById('bkTable2').value = '';
       toast('Table assigned: '+t.label);
     };
   } else {
@@ -1346,7 +1355,7 @@ function runAutoAssign(presetCombo){
     box.innerHTML = `<div class="opt" id="applySuggest"><span>✓ Recommended combo: <b>${a.label} + ${b.label}</b> (${a.seats+b.seats} seats total)</span><span>Use</span></div>`;
     document.getElementById('applySuggest').onclick = ()=>{
       document.getElementById('bkTable').value = a.id;
-      pendingComboTableId2 = b.id;
+      document.getElementById('bkTable2').value = b.id;
       toast('Combo assigned: '+a.label+' + '+b.label);
     };
   }
@@ -1355,7 +1364,6 @@ function runAutoAssign(presetCombo){
   document.getElementById(id).addEventListener('input', ()=> runAutoAssign());
   document.getElementById(id).addEventListener('change', ()=> runAutoAssign());
 });
-document.getElementById('bkTable').addEventListener('change', ()=>{ pendingComboTableId2=null; });
 document.getElementById('bkCancelBtn').onclick = ()=> document.getElementById('bookingModalBackdrop').classList.remove('open');
 
 document.getElementById('bkSaveBtn').onclick = async ()=>{
@@ -1375,7 +1383,7 @@ document.getElementById('bkSaveBtn').onclick = async ()=>{
     indoor: document.getElementById('bkIndoor').value,
     durationMin: parseInt(document.getElementById('bkDuration').value)||90,
     tableId: document.getElementById('bkTable').value || null,
-    tableId2: document.getElementById('bkTable').value ? pendingComboTableId2 : null,
+    tableId2: document.getElementById('bkTable2').value || null,
     notes: document.getElementById('bkNotes').value.trim(),
     allergens: Array.from(document.querySelectorAll('#bkAllergenList input:checked')).map(i=>i.value),
     occasion: occasionVal,

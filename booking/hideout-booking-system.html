@@ -202,9 +202,11 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
           <button class="btn ghost" id="addZone">+ Add zone</button>
           <span class="spacer"></span>
           <button class="btn ghost" id="clearSelection">Deselect</button>
+          <button class="btn" id="saveFloorPlanBtn">Save floor plan</button>
         </div>
+        <div id="floorPlanSaveStatus" class="hint" style="margin-top:-6px;margin-bottom:10px;min-height:16px;"></div>
         <div class="floor-canvas-wrap" id="canvas"></div>
-        <p class="hint">Drag a table to reposition it, use the bottom-right handle to resize. Click a table to edit its seats, type, and name on the right — or view its schedule for the day.</p>
+        <p class="hint">Drag a table to reposition it, use the bottom-right handle to resize. Click a table to edit its seats, type, and name on the right — or view its schedule for the day. Changes save to this device automatically; hit "Save floor plan" to push them to other devices right away.</p>
       </div>
       <div class="panel props-panel" id="propsPanel">
         <h2>Table properties</h2>
@@ -308,6 +310,13 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
         <button class="btn ghost" id="syncNowBtn">Sync now</button>
         <span id="syncStatus" style="font-size:12.5px;color:var(--text-faint);"></span>
       </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn ghost" id="pushAllBtn">Push all locations' floor plans to backend</button>
+        <span id="pushAllStatus" style="font-size:12.5px;color:var(--text-faint);"></span>
+      </div>
+      <p class="hint" style="margin-top:6px;">
+        One-time step: if you already built floor plans on this device before connecting the backend, use this to upload all locations at once so other devices can see them. After that, edits sync automatically.
+      </p>
       <p class="hint">
         Once the Apps Script backend is deployed, paste its URL here to enable automatic Gmail parsing, Google Calendar sync, and confirmation emails.
         For now this is linked to <span class="mono">juannara1169@gmail.com</span> — when ready to switch to the company account, just redeploy the same script and swap the URL here.
@@ -1278,14 +1287,46 @@ function schedulePushFloorPlan(){
   if(floorPlanPushTimer) clearTimeout(floorPlanPushTimer);
   floorPlanPushTimer = setTimeout(pushFloorPlanNow, 900);
 }
-async function pushFloorPlanNow(){
+async function pushFloorPlanNow(storeId){
+  storeId = storeId || currentStore;
   const s = loadSettings();
-  if(!s.scriptUrl) return;
-  const data = storeData(currentStore);
+  if(!s.scriptUrl) return false;
+  const data = storeData(storeId);
   try{
-    await fetch(s.scriptUrl, { method:'POST', body: JSON.stringify({ action:'saveFloorPlan', storeId: currentStore, tables: data.tables, zones: data.zones }) });
-  }catch(e){ /* offline or backend unreachable — local copy is still saved, will retry on next edit/sync */ }
+    const res = await fetch(s.scriptUrl, { method:'POST', body: JSON.stringify({ action:'saveFloorPlan', storeId: storeId, tables: data.tables, zones: data.zones }) });
+    const json = await res.json();
+    return !!(json && json.ok);
+  }catch(e){ return false; }
 }
+document.getElementById('saveFloorPlanBtn').onclick = async ()=>{
+  const statusEl = document.getElementById('floorPlanSaveStatus');
+  const s = loadSettings();
+  if(!s.scriptUrl){ statusEl.textContent = 'Not connected to a backend yet — see Settings.'; return; }
+  if(floorPlanPushTimer){ clearTimeout(floorPlanPushTimer); floorPlanPushTimer = null; }
+  statusEl.textContent = 'Saving...';
+  const ok = await pushFloorPlanNow(currentStore);
+  statusEl.textContent = ok ? 'Saved — other devices will see this the next time they sync.' : 'Save failed — check the backend connection in Settings.';
+};
+async function pushAllFloorPlansNow(){
+  const s = loadSettings();
+  if(!s.scriptUrl) return { ok:false, count:0 };
+  let count = 0;
+  for(const store of STORES){
+    const ok = await pushFloorPlanNow(store.id);
+    if(ok) count++;
+  }
+  return { ok: count===STORES.length, count };
+}
+document.getElementById('pushAllBtn').onclick = async ()=>{
+  const statusEl = document.getElementById('pushAllStatus');
+  const s = loadSettings();
+  if(!s.scriptUrl){ statusEl.textContent = 'Save the Web App URL first'; return; }
+  statusEl.textContent = 'Pushing all locations...';
+  const result = await pushAllFloorPlansNow();
+  statusEl.textContent = result.ok
+    ? `Pushed ${result.count}/${STORES.length} locations — other devices will see this on their next Sync.`
+    : `Pushed ${result.count}/${STORES.length} locations — check connection and try again.`;
+};
 
 function loadSettings(){
   try {

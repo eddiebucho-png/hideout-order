@@ -3055,24 +3055,13 @@ async function kvDeleteLongText(baseKey){
 }
 
 // The actual Claude call happens server-side on the Apps Script backend (action=aiAssist) so the
-// API key never touches the browser. This builds the full context, stashes it under a one-off key,
-// and just asks the backend to read that key, answer the question, and clean up after itself.
+// API key never touches the browser. The CONTEXT is now assembled server-side too (see
+// buildAiContextServerSide in the backend). The front end no longer builds or uploads the context —
+// that chunked kvSetLongText upload round-trip was the main source of the 30s+ latency (and the old
+// "Failed to fetch" bug). We just send the question + a dept hint + recent chat turns, and the
+// backend reads everything it needs straight from Firestore in one execution.
 async function askAiAssistant(question){
   if(!state.backendUrl) throw new Error('No backend connected — set one up under Settings → Connection first.');
-
-  let system;
-  try{
-    system = await buildFullAiContext(question);
-  }catch(e){
-    throw new Error('[Step: gathering context] ' + e.message);
-  }
-
-  const contextKey = 'ai_ctx_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
-  try{
-    await kvSetLongText(contextKey, system);
-  }catch(e){
-    throw new Error('[Step: saving context] ' + e.message);
-  }
 
   // Recent turns give the AI real conversation memory instead of treating every question as a
   // fresh, context-free start (e.g. "what about the barista one?" only makes sense with the
@@ -3082,8 +3071,9 @@ async function askAiAssistant(question){
   const historyParam = priorTurns.length
     ? `&history=${encodeURIComponent(JSON.stringify(priorTurns.map(m=>({role:m.role, content:m.text}))))}`
     : '';
+  const deptParam = `&dept=${encodeURIComponent(state.department||'')}`;
 
-  const url = withAuth(`${state.backendUrl}?action=aiAssist&contextKey=${encodeURIComponent(contextKey)}&question=${encodeURIComponent(question)}${historyParam}`);
+  const url = withAuth(`${state.backendUrl}?action=aiAssist&question=${encodeURIComponent(question)}${deptParam}${historyParam}`);
 
   // Explicit 45s timeout so a genuinely slow/stuck request shows a clear diagnostic instead of the
   // browser's generic, uninformative "Failed to fetch" (which was previously indistinguishable from

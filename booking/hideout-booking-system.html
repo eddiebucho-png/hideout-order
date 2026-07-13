@@ -439,7 +439,7 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
       </div>
       <div class="field-group">
         <label class="field">Linked account</label>
-        <input id="scriptAccount" placeholder="juannara1169@gmail.com" value="juannara1169@gmail.com">
+        <input id="scriptAccount" placeholder="thehideoutbooking20@gmail.com" value="thehideoutbooking20@gmail.com">
       </div>
       <div class="row">
         <button class="btn" id="saveSettingsBtn">Save settings</button>
@@ -464,7 +464,7 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
       </p>
       <p class="hint">
         Once the Apps Script backend is deployed, paste its URL here to enable automatic Gmail parsing, Google Calendar sync, and confirmation emails.
-        For now this is linked to <span class="mono">juannara1169@gmail.com</span> — when ready to switch to the company account, just redeploy the same script and swap the URL here.
+        For now this is linked to <span class="mono">thehideoutbooking20@gmail.com</span> — when ready to switch to the company account, just redeploy the same script and swap the URL here.
         Until connected, all data stays in this browser's local storage.
       </p>
       <div class="hint" style="margin-top:14px;">
@@ -573,7 +573,7 @@ const LOGO_DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEWCAY
 
 /* ============ DATA LAYER ============ */
 // Ships pre-filled so any device opening this file syncs automatically, no manual setup needed.
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyc2suHhyjltDRmyFKfYlL4hnJy3i5qwMBGq8TqK18kMg5eZobr1uAbVmWAwryZsmg7Gg/exec';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2Sa4HsxoBXxRMnXzL4rvdfIRpEOHRNWvPdaxWI8X1Hxlb3wiy_QzsCRfg66eB3-LaPQ/exec';
 function loadStores(){
   try {
     const s = JSON.parse(localStorage.getItem('hideout_booking_stores'));

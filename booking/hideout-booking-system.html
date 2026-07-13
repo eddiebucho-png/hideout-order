@@ -213,6 +213,29 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
 .ds-booking:hover .who{color:var(--accent);}
 .ds-empty{color:var(--text-faint);font-size:12.5px;padding:10px 0;}
 .ds-cal-allday{background:var(--pending-soft);color:var(--pending);border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.03em;}
+.ds-row.ds-cal-item{align-items:flex-start;}
+.ds-cal-body{flex:1;min-width:0;}
+.ds-cal-title{font-weight:600;}
+.ds-cal-sub{color:var(--text-dim);font-size:12px;margin-top:2px;line-height:1.4;}
+.ds-cal-sub .k{color:var(--text-faint);}
+.ds-cal-desc{color:var(--text-dim);font-size:12px;margin-top:5px;white-space:pre-wrap;line-height:1.5;border-left:2px solid var(--border);padding-left:9px;}
+.ds-modes{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:3px;margin-left:auto;}
+.ds-modes button{border:none;background:transparent;color:var(--text-dim);padding:5px 13px;border-radius:999px;font-family:inherit;font-size:12.5px;cursor:pointer;font-weight:500;transition:.12s;}
+.ds-modes button.active{background:var(--accent);color:#1b1509;}
+.ds-modes button:not(.active):hover{color:var(--text);}
+.ds-refresh{margin-left:10px;}
+.ds-week-day{margin-bottom:14px;}
+.ds-week-day:last-child{margin-bottom:0;}
+.ds-week-date{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);font-weight:600;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+.ds-week-row{display:flex;gap:10px;align-items:center;padding:6px 0;font-size:13px;}
+.ds-week-row .t{font-family:'JetBrains Mono',monospace;color:var(--text-faint);width:54px;flex-shrink:0;font-size:12px;}
+.ds-week-row .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ds-week-row .kind{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;flex-shrink:0;}
+.ds-week-row .kind.booking{background:var(--accent-soft);color:var(--accent);}
+.ds-week-row .kind.event{background:var(--clean-soft);color:var(--clean);}
+.ds-week-row.book{cursor:pointer;}
+.ds-week-row.book:hover .tt{color:var(--accent);}
+.ds-week-empty{color:var(--text-faint);font-size:12.5px;padding:12px 0;}
 </style>
 </head>
 <body>
@@ -306,9 +329,14 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
       <div class="ds-head">
         <h2 id="dailySummaryTitle">Daily Summary</h2>
         <div class="ds-stats" id="dailySummaryStats"></div>
+        <div class="ds-modes" id="dsModes">
+          <button id="dsToday" class="active">Today</button>
+          <button id="dsTomorrow">Tomorrow</button>
+          <button id="dsWeekBtn">Weekly</button>
+        </div>
         <button class="btn ghost small ds-refresh" id="refreshCalBtn">&#8635; Sync calendar</button>
       </div>
-      <div class="ds-cols">
+      <div class="ds-cols" id="dsDayView">
         <div class="ds-col">
           <h3>Bookings &mdash; table &middot; guest &middot; party &middot; time</h3>
           <div id="dsBookings"></div>
@@ -318,6 +346,7 @@ button.icon-btn:hover{color:var(--text);border-color:var(--accent);}
           <div id="dsCalendar"></div>
         </div>
       </div>
+      <div id="dsWeek" class="ds-week" style="display:none;"></div>
     </div>
     <div class="row" style="margin-bottom:12px;">
       <input type="date" id="floorviewDate" style="width:auto;">
@@ -1698,7 +1727,7 @@ document.getElementById('custExportBtn').onclick = ()=>{
 
 /* ============ FLOOR VIEW ============ */
 document.getElementById('floorviewDate').valueAsDate = new Date();
-document.getElementById('floorviewDate').onchange = renderFloorView;
+document.getElementById('floorviewDate').onchange = function(){ dsMode = 'day'; renderFloorView(); };
 function deriveTableStatus(t, data, date){
   if(t.blocked) return { status:'blocked', label: t.seats+' seats' };
   if(t.tempBlockDate===date){
@@ -1811,6 +1840,8 @@ function dsEscape(str){ return String(str==null?'':str).replace(/[&<>"']/g, func
 // older than 60s or when the user hits "Sync calendar".
 const calEventsCache = {};
 function calCacheKey(storeId, date){ return storeId + '|' + date; }
+let dsMode = 'day'; // 'day' | 'week' — controls the Daily Summary panel
+function tomorrowStr(){ const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
 
 async function fetchCalendarEvents(storeId, date, force){
   const s = loadSettings();
@@ -1833,7 +1864,7 @@ async function fetchCalendarEvents(storeId, date, force){
   // Re-render only if the user is still looking at this same store + date on the floor view.
   const onFloor = document.getElementById('view-floorview').classList.contains('active');
   const shownDate = document.getElementById('floorviewDate').value || todayStr();
-  if(onFloor && currentStore===storeId && shownDate===date){
+  if(onFloor && currentStore===storeId && (dsMode==='week' || shownDate===date)){
     renderDailySummary(storeData(currentStore), date);
   }
 }
@@ -1852,6 +1883,17 @@ function updateDsCalStatus(storeId, date){
 function renderDailySummary(data, date){
   const titleEl = document.getElementById('dailySummaryTitle');
   if(!titleEl) return;
+  updateDsModeButtons();
+  const dayView = document.getElementById('dsDayView');
+  const weekView = document.getElementById('dsWeek');
+  if(dsMode==='week'){
+    if(dayView) dayView.style.display = 'none';
+    if(weekView) weekView.style.display = '';
+    renderWeeklySummary(data);
+    return;
+  }
+  if(dayView) dayView.style.display = '';
+  if(weekView) weekView.style.display = 'none';
   date = date || (document.getElementById('floorviewDate') ? (document.getElementById('floorviewDate').value || todayStr()) : todayStr());
   const isToday = date === todayStr();
   const nice = new Date(date + 'T00:00:00').toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'});
@@ -1913,11 +1955,21 @@ function renderDailySummary(data, date){
       return (a.start||'').localeCompare(b.start||'');
     }).forEach(function(ev){
       const row = document.createElement('div');
-      row.className = 'ds-row';
+      row.className = 'ds-row ds-cal-item';
       const timeCell = ev.allDay ? '<span class="ds-cal-allday">All day</span>' : '<span class="t">' + (ev.start||'') + '</span>';
-      const range = (!ev.allDay && ev.end) ? '<span class="sub"> · ' + ev.start + '–' + ev.end + '</span>' : '';
-      const loc = ev.location ? '<span class="sub"> · ' + dsEscape(ev.location) + '</span>' : '';
-      row.innerHTML = timeCell + '<span class="who">' + dsEscape(ev.title||'(untitled)') + range + loc + '</span>';
+      // Detail line: full time range, location, organiser
+      const bits = [];
+      if(!ev.allDay && ev.end) bits.push(ev.start + '–' + ev.end);
+      else if(ev.allDay) bits.push('All day');
+      if(ev.location) bits.push('<span class="k">📍</span> ' + dsEscape(ev.location));
+      if(ev.organizer) bits.push('<span class="k">by</span> ' + dsEscape(ev.organizer));
+      const subLine = bits.length ? '<div class="ds-cal-sub">' + bits.join(' &nbsp;·&nbsp; ') + '</div>' : '';
+      const guestLine = (ev.guests && ev.guests.length)
+        ? '<div class="ds-cal-sub"><span class="k">Guests:</span> ' + ev.guests.map(dsEscape).join(', ') + '</div>' : '';
+      const descLine = ev.description ? '<div class="ds-cal-desc">' + dsEscape(ev.description) + '</div>' : '';
+      row.innerHTML = timeCell
+        + '<div class="ds-cal-body"><div class="ds-cal-title">' + dsEscape(ev.title||'(untitled)') + '</div>'
+        + subLine + guestLine + descLine + '</div>';
       cEl.appendChild(row);
     });
   }
@@ -1927,6 +1979,92 @@ function renderDailySummary(data, date){
 document.getElementById('refreshCalBtn').onclick = function(){
   const date = document.getElementById('floorviewDate').value || todayStr();
   fetchCalendarEvents(currentStore, date, true);
+};
+
+function updateDsModeButtons(){
+  const bToday = document.getElementById('dsToday');
+  const bTom = document.getElementById('dsTomorrow');
+  const bWk = document.getElementById('dsWeekBtn');
+  if(!bToday || !bTom || !bWk) return;
+  [bToday, bTom, bWk].forEach(function(b){ b.classList.remove('active'); });
+  if(dsMode==='week'){ bWk.classList.add('active'); return; }
+  const date = document.getElementById('floorviewDate').value || todayStr();
+  if(date===todayStr()) bToday.classList.add('active');
+  else if(date===tomorrowStr()) bTom.classList.add('active');
+}
+
+// Weekly / upcoming view: next 7 days, compact "date · title" rows for both bookings and
+// calendar events. Reuses the same per-day calendar cache, so no backend change is needed.
+function renderWeeklySummary(data){
+  const start = new Date(); start.setHours(0,0,0,0);
+  const days = [];
+  for(let i=0;i<7;i++){ const d = new Date(start); d.setDate(start.getDate()+i); days.push(d.toISOString().slice(0,10)); }
+  days.forEach(function(dt){ fetchCalendarEvents(currentStore, dt); }); // warm the cache; each resolve re-renders
+
+  const startNice = new Date(days[0]+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  const endNice = new Date(days[6]+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  document.getElementById('dailySummaryTitle').textContent = 'This week — ' + startNice + ' – ' + endNice;
+
+  const perDay = {}; let totalBookings=0, totalGuests=0, totalEvents=0;
+  days.forEach(function(dt){
+    const items = [];
+    data.bookings.filter(function(b){ return b.date===dt && b.status!=='cancelled'; }).forEach(function(b){
+      totalBookings++; totalGuests += (parseInt(b.party)||0);
+      items.push({ time:b.time||'', allDay:false, kind:'booking', title:(b.name||'Guest')+' · '+(parseInt(b.party)||1)+'g', bookingId:b.id });
+    });
+    const cal = calEventsCache[calCacheKey(currentStore, dt)];
+    ((cal&&cal.events)||[]).filter(function(ev){ return !/^\[Booking\]/i.test(ev.title||''); }).forEach(function(ev){
+      totalEvents++;
+      items.push({ time: ev.allDay?'':(ev.start||''), allDay:!!ev.allDay, kind:'event', title:ev.title||'(untitled)' });
+    });
+    items.sort(function(a,b){ return (a.allDay?'0':(a.time||'99:99')).localeCompare(b.allDay?'0':(b.time||'99:99')); });
+    perDay[dt] = items;
+  });
+
+  document.getElementById('dailySummaryStats').innerHTML =
+      '<span><b>' + totalBookings + '</b> booking' + (totalBookings===1?'':'s') + '</span>'
+    + '<span><b>' + totalGuests + '</b> guest' + (totalGuests===1?'':'s') + '</span>'
+    + '<span><b>' + totalEvents + '</b> calendar event' + (totalEvents===1?'':'s') + '</span>';
+
+  const wk = document.getElementById('dsWeek');
+  wk.innerHTML = '';
+  const anyItems = days.some(function(dt){ return perDay[dt].length; });
+  if(!anyItems){ wk.innerHTML = '<div class="ds-week-empty">Nothing scheduled in the next 7 days.</div>'; return; }
+  days.forEach(function(dt){
+    const items = perDay[dt];
+    if(!items.length) return; // skip empty days to keep the list tight
+    const dObj = new Date(dt+'T00:00:00');
+    const isToday = dt===todayStr();
+    const group = document.createElement('div');
+    group.className = 'ds-week-day';
+    const label = (isToday?'Today · ':'') + dObj.toLocaleDateString('en-AU',{weekday:'short', day:'numeric', month:'short'});
+    group.innerHTML = '<div class="ds-week-date">' + label + '</div>';
+    items.forEach(function(it){
+      const row = document.createElement('div');
+      row.className = 'ds-week-row' + (it.kind==='booking' ? ' book' : '');
+      row.innerHTML = '<span class="t">' + (it.allDay ? 'All day' : (it.time||'--:--')) + '</span>'
+        + '<span class="tt">' + dsEscape(it.title) + '</span>'
+        + '<span class="kind ' + it.kind + '">' + (it.kind==='booking'?'Booking':'Event') + '</span>';
+      if(it.kind==='booking'){ row.onclick = function(){ openBookingDetail(it.bookingId); }; }
+      group.appendChild(row);
+    });
+    wk.appendChild(group);
+  });
+}
+
+document.getElementById('dsToday').onclick = function(){
+  dsMode = 'day';
+  document.getElementById('floorviewDate').value = todayStr();
+  renderFloorView();
+};
+document.getElementById('dsTomorrow').onclick = function(){
+  dsMode = 'day';
+  document.getElementById('floorviewDate').value = tomorrowStr();
+  renderFloorView();
+};
+document.getElementById('dsWeekBtn').onclick = function(){
+  dsMode = 'week';
+  renderFloorView();
 };
 
 /* ============ WAITLIST ============ */
@@ -2261,6 +2399,17 @@ document.getElementById('saveEmailSettingsBtn').onclick = async ()=>{
 // Builds the full flat settings map the backend stores. IMPORTANT: the backend's saveSettings
 // replaces the whole settings sheet, so every save must send ALL keys (email, branding, and
 // calendar IDs) together — otherwise saving one section would wipe the others.
+// If someone pastes a Google Calendar embed/share URL instead of the plain Calendar ID,
+// pull the id out of the ?src=... parameter automatically (e.g. an embed URL for
+// thehideoutbooking20@gmail.com becomes just that address).
+function normalizeCalendarId(v){
+  v = String(v==null?'':v).trim();
+  if(!v) return '';
+  const m = v.match(/[?&]src=([^&]+)/);
+  if(m){ try { return decodeURIComponent(m[1]).trim(); } catch(e){ return m[1].trim(); } }
+  return v;
+}
+
 function buildFlatSettings(es){
   const flat = {};
   Object.keys(es.stores||{}).forEach(function(id){
@@ -2296,7 +2445,7 @@ function renderCalendarIdSettings(){
 document.getElementById('saveCalendarIdsBtn').onclick = async function(){
   const es = loadEmailSettings();
   es.calendars = es.calendars || {};
-  document.querySelectorAll('.calId').forEach(function(inp){ es.calendars[inp.dataset.id] = inp.value.trim(); });
+  document.querySelectorAll('.calId').forEach(function(inp){ es.calendars[inp.dataset.id] = normalizeCalendarId(inp.value); });
   saveEmailSettingsLocal(es);
   const statusEl = document.getElementById('calendarIdsStatus');
   const s = loadSettings();

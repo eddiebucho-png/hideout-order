@@ -504,6 +504,17 @@ async function kvGetBatch(keys){
 /* ---- chunked array storage (CHUNK_SIZE=2, see original) ---- */
 const CHUNK_SIZE = 2;
 async function kvSetChunked(baseKey, arr){
+    // [SAFETY GUARD 2026-07-20] Never overwrite existing non-empty data with an empty list.
+    // Root-caused a Barista items wipe: on load an empty dept read initialised items=[] and
+    // saved it back, deleting real data. This makes chef & barista behave identically-safe (P5).
+    if(!arr || arr.length===0){
+      try{
+        const _flat=await kvGet(baseKey);
+        if(_flat){ try{ const _p=JSON.parse(_flat); if(Array.isArray(_p)&&_p.length>0){ console.warn('[guard] refused empty overwrite of '+baseKey); return; } }catch(_e){} }
+        const _c=await kvGet(`${baseKey}_chunk_count`);
+        if(_c && (parseInt(_c,10)||0)>0){ console.warn('[guard] refused empty overwrite of '+baseKey+' chunks='+_c); return; }
+      }catch(_e){ console.warn('[guard] backend read failed, refusing empty write to '+baseKey); return; }
+    }
   const chunks=[]; for(let i=0;i<arr.length;i+=CHUNK_SIZE) chunks.push(arr.slice(i,i+CHUNK_SIZE));
   for(let i=0;i<chunks.length;i++) await kvSet(`${baseKey}_chunk_${i}`, JSON.stringify(chunks[i]));
   await kvSet(`${baseKey}_chunk_count`, String(chunks.length));

@@ -509,9 +509,10 @@ async function kvSetChunked(baseKey, arr){
     // saved it back, deleting real data. This makes chef & barista behave identically-safe (P5).
     if(!arr || arr.length===0){
       try{
-        const _flat=await kvGet(baseKey);
+        // use FRESH (uncached) reads so a stale cached 0 can't bypass the guard
+        const _flat=await kvGetFresh(baseKey);
         if(_flat){ try{ const _p=JSON.parse(_flat); if(Array.isArray(_p)&&_p.length>0){ console.warn('[guard] refused empty overwrite of '+baseKey); return; } }catch(_e){} }
-        const _c=await kvGet(`${baseKey}_chunk_count`);
+        const _c=await kvGetFresh(`${baseKey}_chunk_count`);
         if(_c && (parseInt(_c,10)||0)>0){ console.warn('[guard] refused empty overwrite of '+baseKey+' chunks='+_c); return; }
       }catch(_e){ console.warn('[guard] backend read failed, refusing empty write to '+baseKey); return; }
     }

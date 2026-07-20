@@ -695,16 +695,24 @@ window.OrderCore = {
   function rccData(){ return hasRcc()?rccState():(RCC_CACHE||{}); }
   function rccCategories(){ var s=rccData(), set={}, out=[]; (s.recipes||[]).forEach(function(r){ if(r.category&&!r.archived) set[r.category]=1; }); var dc=s.dishCats||{}; [].concat(dc.kitchen||[],dc.bakery||[]).forEach(function(c){ if(c) set[c]=1; }); ["Drinks","Brunch","Bagel","Sandwich","Wraps & Salad","Pastry","Breakfast"].forEach(function(c){ set[c]=1; }); Object.keys(set).forEach(function(c){ out.push(c); }); return out; }
   function ingredientNames(){ try{ return (window.HideoutRCC.ingredients()||[]).map(function(i){ return i.name; }); }catch(e){ return []; } }
-  var RECIPE_VERB=/(make|create|build|invent|develop|write|generate|draft|new|add|만들|만드|생성|추가|짜)/i;
-  function wantsRecipe(q){ return /(recipe|레시피)/i.test(q||"") && RECIPE_VERB.test(q||""); }
+  var RECIPE_VERB=/(make|create|build|invent|develop|write|generate|draft|new|add|만들|만드|생성|추가|짜|등록)/i;
+  var RECIPE_NOUN=/(recipe|레시피|dish|menu item|메뉴|신메뉴|recipe ?card|레시피 ?카드)/i;
+  function wantsRecipe(q){ return RECIPE_NOUN.test(q||"") && RECIPE_VERB.test(q||""); }
+  var INGREDIENT_NOUN=/(ingredient|ingredients|재료|품목|stock item)/i;
+  function wantsIngredient(q){ return INGREDIENT_NOUN.test(q||"") && RECIPE_VERB.test(q||""); }
+  // The AI sometimes replies in prose asking for recipe details instead of emitting recipe-json; detect that so the builder card still opens.
+  function looksLikeRecipeAsk(r){ if(!r) return false; var t=String(r).toLowerCase(); return /(recipe card|recipe for|create a recipe|new recipe|레시피)/.test(t) && /(what dish|which dish|dish name|few details|some details|i need|please provide|let me know|tell me|어떤|알려주|필요)/.test(t); }
+  function extractIngredient(text){ if(!text) return null; var m=text.match(/```\s*ingredient-json\s*([\s\S]*?)```/i); if(!m) return null; var ing; try{ ing=JSON.parse(m[1].trim()); }catch(e){ return null; } if(!ing||!ing.name) return null; return { intro:text.slice(0,m.index).trim(), ingredient:ing }; }
 
   function resolveCfg(opts){ var c=opts&&opts.cfg; return (typeof c==="function")?(c()||{}):(c||{}); }
   function buildContext(opts, q){
     var parts=[]; var hasO=opts.cfg||window.OrderCore;
     if(opts.source==="ordering"){ parts.push(ctxOrdering(resolveCfg(opts))); if(hasRcc()||RCC_CACHE) parts.push(ctxRcc(q)); }
     else { parts.push(ctxRcc(q)); if(hasO) parts.push(ctxOrdering(resolveCfg(opts))); }
+    try{ var wc=window.__HIDEOUT_CAL; if(wc&&wc.events&&wc.events.length){ parts.push("CALENDAR AS SHOWN IN THE APP ("+(wc.branch||"this branch")+"):\n"+wc.events.slice(0,40).map(function(e){ return "- "+(e.date?e.date+" ":"")+(e.allday?"(all day)":(e.start||""))+" "+(e.summary||"")+(e.location?(" @"+e.location):""); }).join("\n")); } }catch(e){}
     if(canSaveRecipe()) parts.push(recipeCreateHint());
     if(canRemember()) parts.push(rememberHint());
+    parts.push(calendarAddHint());
     return parts.join("\n\n---\n\n");
   }
 
@@ -712,10 +720,18 @@ window.OrderCore = {
     var burl=(typeof opts.backendUrl==="function")?opts.backendUrl():opts.backendUrl;
     var tok=(typeof opts.token==="function")?opts.token():opts.token;
     if(burl){
+      var tk=encodeURIComponent(tok||TOKEN_DEFAULT);
+      // Upload this app's own context (recipes/costs or ordering) so the backend can merge it
+      // with its server-side knowledge — both bots see BOTH apps' data (front & back).
+      // SPEED (zero-upload): the backend blob already holds ordering data, the live RCC
+      // snapshot, the 3-week calendar AND the recipe/remember/calendar protocol hints —
+      // so the client never uploads context. Every question = one single GET.
+      var extra="&merge=1";
       var url=burl+(burl.indexOf("?")>-1?"&":"?")+"action=aiAssist"
-        +"&token="+encodeURIComponent(tok||TOKEN_DEFAULT)
+        +"&token="+tk
         +"&question="+encodeURIComponent(q)
-        +"&history="+encodeURIComponent(JSON.stringify(hist.map(function(m){return {role:m.role==="user"?"user":"assistant",content:m.text};})));
+        +"&history="+encodeURIComponent(JSON.stringify(hist.map(function(m){return {role:m.role==="user"?"user":"assistant",content:m.text};})))
+        +extra;
       var res=await fetch(url,{cache:"no-store"}); var j=await res.json();
       if(j&&j.error) throw new Error(j.error);
       return (j&&j.answer)||"(no response)";
@@ -731,6 +747,20 @@ window.OrderCore = {
   function logQA(source, q, a){
     try{ var log=JSON.parse(localStorage.getItem(LOG_KEY)||"[]"); log.push({ts:Date.now(), source:source||"", q:q, a:a}); if(log.length>LOG_MAX) log=log.slice(-LOG_MAX); localStorage.setItem(LOG_KEY, JSON.stringify(log)); }catch(e){}
     if(window.HideoutRCC&&window.HideoutRCC.logQuestion){ try{ window.HideoutRCC.logQuestion({ts:Date.now(), source:source||"", q:q, a:a}); }catch(e){} }
+  }
+
+  var CAL_BACKEND="https://script.google.com/macros/s/AKfycby2Sa4HsxoBXxRMnXzL4rvdfIRpEOHRNWvPdaxWI8X1Hxlb3wiy_QzsCRfg66eB3-LaPQ/exec";
+  function calendarAddHint(){
+    var today=new Date(); var ds=today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
+    var curBr=""; try{ curBr=(window.__HIDEOUT_CAL&&window.__HIDEOUT_CAL.branch)||""; }catch(e){}
+    return "\n\n--- CALENDAR EVENT CREATION ---\nWhen the user asks to ADD / book / schedule / put something ON the calendar, do BOTH:\n1) One short line confirming what you understood.\n2) A fenced code block starting with ```calendar-json containing ONLY valid JSON of this exact shape:\n```calendar-json\n{\"title\":\"Event title\",\"date\":\"YYYY-MM-DD\",\"start\":\"HH:mm\",\"end\":\"HH:mm\",\"allDay\":false,\"location\":\"\",\"notes\":\"\",\"store\":\"adelaide\"}\n```\nRules: store must be one of adelaide (340 Adelaide St), city (100 Edward St), valley (515 St Paul Tce)."+(curBr?(" The user's current branch is \""+curBr+"\" \u2014 default to it."):" Default to adelaide if the branch is not stated.")+" Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. If no end time given, leave end as start+1 hour. If no time at all, set allDay true. NEVER invent details the user did not give \u2014 ask instead. Emit the block ONLY for calendar-add requests; the app will show a confirm card before anything is created.";
+  }
+  function extractCalEvent(text){
+    if(!text) return null;
+    var m=text.match(/```\s*calendar-json\s*([\s\S]*?)```/i); if(!m) return null;
+    var ev; try{ ev=JSON.parse(m[1].trim()); }catch(e){ return null; }
+    if(!ev||!ev.title||!ev.date||!/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return null;
+    return { intro:text.slice(0,m.index).trim(), ev:ev };
   }
 
   // ---- recipe-json parsing ----
@@ -842,8 +872,8 @@ window.OrderCore = {
     var markHTML=logo?("<img src='"+esc(logo)+"' alt='The Hideout'/>"):"<span class='hb-mono'>H</span>";
     var open=false, busy=false, hist=[], greeted=false;
     var defSug=(opts.source==="ordering")
-      ? ["What's the prep situation today?","Today's deliveries","Which items have allergens?","Make a recipe for\u2026"]
-      : ["Today's prep priorities","What's below target margin?","Make a recipe for\u2026","Allergens in a dish"];
+      ? ["What's the prep situation today?","Today's deliveries","Which items have allergens?","What's in a dish?"]
+      : ["Today's prep priorities","Make a recipe for\u2026","Add an ingredient\u2026","Allergens in a dish"];
     var sug=opts.suggestions||defSug;
 
     var fab=document.createElement("button"); fab.id="hb-fab"; fab.title="Hideout Assistant";
@@ -926,6 +956,43 @@ window.OrderCore = {
       };
     }
 
+    // ---- interactive ingredient builder (editable form popup) ----
+    function ingredientBuilder(seed){
+      seed=seed||{};
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      var cats=rccCategories(), UNITS=["g","kg","ml","L","each"];
+      var chosen={cat:seed.category||""};
+      var H="<div style='padding:12px 14px;background:#241d16;color:#fff;font-family:\"SF Pro Display\",Inter,system-ui;font-weight:600;font-size:14.5px;letter-spacing:-.01em'>Add an ingredient</div>";
+      var B="<div style='padding:4px 14px 14px'>";
+      B+="<div class='hb-lbl'>Name</div><input class='hb-f' data-name placeholder='e.g. Full Cream Milk 2L' value=\""+esc(seed.name||"")+"\"/>";
+      B+="<div class='hb-lbl'>Category</div><div data-cats style='display:flex;flex-wrap:wrap;gap:6px'>"
+        +cats.map(function(c){ return "<button type='button' class='hb-cc"+(c===chosen.cat?" on":"")+"' data-cat=\""+esc(c)+"\">"+esc(c)+"</button>"; }).join("")
+        +"<button type='button' class='hb-cc' data-catcustom>+ Custom</button></div>"
+        +"<input class='hb-f' data-catinput placeholder='Custom category' style='display:none;margin-top:6px'/>";
+      B+="<div class='hb-lbl'>Purchase price</div><div style='display:flex;align-items:center;gap:7px'><span style='color:#a2917a;font-size:15px'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.purchasePrice!=null&&seed.purchasePrice!==""?esc(seed.purchasePrice):"")+"\" style='width:120px'/></div>";
+      B+="<div class='hb-lbl'>Purchase pack (qty + unit)</div><div style='display:flex;gap:6px;align-items:center'><input class='hb-f' data-pqty type='number' inputmode='decimal' placeholder='Qty' value=\""+(seed.purchaseQty!=null&&seed.purchaseQty!==""?esc(seed.purchaseQty):"")+"\" style='width:80px;text-align:right'/><select data-punit class='hb-f' style='width:80px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(seed.purchaseUnit||"each")?" selected":"")+">"+u+"</option>";}).join("")+"</select></div>";
+      B+="<div class='hb-lbl'>Use unit (in recipes)</div><select data-uunit class='hb-f' style='width:120px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(seed.useUnit||"g")?" selected":"")+">"+u+"</option>";}).join("")+"</select>";
+      B+="<div data-note style='font-size:11.5px;color:#8a7a63;margin-top:11px;line-height:1.45'>Allergens are auto-detected from the name — fine-tune later in the Ingredients tab.</div>";
+      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' style='flex:1;border:none;border-radius:999px;padding:11px 0;background:#c81a22;color:#fff;font-weight:600;font-size:13.5px;cursor:pointer'>Save to Ingredients</button><button type='button' data-act='cancel' style='border:1px solid rgba(70,45,20,.22);border-radius:999px;padding:11px 16px;background:#fff;color:#6b5335;font-size:13.5px;cursor:pointer'>Cancel</button></div>";
+      B+="</div>";
+      wrap.innerHTML=H+B; msgs.appendChild(wrap); scroll();
+      var noteEl=wrap.querySelector("[data-note]");
+      var catInput=wrap.querySelector("[data-catinput]"), catCustomBtn=wrap.querySelector("[data-catcustom]");
+      function clearCat(){ [].forEach.call(wrap.querySelectorAll("[data-cat],[data-catcustom]"),function(b){ b.classList.remove("on"); }); }
+      [].forEach.call(wrap.querySelectorAll("[data-cat]"),function(btn){ btn.onclick=function(){ clearCat(); btn.classList.add("on"); chosen.cat=btn.getAttribute("data-cat"); catInput.style.display="none"; }; });
+      catCustomBtn.onclick=function(){ clearCat(); catCustomBtn.classList.add("on"); catInput.style.display="block"; catInput.focus(); chosen.cat=catInput.value.trim(); };
+      catInput.addEventListener("input",function(){ chosen.cat=catInput.value.trim(); });
+      if(chosen.cat && cats.indexOf(chosen.cat)<0){ catCustomBtn.classList.add("on"); catInput.style.display="block"; catInput.value=chosen.cat; }
+      wrap.querySelector("[data-act='cancel']").onclick=function(){ wrap.remove(); bubble("bot","No worries — nothing saved."); };
+      wrap.querySelector("[data-act='save']").onclick=function(){
+        var name=(wrap.querySelector("[data-name]").value||"").trim();
+        if(!name){ wrap.querySelector("[data-name]").focus(); noteEl.textContent="Give the ingredient a name first."; return; }
+        var payload={ name:name, category:chosen.cat||"", purchasePrice:Number(wrap.querySelector("[data-price]").value)||0, purchaseQty:Number(wrap.querySelector("[data-pqty]").value)||1, purchaseUnit:wrap.querySelector("[data-punit]").value||"each", useUnit:wrap.querySelector("[data-uunit]").value||"g" };
+        try{ window.HideoutRCC.createIngredient(payload); wrap.remove(); bubble("bot","Saved “"+name+"” to Ingredients ✓\nOpen the Ingredients tab to fine-tune price, supplier or allergens."); }
+        catch(e){ bubble("bot","Couldn't save: "+(e&&e.message||e)); }
+      };
+    }
+
     // ---- two-agent engine: Auditor (finds data errors) + Learner (self-Q&A → memory) ----
     var AG_KEY="hideout_agents";
     function agLoad(){ try{ return JSON.parse(localStorage.getItem(AG_KEY)||"{}"); }catch(e){ return {}; } }
@@ -1003,10 +1070,32 @@ window.OrderCore = {
     // inviting label peek shortly after load
     setTimeout(function(){ if(!open&&!greeted){ fab.classList.add("hb-wide"); setTimeout(function(){ fab.classList.remove("hb-wide"); }, 3200); } }, 1400);
 
+    function calCard(ev){
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      var line2=(ev.allDay?"All day":((ev.start||"")+(ev.end?("\u2013"+ev.end):"")));
+      wrap.innerHTML="<div style='padding:12px 14px;background:#241d16;color:#fff;font-weight:600;font-size:14.5px'>Add to calendar?</div>"
+        +"<div style='padding:12px 14px;font-size:13.5px;line-height:1.6;color:#2a2018'><b>"+esc(ev.title)+"</b><br/>"+esc(ev.date)+" \u00b7 "+esc(line2)+(ev.location?("<br/>@ "+esc(ev.location)):"")+(ev.notes?("<br/>"+esc(ev.notes)):"")+"<br/><span style='color:#a2917a;font-size:12px'>Branch: "+esc(ev.store||"adelaide")+"</span></div>"
+        +"<div style='display:flex;gap:8px;padding:0 14px 14px'><button class='hb-cc on' data-ok>\u2713 Add event</button><button class='hb-cc' data-no>Cancel</button></div>";
+      msgs.appendChild(wrap); scroll();
+      wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); bubble("assistant","Cancelled \u2014 nothing was added."); };
+      wrap.querySelector("[data-ok]").onclick=async function(){
+        var b=wrap.querySelector("[data-ok]"); b.disabled=true; b.textContent="Adding\u2026";
+        try{
+          var u=CAL_BACKEND+"?action=addEvent&store="+encodeURIComponent(ev.store||"adelaide")+"&title="+encodeURIComponent(ev.title)+"&date="+encodeURIComponent(ev.date)+"&start="+encodeURIComponent(ev.start||"")+"&end="+encodeURIComponent(ev.end||"")+"&allDay="+(ev.allDay?"1":"")+"&location="+encodeURIComponent(ev.location||"")+"&notes="+encodeURIComponent(ev.notes||"");
+          var r=await fetch(u); var j=await r.json();
+          wrap.remove();
+          bubble("assistant", (j&&j.ok) ? ("\u2713 Added to the "+(ev.store||"adelaide")+" calendar: "+ev.title+" \u2014 "+ev.date+(ev.allDay?" (all day)":(ev.start?(" "+ev.start):""))) : ("Could not add the event: "+((j&&j.error)||"backend error")));
+          logQA(opts.source,"[calendar add]",(j&&j.ok)?("added: "+ev.title+" "+ev.date):("failed: "+((j&&j.error)||"")));
+        }catch(e){ b.disabled=false; b.textContent="\u2713 Add event"; bubble("assistant","Could not reach the calendar backend: "+(e&&e.message||e)); }
+      };
+    }
     async function ask(){
       var q=input.value.trim(); if(!q||busy) return; input.value=""; var ch=msgs.querySelector(".hb-chips"); if(ch) ch.remove();
       bubble("user",q); hist.push({role:"user",text:q}); busy=true;
       var intent=canSaveRecipe() && wantsRecipe(q);
+      var ingIntent=canSaveRecipe() && !intent && wantsIngredient(q);
+      // Apps without recipe management (e.g. Ordering) can't save recipes/ingredients — redirect instead of dangling a builder it can't fulfil.
+      if(!canSaveRecipe() && (wantsRecipe(q)||wantsIngredient(q))){ var rb=bubble("bot","Recipe & ingredient building lives in the Recipe Cost app — open hideout-recipe-cost.web.app to create and save them. Here I can still answer questions about recipes, costs, prep and orders."); hist.push({role:"assistant",text:rb.textContent}); logQA(opts.source,q,"[redirect to RCC for build]"); busy=false; return; }
       var t=typing();
       try{
         await ensureRcc();
@@ -1015,9 +1104,14 @@ window.OrderCore = {
         var remembered=0;
         if(canRemember()){ var rem=extractRemember(r); if(rem){ rem.facts.forEach(function(f){ try{ window.HideoutRCC.remember(f); remembered++; }catch(e){} }); r=rem.rest||r; } }
         var parsed=canSaveRecipe()?extractRecipe(r):null;
+        var ingParsed=canSaveRecipe()?extractIngredient(r):null;
+        var calp=extractCalEvent(r);
         t.className="hb-b hb-a";
-        if(parsed){ t.textContent=parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"; recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
-        else if(intent){ t.textContent="Let's build it \u2014 pick a category, set the quantities, then Save:"; recipeBuilder(null); logQA(opts.source, q, "[recipe builder opened]"); }
+        if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
+        else if(ingParsed){ t.textContent=ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"; ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
+        else if(parsed){ t.textContent=parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"; recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
+        else if(ingIntent){ t.textContent="Let's add it \u2014 set the price and unit, then Save:"; ingredientBuilder(null); logQA(opts.source, q, "[ingredient builder opened]"); }
+        else if(intent || (canSaveRecipe() && looksLikeRecipeAsk(r))){ t.textContent="Let's build it \u2014 pick a category, set the quantities, then Save:"; recipeBuilder(null); logQA(opts.source, q, "[recipe builder opened]"); }
         else { t.textContent=(r||"(no response)")+(remembered?"\n\n\u2713 Saved to memory \u2014 I'll remember that.":""); logQA(opts.source, q, r||""); }
         if(remembered && curView==="insights") renderInsights();
       }

@@ -306,6 +306,9 @@
   @media (hover:hover){ .lift:hover{ transform:translateY(-3px); box-shadow:0 12px 30px rgba(40,25,10,.1); } }
   .barfill{ animation:barGrow .7s cubic-bezier(.2,.8,.2,1) both; transform-origin:left; } @keyframes barGrow{ from{ transform:scaleX(0);} to{ transform:scaleX(1);} }
   .row-live{ transition:background .2s; }
+  .hb-notecard{ transition:transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .18s ease; }
+  @media (hover:hover){ .hb-notecard:hover{ transform:scale(1.012); box-shadow:0 26px 56px -26px rgba(46,42,38,0.55); } }
+  @media (prefers-reduced-motion:reduce){ .hb-notecard{ transition:none; } .hb-notecard:hover{ transform:none; } }
   .masthead{ border-bottom:2px solid var(--color-ink); }
   .u-label{ font-size:11px; text-transform:uppercase; letter-spacing:.18em; font-weight:700; color:var(--color-ink-muted-48); }
   .sticky{ position:sticky; } .top-0{ top:0; }
@@ -1330,15 +1333,22 @@ function TodaySummary({ctx}){
       {ctx.locations.map(l=>{ const ok=submittedLocs.includes(l); const by=data[l.id]&&data[l.id]._by; return <div key={l.id} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:999,fontSize:13,fontWeight:600,background:ok?"var(--color-canvas)":"rgba(180,83,9,.09)",border:"1px solid "+(ok?"var(--color-hairline-alpha)":"rgba(180,83,9,.2)"),color:ok?"var(--color-ink)":"#b45309"}}><span style={{width:8,height:8,borderRadius:"50%",background:ok?"#3f9e63":"#b45309"}}></span>{l.name.replace(/\s*\(.*\)/,"")} · {ok?(by?"by "+by:"submitted"):"pending"}</div>; })}
     </div>
 
-    {/* notes from locations */}
+    {/* notes from locations — floating card (2f design) */}
     {(()=>{ const withNotes=ctx.locations.filter(l=>data[l.id]&&data[l.id]._note); if(!withNotes.length) return null;
-      return <Card style={{marginBottom:16,borderLeft:"4px solid var(--color-primary)"}}>
-        <div className="u-label" style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico name="note" size={14} />Notes from locations</span></div>
-        <div style={{display:"grid",gap:10}}>{withNotes.map(l=>(<div key={l.id} style={{display:"flex",gap:10}}>
-          <div style={{fontWeight:700,fontSize:13,minWidth:96,color:"var(--color-ink)"}}>{l.name.replace(/\s*\(.*\)/,"")}</div>
-          <div style={{fontSize:13.5,color:"var(--color-ink-muted-80)",whiteSpace:"pre-wrap",flex:1}}>{data[l.id]._note}</div>
-        </div>))}</div>
-      </Card>; })()}
+      return <div className="hb-notecard" style={{marginBottom:16,background:"#faf8f2",borderRadius:20,padding:"22px 24px 24px",boxShadow:"0 18px 40px -28px rgba(46,42,38,0.45)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <span style={{color:"#9c2a22",display:"inline-flex"}}><Ico name="note" size={16} /></span>
+          <span style={{fontSize:13,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#6f665a"}}>Notes from locations</span>
+        </div>
+        <div style={{display:"grid",gap:12}}>{withNotes.map(l=>{ const by=data[l.id]._by; return (
+          <div key={l.id} style={{display:"grid",gridTemplateColumns:"auto 1fr",background:"#fff",border:"1px solid #ece6da",borderRadius:14,overflow:"hidden"}}>
+            <div style={{padding:"14px 18px",background:"#f4e3e0",display:"flex",flexDirection:"column",gap:4,justifyContent:"center",borderRight:"1px solid #ece6da",minWidth:130}}>
+              <span style={{fontSize:14,fontWeight:800,color:"#9c2a22"}}>{l.name.replace(/\s*\(.*\)/,"")}</span>
+              {by&&<span style={{fontSize:12,color:"#9c5a52"}}>by {by}</span>}
+            </div>
+            <div style={{padding:"14px 18px",display:"flex",alignItems:"center",fontSize:15,color:"#3d3833",whiteSpace:"pre-wrap"}}>{data[l.id]._note}</div>
+          </div>); })}</div>
+      </div>; })()}
 
     {/* grouped totals — items sharing a Group Label are combined (e.g. every croissant variety → one dough number) */}
     {(()=>{ const gt={};

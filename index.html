@@ -1340,10 +1340,35 @@ function TodaySummary({ctx}){
         </div>))}</div>
       </Card>; })()}
 
+    {/* grouped totals — items sharing a Group Label are combined (e.g. every croissant variety → one dough number) */}
+    {(()=>{ const gt={};
+      ctx.items.forEach(item=>{ const raw=(item.groupLabel||"").trim(); if(!raw) return; const key=raw.toLowerCase();
+        if(!gt[key]) gt[key]={label:raw,total:0,units:new Set()};
+        let sum=0; ctx.locations.forEach(l=>{ const o=data[l.id]; if(!o) return; const e=o[item.id]; if(e) sum+=Number(e.needed)||0; });
+        if(sum>0 && item.unit) gt[key].units.add(item.unit);
+        gt[key].total+=sum; });
+      const list=Object.values(gt).filter(g=>g.total>0).sort((a,b)=>b.total-a.total);
+      if(!list.length) return null;
+      return <Card style={{marginBottom:16,borderLeft:"4px solid var(--color-primary)"}}>
+        <div className="u-label" style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><span aria-hidden="true" style={{fontSize:14,lineHeight:1}}>🥐</span>Grouped totals · same base ingredient</span></div>
+        <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:260}}>
+          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th></tr></thead>
+          <tbody>{list.map(g=>{ const mixed=g.units.size>1; const u=mixed?"mixed":([...g.units][0]||""); return (<tr key={g.label} className="row-live">
+            <td style={{...td,fontWeight:600}}>{g.label}</td>
+            <td style={{...td,textAlign:"center",fontWeight:700}}>{g.total}<span style={{fontSize:10,fontWeight:500,color:mixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={mixed?"이 그룹에 단위가 섞여 있어요 — 합계 해석 주의":undefined}>{u}</span></td>
+          </tr>); })}</tbody>
+        </table></HScroll>
+      </Card>; })()}
+
     {orders.loading ? <Skeleton /> : orders.error ? <Card><Empty>Couldn’t load: {orders.error}</Empty></Card> :
     (grandTotal===0 && missingLocs.length===0) ? <Card><Empty>No orders entered for this date yet.</Empty></Card> :
     <div>
-      {cats.map(({cat,visible})=>{ const dup=dupFamilies(visible.map(v=>v.item)); return (<div key={cat.id} style={{marginBottom:18}}>
+      {cats.map(({cat,visible})=>{ const dup=dupFamilies(visible.map(v=>v.item));
+        const colSums=ctx.locations.map((l,i)=>visible.reduce((s,v)=>s+(v.perLoc[i]&&v.perLoc[i].submitted?(Number(v.perLoc[i].need)||0):0),0));
+        const catTotal=visible.reduce((s,v)=>s+(Number(v.total)||0),0);
+        const cunits=new Set(visible.filter(v=>(Number(v.total)||0)>0).map(v=>v.item.unit).filter(Boolean));
+        const catMixed=cunits.size>1; const catUnit=catMixed?"mixed":([...cunits][0]||"");
+        return (<div key={cat.id} style={{marginBottom:18}}>
         <div className="masthead" style={{paddingBottom:8,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
           <span style={{width:10,height:10,borderRadius:3,background:cat.color||"var(--color-primary)"}}></span>
           <span className="u-label" style={{color:"var(--color-ink)"}}>{cat.label}</span>
@@ -1360,6 +1385,11 @@ function TodaySummary({ctx}){
               {perLoc.map((p,i)=><td key={i} style={{...td,textAlign:"center",borderLeft:vline,fontWeight:p.need>0?700:400,color:!p.submitted?"var(--color-ink-muted-48)":p.need===0?"#c9bda9":"var(--color-ink)"}}>{!p.submitted?"–":p.need}</td>)}
               <td style={{...td,textAlign:"center",fontWeight:700,borderLeft:vline}}>{total>0?total:"·"}<span style={{fontSize:10,fontWeight:500,color:"var(--color-ink-muted-48)",marginLeft:2}}>{total>0?item.unit:""}</span></td>
             </tr>))}</tbody>
+            <tfoot><tr style={{background:"var(--color-canvas)"}}>
+              <td style={{...td,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1,fontWeight:800,borderTop:"2px solid var(--color-hairline)"}}>Category total</td>
+              {colSums.map((s,i)=><td key={i} style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800,color:s>0?"var(--color-ink)":"var(--color-ink-muted-48)"}}>{s>0?Math.round(s*1000)/1000:"·"}</td>)}
+              <td style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800}}>{Math.round(catTotal*1000)/1000}<span style={{fontSize:10,fontWeight:500,color:catMixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={catMixed?"이 카테고리에 단위가 섞여 있어요 — 합계 해석 주의":undefined}>{catUnit}</span></td>
+            </tr></tfoot>
           </table></HScroll>
         </Card>
       </div>); })}
@@ -1581,7 +1611,7 @@ function ItemsCard({ctx}){
   const items=(ctx.items||[]).filter(i=>!q||i.name.toLowerCase().includes(q.toLowerCase()));
   const catLabel=id=>{ const c=ctx.categories.find(c=>c.id===id); return c?c.label:"—"; };
   const removeItem=(it)=>{ if(!confirm(`Delete "${it.name}"? This can't be undone.`)) return; const next=ctx.items.filter(x=>x.id!==it.id); ctx.saveItems(next); toast("Deleted ✓"); };
-  const blank=()=>({id:uid("i"),name:"",unit:"ea",cat:ctx.categories[0]?.id||"",allergens:"",cost:"",minOrderQty:null,parLevels:{}});
+  const blank=()=>({id:uid("i"),name:"",unit:"ea",cat:ctx.categories[0]?.id||"",allergens:"",cost:"",minOrderQty:null,groupLabel:"",parLevels:{}});
   const commit=(it)=>{ if(!it.name.trim()){ toast("Name required",true); return; } let next; if(ctx.items.find(x=>x.id===it.id)) next=ctx.items.map(x=>x.id===it.id?it:x); else next=[...ctx.items,it]; ctx.saveItems(next); setEdit(null); setAdding(false); toast("Saved ✓"); };
   return <Card>
     <SectionLabel right={<Btn size="sm" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</Btn>}>Items ({ctx.items.length})</SectionLabel>
@@ -1608,6 +1638,7 @@ function ItemsCard({ctx}){
           <Field label="Min order qty (optional)"><input inputMode="decimal" value={edit.minOrderQty??""} onChange={e=>setEdit({...edit,minOrderQty:e.target.value===""?null:Number(e.target.value)})} style={inp} /></Field>
         </div>
         <Field label="Allergens (comma separated)"><input value={edit.allergens||""} onChange={e=>setEdit({...edit,allergens:e.target.value})} style={inp} placeholder={C.ALLERGEN_OPTIONS.slice(0,4).join(", ")} /></Field>
+        <Field label={'Group (combines totals — e.g. "Croissant dough")'}><input value={edit.groupLabel||""} onChange={e=>setEdit({...edit,groupLabel:e.target.value})} style={inp} list="ord-group-options" placeholder="Optional — items sharing this label are summed in Today" /><datalist id="ord-group-options">{Array.from(new Set((ctx.items||[]).map(i=>(i.groupLabel||"").trim()).filter(Boolean))).map(g=><option key={g} value={g} />)}</datalist></Field>
       </div>
     </Modal>}
   </Card>;

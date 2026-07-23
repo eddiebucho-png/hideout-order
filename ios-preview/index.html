@@ -7,6 +7,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<!-- Firebase compat SDK — shared RCC project (hideout-recipe-cost): staff login + postcards + photos. Added 2026-07-23. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<!-- Staff Postcards widget — single canonical source (deploys alongside this file). Loads first so the older inline copy below self-disables via its __HIDEOUT_POSTCARDS__ guard. -->
+<script src="postcards.js"></script>
+<!-- Staff Gate — soft Google-login identity gate (same RCC project/session as postcards). Integrated 2026-07-24 after live verification on ordering-gate-test.html. -->
+<script src="staff-gate.js"></script>
 <style>
 @import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,600;0,14..32,700&display=swap");
 
@@ -1890,8 +1899,8 @@ function AiTrainingCard({ctx}){
 function Settings({ctx}){
   const [unlocked,setUnlocked]=useState(false); const [pw,setPw]=useState(""); const [err,setErr]=useState("");
   const [sub,setSub]=useState("items");
-  const OPEN=["items","parlevels","categories"]; // day-to-day open sections
-  const SECTIONS=[["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
+  const OPEN=["profile","items","parlevels","categories"]; // day-to-day open sections (P5: Profile has no lock)
+  const SECTIONS=[["profile","Profile"],["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["users","Users"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
   const gated = !OPEN.includes(sub) && !unlocked;
   const tryUnlock=()=>{ if(pw===SETTINGS_PASSWORD||pw===MASTER){ setUnlocked(true); setErr(""); } else setErr("Incorrect"); };
   return <div>
@@ -1905,10 +1914,12 @@ function Settings({ctx}){
       {err && <div style={{fontSize:12,color:"#d70015",marginBottom:8}}>{err}</div>}
       <Btn onClick={tryUnlock} style={{width:"100%"}}>Unlock</Btn>
     </Card> : <>
+      {sub==="profile" && <ProfileCard />}
       {sub==="items" && <ItemsCard ctx={ctx} />}
       {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
       {sub==="categories" && <CategoriesCard ctx={ctx} />}
       {sub==="locations" && <LocationsCard ctx={ctx} />}
+      {sub==="users" && <UsersCard />}
       {sub==="suppliers" && <SuppliersCard ctx={ctx} />}
       {sub==="delivery" && <DeliveryCard ctx={ctx} />}
       {sub==="dailysummary" && <DailySummaryCard ctx={ctx} />}
@@ -1916,6 +1927,123 @@ function Settings({ctx}){
       {sub==="connection" && <ConnectionCard ctx={ctx} />}
     </>}
   </div>;
+}
+
+/* ---------- Profile (P5: own avatar, no password — saves allowlist/{email}.photoURL) ---------- */
+function ProfileCard(){
+  const gdb=()=>{ try{ return window.HideoutGate&&window.HideoutGate.db&&window.HideoutGate.db(); }catch(e){ return null; } };
+  const me = window.HideoutUser || null;
+  const email = (me&&me.email) ? String(me.email).toLowerCase() : "";
+  const [rec,setRec]=useState(null);   // null=loading | "noauth" | "nodb" | {name,photoURL}
+  const [busy,setBusy]=useState(false);
+  const load=()=>{
+    if(!email){ setRec("noauth"); return; }
+    const db=gdb(); if(!db){ setRec("nodb"); return; }
+    db.collection("allowlist").doc(email).get().then(snap=>{
+      const v=(snap&&snap.exists)?(snap.data()||{}):{};
+      setRec({name:v.name||(me&&me.name)||email, photoURL:(typeof v.photoURL==="string"?v.photoURL:"")});
+    }).catch(()=>setRec({name:(me&&me.name)||email, photoURL:""}));
+  };
+  useEffect(load,[]);
+  const initials=(nm)=>{ const n=String(nm||email||"?").trim(); const p=n.split(/\s+/); return (p.length>=2?(p[0][0]+p[1][0]):n.slice(0,2)).toUpperCase(); };
+  const pickFile=(file)=>{
+    if(!file) return;
+    if(!window.HideoutPostcards||!window.HideoutPostcards.uploadPhoto){ toast("Photo uploader isn't ready — reload the page.",true); return; }
+    setBusy(true);
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const S=512, cv=document.createElement("canvas"); cv.width=S; cv.height=S;
+        const g=cv.getContext("2d"), side=Math.min(img.width,img.height);
+        g.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,S,S);
+        cv.toBlob(blob=>{
+          const f=blob?new File([blob],"avatar.jpg",{type:"image/jpeg"}):file;
+          window.HideoutPostcards.uploadPhoto(f).then(url=>{
+            const db=gdb(); if(!db){ setBusy(false); toast("No database connection",true); return; }
+            db.collection("allowlist").doc(email).set({photoURL:url,photoBy:email,photoAt:Date.now()},{merge:true}).then(()=>{
+              setBusy(false); setRec(r=>({...(r||{}),photoURL:url})); toast("Profile photo updated ✓");
+              try{ if(window.HideoutUser) window.HideoutUser.photoURL=url; }catch(_){}
+            }).catch(e=>{ setBusy(false); toast("Save failed: "+e.message,true); });
+          }).catch(e=>{ setBusy(false); toast("Upload failed: "+((e&&e.message)||"try again"),true); });
+        },"image/jpeg",0.85);
+      }catch(e){ setBusy(false); toast("Couldn't process that image",true); }
+    };
+    img.onerror=()=>{ setBusy(false); toast("Couldn't read that image",true); };
+    img.src=URL.createObjectURL(file);
+  };
+  if(rec==="noauth") return <Card><Empty>Sign in with your Hideout Google account to set a profile photo.</Empty></Card>;
+  if(rec==="nodb") return <Card><Empty>The Google sign-in gate isn't running on this page, so a profile photo can't be saved here.</Empty></Card>;
+  if(!rec) return <Card><Empty>Loading your profile…</Empty></Card>;
+  const avatar = rec.photoURL
+    ? <img src={rec.photoURL} alt="" style={{width:96,height:96,borderRadius:"50%",objectFit:"cover",border:"2px solid var(--color-hairline-alpha)"}} onError={e=>{e.target.style.display="none";}} />
+    : <div style={{width:96,height:96,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-surface-black)",color:"#fff",fontFamily:"var(--font-display)",fontWeight:900,fontSize:34}}>{initials(rec.name)}</div>;
+  return <Card style={{maxWidth:420,margin:"0 auto"}}>
+    <SectionLabel>Your profile photo</SectionLabel>
+    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 14px"}}>This is the avatar your team sees on the staff postcards board. Signed in as {email||"—"}.</p>
+    <div style={{display:"flex",alignItems:"center",gap:16}}>
+      {avatar}
+      <div style={{flex:1}}>
+        <label style={{display:"inline-block"}}>
+          <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{ const f=(e.target.files||[])[0]; e.target.value=""; pickFile(f); }} disabled={busy} />
+          <span className="vbtn-card" style={{display:"inline-block",border:"1px solid var(--color-hairline-alpha)",borderRadius:10,padding:"10px 16px",fontWeight:600,cursor:busy?"default":"pointer",background:"var(--color-surface-black)",color:"#fff",opacity:busy?0.6:1}}>{busy?"Uploading…":(rec.photoURL?"Change photo":"Upload photo")}</span>
+        </label>
+        <div style={{fontSize:11.5,color:"var(--color-ink-muted-48)",marginTop:8,lineHeight:1.5}}>Square crop, stored on the shared image CDN. No password needed — you can only change your own.</div>
+      </div>
+    </div>
+  </Card>;
+}
+
+/* ---------- Users (staff Google accounts — allowlist via the sign-in gate) ---------- */
+function UsersCard(){
+  const [rows,setRows]=useState(null);
+  const [reqs,setReqs]=useState([]);
+  const VENUES=[["","—"],["b1","Edward St"],["b2","Adelaide St"],["b3","St Pauls Ter"]];
+  const vName=id=>{ const v=VENUES.find(x=>x[0]===id); return v?v[1]:id||"—"; };
+  const gdb=()=>{ try{ return window.HideoutGate&&window.HideoutGate.db&&window.HideoutGate.db(); }catch(e){ return null; } };
+  const load=()=>{
+    const db=gdb(); if(!db){ setRows("nodb"); return; }
+    db.collection("allowlist").get().then(qs=>{
+      const a=[]; qs.forEach(d=>{ if(d.id.indexOf("cfg-")===0) return; const v=d.data()||{}; a.push({email:d.id,name:v.name||"",role:v.role||"staff",branch:v.branch||"",self:!!v.self}); });
+      a.sort((x,y)=>(x.name||x.email).localeCompare(y.name||y.email)); setRows(a);
+    }).catch(e=>{ setRows("err:"+(e&&e.message||"load failed")); });
+    db.collection("accessRequests").get().then(qs=>{
+      const a=[]; qs.forEach(d=>{ const v=d.data()||{}; if(v.status==="pending") a.push({email:d.id,name:v.name||d.id}); }); setReqs(a);
+    }).catch(()=>setReqs([]));
+  };
+  useEffect(load,[]);
+  const save=(email,patch,msg)=>{ const db=gdb(); if(!db) return; db.collection("allowlist").doc(email).set(patch,{merge:true}).then(()=>{ toast(msg||"Saved ✓"); load(); }).catch(e=>toast("Save failed: "+e.message,true)); };
+  const removeUser=(u)=>{ if(!confirm(`Remove ${u.name||u.email} (${u.email}) from the staff list? They'll see the sign-up screen next time.`)) return; const db=gdb(); if(!db) return; db.collection("allowlist").doc(u.email).delete().then(()=>{ toast("Removed ✓"); load(); }).catch(e=>toast("Failed: "+e.message,true)); };
+  const approve=(r)=>{ const db=gdb(); if(!db) return; db.collection("allowlist").doc(r.email).set({name:r.name||r.email,role:"staff",branch:"",ts:Date.now()},{merge:true}).then(()=>db.collection("accessRequests").doc(r.email).set({status:"approved"},{merge:true})).then(()=>{ toast("Approved ✓"); load(); }).catch(e=>toast("Failed: "+e.message,true)); };
+  const dismiss=(r)=>{ const db=gdb(); if(!db) return; db.collection("accessRequests").doc(r.email).set({status:"rejected"},{merge:true}).then(()=>{ toast("Dismissed"); load(); }).catch(e=>toast("Failed: "+e.message,true)); };
+  if(rows==="nodb") return <Card><Empty>The Google sign-in gate isn't running on this page, so staff accounts can't be managed here.</Empty></Card>;
+  if(typeof rows==="string") return <Card><Empty>Couldn't load staff accounts — {rows.slice(4)}</Empty></Card>;
+  if(!rows) return <Card><Empty>Loading staff accounts…</Empty></Card>;
+  const selSt={...inp,width:"auto",minWidth:120,padding:"8px 10px",fontSize:13};
+  return <>
+    {reqs.length>0 && <Card style={{marginBottom:14,border:"1px solid rgba(215,0,21,.25)"}}>
+      <SectionLabel>Waiting for approval ({reqs.length})</SectionLabel>
+      {reqs.map(r=><div key={r.email} style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--color-hairline-alpha)"}}>
+        <div><div style={{fontWeight:600,fontSize:14}}>{r.name}</div><div style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>{r.email}</div></div>
+        <div style={{display:"flex",gap:8}}><Btn size="sm" onClick={()=>approve(r)}>Approve</Btn><Btn size="sm" tone="ghost" onClick={()=>dismiss(r)}>Dismiss</Btn></div>
+      </div>)}
+    </Card>}
+    <Card>
+      <SectionLabel right={<Btn size="sm" tone="ghost" onClick={load}>Refresh</Btn>}>Staff accounts · Google sign-in ({rows.length})</SectionLabel>
+      <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 12px"}}>Until 24 Aug 2026 anyone who signs in is let in automatically (open enrolment) and appears here with a "self" badge — review and adjust venue/role, or remove them. After that date, new accounts wait for approval above.</p>
+      <HScroll>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13.5}}>
+          <thead><tr><th style={th}>Name</th><th style={th}>Email</th><th style={th}>Venue</th><th style={th}>Role</th><th style={th}></th></tr></thead>
+          <tbody>{rows.map(u=><tr key={u.email} style={{borderTop:"1px solid var(--color-hairline-alpha)"}}>
+            <td style={td}><input defaultValue={u.name} placeholder="Name" style={{...inp,minWidth:130,padding:"8px 10px",fontSize:13}} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==u.name) save(u.email,{name:v}); }} />{u.self&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",background:"rgba(215,120,0,.12)",color:"#a05a00",borderRadius:999,padding:"3px 8px"}}>self</span>}</td>
+            <td style={{...td,whiteSpace:"nowrap"}}>{u.email}</td>
+            <td style={td}><select value={u.branch} onChange={e=>save(u.email,{branch:e.target.value},"Venue → "+vName(e.target.value))} style={selSt}>{VENUES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></td>
+            <td style={td}><select value={u.role} onChange={e=>save(u.email,{role:e.target.value},"Role → "+e.target.value)} style={selSt}><option value="staff">staff</option><option value="manager">manager</option></select></td>
+            <td style={{...td,textAlign:"right"}}><Btn size="sm" tone="ghost" onClick={()=>removeUser(u)} style={{color:"#d70015"}}>Remove</Btn></td>
+          </tr>)}</tbody>
+        </table>
+      </HScroll>
+    </Card>
+  </>;
 }
 
 /* ---------- AI widget ---------- */
@@ -2012,6 +2140,71 @@ function DeptPick({onPick}){
   </div>;
 }
 
+/* ---- Power button dropdown: lock device + Google sign-out / switch account ----
+   Uses window.HideoutGate (staff-gate.js). Gate is fail-open: if it never loaded,
+   only the original Lock action is shown and the app is never blocked. */
+function PowerMenu(){
+  const [open,setOpen]=useState(false);
+  const [user,setUser]=useState(window.HideoutUser||null);
+  const ref=useRef(null);
+  useEffect(()=>{
+    const onAuth=(e)=>setUser((e&&e.detail)||window.HideoutUser||null);
+    document.addEventListener("hideout-auth",onAuth);
+    return ()=>document.removeEventListener("hideout-auth",onAuth);
+  },[]);
+  useEffect(()=>{
+    if(!open) return;
+    const onDoc=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",onDoc); document.addEventListener("touchstart",onDoc);
+    return ()=>{ document.removeEventListener("mousedown",onDoc); document.removeEventListener("touchstart",onDoc); };
+  },[open]);
+  const gate=(window.HideoutGate&&typeof window.HideoutGate.signOut==="function")?window.HideoutGate:null;
+  const it={display:"block",width:"100%",textAlign:"left",background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:500,padding:"9px 14px",whiteSpace:"nowrap"};
+  return <div ref={ref} style={{position:"relative",display:"inline-flex"}}>
+    <button onClick={()=>setOpen(o=>!o)} title="Lock / account" style={{background:"none",border:"none",color:open?"#fff":"var(--color-body-muted)",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center"}}><Ico name="power" size={15} /></button>
+    {open && <div className="modal-pop" style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:60,minWidth:190,maxWidth:260,background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"5px 0",boxShadow:"0 10px 28px rgba(0,0,0,.45)"}}>
+      {gate&&user ? <div style={{padding:"7px 14px 8px",borderBottom:"1px solid rgba(255,255,255,.08)",marginBottom:4}}>
+        <div style={{color:"var(--color-body-muted)",fontSize:10,textTransform:"uppercase",letterSpacing:".07em"}}>Signed in as</div>
+        <div style={{color:"#fff",fontSize:12,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis"}}>{user.name||user.email||""}</div>
+        {user.name&&user.email ? <div style={{color:"var(--color-body-muted)",fontSize:11,overflow:"hidden",textOverflow:"ellipsis"}}>{user.email}</div> : null}
+      </div> : null}
+      <button style={it} onClick={()=>{ setOpen(false); if(confirm("Lock this device? You’ll need the passcode again.")) location.reload(); }}>Lock device</button>
+      {gate ? <button style={it} onClick={()=>{ setOpen(false); try{ gate.signOut(); }catch(e){} }}>Sign out (Google)</button> : null}
+      {gate ? <button style={it} onClick={()=>{ setOpen(false); try{ gate.signOut(); gate.signIn(); }catch(e){} }}>Switch account</button> : null}
+    </div>}
+  </div>;
+}
+
+// Top-left location display → tap to switch branch (passcode-aware; MASTER always works)
+function LocMenu({locations, branch, onSwitch}){
+  const [open,setOpen]=useState(false);
+  const [pend,setPend]=useState(null); const [code,setCode]=useState(""); const [err,setErr]=useState("");
+  const ref=useRef(null);
+  const nm=(l)=>(l&&l.name?l.name.replace(/\s*\(.*\)/,""):"");
+  const cur=locations.find(l=>l.id===branch);
+  useEffect(()=>{ if(!open) return; const onDoc=(e)=>{ if(ref.current&&!ref.current.contains(e.target)){ setOpen(false); setPend(null); setCode(""); setErr(""); } }; document.addEventListener("mousedown",onDoc); document.addEventListener("touchstart",onDoc); return ()=>{ document.removeEventListener("mousedown",onDoc); document.removeEventListener("touchstart",onDoc); }; },[open]);
+  const choose=(l)=>{ if(l.id===branch){ setOpen(false); return; } if(l.passcode){ setPend(l.id); setCode(""); setErr(""); } else { onSwitch(l.id); setOpen(false); } };
+  const confirmCode=()=>{ const l=locations.find(x=>x.id===pend); if(!l) return; const c=code.trim(); if(c!==MASTER && l.passcode && String(l.passcode)!==c){ setErr("Incorrect passcode"); return; } onSwitch(pend); setOpen(false); setPend(null); setCode(""); setErr(""); };
+  return <div ref={ref} style={{position:"relative",display:"inline-flex"}}>
+    <button onClick={()=>setOpen(o=>!o)} title="Switch branch" style={{background:"none",border:"none",cursor:"pointer",color:open?"#fff":"var(--color-body-muted)",fontSize:12,display:"inline-flex",alignItems:"center",gap:3,padding:0,fontFamily:"inherit"}}>
+      {nm(cur)||"Select branch"}<span style={{fontSize:9,opacity:.7}}>▾</span>
+    </button>
+    {open && <div className="modal-pop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,zIndex:60,minWidth:190,maxWidth:260,background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"5px 0",boxShadow:"0 10px 28px rgba(0,0,0,.45)"}}>
+      {!pend ? locations.map(l=>(<button key={l.id} onClick={()=>choose(l)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",textAlign:"left",background:l.id===branch?"rgba(255,255,255,.10)":"none",border:"none",cursor:"pointer",color:"#fff",fontSize:13,padding:"9px 14px",whiteSpace:"nowrap"}}><span>{nm(l)}</span>{l.passcode?<span style={{fontSize:10,opacity:.55}}>🔒</span>:null}</button>)) : (
+        <div style={{padding:"8px 12px"}}>
+          <div style={{color:"var(--color-body-muted)",fontSize:11,marginBottom:6}}>Passcode · {nm(locations.find(x=>x.id===pend))}</div>
+          <input autoFocus inputMode="numeric" value={code} onChange={e=>{ setCode(e.target.value.replace(/\D/g,"")); setErr(""); }} onKeyDown={e=>e.key==="Enter"&&confirmCode()} placeholder="••••" style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.06)",color:"#fff",padding:"9px 10px",fontSize:15}} />
+          {err?<div style={{color:"#ff8a80",fontSize:11,marginTop:5}}>{err}</div>:null}
+          <div style={{display:"flex",gap:6,marginTop:9}}>
+            <button onClick={()=>{ setPend(null); setCode(""); setErr(""); }} style={{flex:1,background:"none",border:"1px solid rgba(255,255,255,.2)",color:"var(--color-body-muted)",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12}}>Back</button>
+            <button onClick={confirmCode} style={{flex:1,background:"var(--color-primary)",border:"none",color:"#fff",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12,fontWeight:700}}>Enter</button>
+          </div>
+        </div>
+      )}
+    </div>}
+  </div>;
+}
+
 function App(){
   const [phase,setPhase]=useState("loading"); // loading | gate | dept | app
   const [locations,setLocations]=useState([]);
@@ -2077,6 +2270,7 @@ function App(){
   };
 
   const onUnlock=(bid)=>{ setBranch(bid); if(department){ ensureCore(department).then(()=>setPhase("app")); } else setPhase("dept"); };
+  const switchBranch=(bid)=>{ if(bid===branch) return; setBranch(bid); setTick(t=>t+1); };
   const onPickDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); corePromise.current=loadCore(d); corePromise.current.then(()=>setPhase("app")); };
   const switchDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); setCore(null); corePromise.current=loadCore(d); corePromise.current.then(()=>setTick(t=>t+1)); };
 
@@ -2109,7 +2303,7 @@ function App(){
       <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"6px 14px",padding:"9px 16px",minHeight:52}}>
         <div style={{display:"flex",alignItems:"center",gap:10,order:1}}>
           {LOGO?<img src={LOGO} alt="" style={{height:26,filter:"brightness(0) invert(1)"}} />:<span style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:700}}>Hideout</span>}
-          <span style={{color:"var(--color-body-muted)",fontSize:12}}>{locations.find(l=>l.id===branch)?.name?.replace(/\s*\(.*\)/,"")||""}</span>
+          <LocMenu locations={locations} branch={branch} onSwitch={switchBranch} />
         </div>
         <div style={{order:2,marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
           <div style={{display:"inline-flex",background:"rgba(255,255,255,.08)",borderRadius:999,padding:2}}>
@@ -2117,7 +2311,7 @@ function App(){
           </div>
           <button onClick={refresh} title="Refresh" style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center"}}><Ico name="refresh" size={16} /></button>
           <span title={sync.err||"synced"} style={{width:8,height:8,borderRadius:"50%",background:sync.ok===false?"#ff8a80":sync.ok?"#74d99f":"#c9b",display:"inline-block"}}></span>
-          <button onClick={()=>{ if(confirm("Lock this device? You’ll need the passcode again.")) location.reload(); }} title="Lock" style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center"}}><Ico name="power" size={15} /></button>
+          <PowerMenu />
         </div>
         {/* tab bar */}
         <div style={{order:3,width:"100%",display:"flex",gap:4,overflowX:"auto",scrollbarWidth:"none",paddingTop:4}}>
@@ -2150,6 +2344,368 @@ function App(){
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 })();
 
+</script>
+<!-- ================= Hideout Postcards — staff messaging widget (2026-07-23) ================= -->
+<script>
+/* Self-contained vanilla widget. Mirrors the AI assistant pattern; does NOT touch the React tree.
+   Identity + data in the SHARED RCC Firebase project (hideout-recipe-cost). Photos → Storage URL (never base64 in a doc). */
+(function(){
+  "use strict";
+  if(window.__HIDEOUT_POSTCARDS__) return; window.__HIDEOUT_POSTCARDS__=true;
+
+  var FB={apiKey:"AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s",authDomain:"hideout-recipe-cost.firebaseapp.com",projectId:"hideout-recipe-cost",storageBucket:"hideout-recipe-cost.firebasestorage.app",messagingSenderId:"717961739938",appId:"1:717961739938:web:752af54de485d7f7c921fb"};
+  var APP="postcards";
+  var BACKEND="https://script.google.com/macros/s/AKfycbyT4pJ5QuF1HwLCBzbSS2eXcQoAwCNjeE2WqNucJcG20JQ5hlG3BBuBLWDA50llNZCh/exec";
+  var TOKEN="hideout-9f2a7c-orders";
+  var THEMES=[
+    {id:"cream",name:"Cream",bg:"#fbf5ec",ink:"#2a2118",accent:"#c81a22"},
+    {id:"sage",name:"Sage",bg:"#e8ede4",ink:"#26301f",accent:"#5a7150"},
+    {id:"sky",name:"Sky",bg:"#e6eef4",ink:"#1d2b38",accent:"#3f6f9c"},
+    {id:"blush",name:"Blush",bg:"#f6e9e6",ink:"#3a2320",accent:"#b45a52"}
+  ];
+  var app,auth,db,storage,me=null,staff=[],feedUnsub=null,booting=false;
+
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function theme(id){ for(var i=0;i<THEMES.length;i++){ if(THEMES[i].id===id) return THEMES[i]; } return THEMES[0]; }
+  function fmtTime(ts){ try{ var d=ts&&ts.toDate?ts.toDate():(ts?new Date(ts):new Date()); return d.toLocaleString("en-AU",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
+
+  function initFb(){
+    if(!window.firebase||!firebase.initializeApp){ return false; }
+    try{
+      var existing=(firebase.apps||[]).filter(function(a){return a.name===APP;})[0];
+      app=existing||firebase.initializeApp(FB,APP);
+    }catch(e){ try{ app=firebase.app(APP); }catch(e2){ return false; } }
+    try{ auth=app.auth(); db=app.firestore(); storage=app.storage(); }catch(e){ return false; }
+    try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
+    auth.onAuthStateChanged(function(u){ onAuth(u); });
+    return true;
+  }
+
+  function onAuth(u){
+    if(!u){ me=null; render(); return; }
+    db.collection("allowlist").doc((u.email||"").toLowerCase()).get().then(function(snap){
+      var d=snap&&snap.exists?snap.data():{};
+      me={email:(u.email||"").toLowerCase(),name:(d&&d.name)||u.displayName||(u.email||"").split("@")[0],role:(d&&d.role)||"staff",branch:(d&&d.branch)||""};
+      loadStaff(); subscribeFeed(); render();
+    }).catch(function(){
+      me={email:(u.email||"").toLowerCase(),name:u.displayName||(u.email||"").split("@")[0],role:"staff",branch:""};
+      loadStaff(); subscribeFeed(); render();
+    });
+  }
+
+  function loadStaff(){
+    db.collection("allowlist").get().then(function(qs){
+      var list=[]; qs.forEach(function(doc){ var d=doc.data()||{}; list.push({email:doc.id,name:d.name||doc.id,role:d.role||"staff"}); });
+      list.sort(function(a,b){ return (a.name||"").localeCompare(b.name||""); });
+      staff=list; render();
+    }).catch(function(){ staff=[]; });
+  }
+
+  function signIn(){
+    if(!auth){ toast("Not ready — reload the page."); return; }
+    var pr=new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(pr).catch(function(e){
+      toast("Sign-in failed: "+(e&&e.message?e.message:e)+" (open the app from its web address, not a file).");
+    });
+  }
+  function signOut(){ if(auth) auth.signOut(); }
+
+  function moderate(text){
+    var url=BACKEND+"?action=moderatePostcard&token="+encodeURIComponent(TOKEN)+"&text="+encodeURIComponent(text||"");
+    return fetch(url,{cache:"no-store"}).then(function(r){ return r.json(); }).then(function(j){
+      if(j&&typeof j.allow==="boolean") return j;
+      return {allow:false,reason:"Could not check the message right now. Try again in a moment.",_soft:true};
+    }).catch(function(){
+      return {allow:false,reason:"Could not reach the safety check. Try again in a moment.",_soft:true};
+    });
+  }
+
+  function uploadPhoto(file){
+    if(!file) return Promise.resolve("");
+    var id=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    var ext=(file.name&&file.name.indexOf(".")>-1)?file.name.slice(file.name.lastIndexOf(".")):".jpg";
+    var ref=storage.ref("postcards/"+id+ext);
+    return ref.put(file).then(function(){ return ref.getDownloadURL(); });
+  }
+
+  function send(opts, done){
+    var msg=(opts.message||"").trim();
+    if(!msg){ done({error:"Write a message first."}); return; }
+    moderate(msg).then(function(mod){
+      if(!mod.allow){ done({blocked:true, reason:mod.reason||"That message can't be posted.", soft:!!mod._soft}); return; }
+      uploadPhoto(opts.file).then(function(photoUrl){
+        var rec={
+          fromEmail:me.email, fromName:me.name,
+          toName:opts.toName||"Everyone", toEmail:opts.toEmail||"",
+          message:msg, photoUrl:photoUrl||"", theme:opts.themeId||"cream",
+          status:"approved",
+          createdAt:firebase.firestore.FieldValue.serverTimestamp()
+        };
+        return db.collection("postcards").add(rec);
+      }).then(function(){ done({ok:true}); })
+        .catch(function(e){ done({error:(e&&e.message)||"Could not send. Try again."}); });
+    });
+  }
+
+  var feedItems=[];
+  function subscribeFeed(){
+    if(feedUnsub){ try{ feedUnsub(); }catch(e){} feedUnsub=null; }
+    feedUnsub=db.collection("postcards").orderBy("createdAt","desc").limit(60).onSnapshot(function(qs){
+      var arr=[]; qs.forEach(function(doc){ var d=doc.data()||{}; d._id=doc.id; arr.push(d); });
+      feedItems=arr; renderFeed();
+    }, function(){ });
+  }
+
+  function injectCSS(){
+    if(document.getElementById("pc-css")) return;
+    var st=document.createElement("style"); st.id="pc-css";
+    st.textContent=[
+"#pc-fab{position:fixed;left:20px;bottom:20px;z-index:99998;width:58px;height:58px;border:none;border-radius:999px;cursor:pointer;background:#c81a22;color:#fff;box-shadow:0 10px 30px rgba(120,10,14,.34),0 2px 6px rgba(20,12,4,.2);display:flex;align-items:center;justify-content:center;font-size:26px;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s}",
+"#pc-fab:hover{transform:translateY(-2px)}#pc-fab:active{transform:scale(.95)}",
+"#pc-try{position:fixed;left:20px;bottom:88px;z-index:99998;border:none;border-radius:999px;cursor:pointer;background:#241d16;color:#fbf5ec;font-family:'SF Pro Text','Inter',system-ui,sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.02em;padding:10px 15px;box-shadow:0 8px 22px rgba(20,12,4,.28);display:flex;align-items:center;gap:6px;transition:transform .16s cubic-bezier(.2,.7,.2,1)}",
+"#pc-try:hover{transform:translateY(-2px)}#pc-try:active{transform:scale(.96)}",
+"#pc-overlay{position:fixed;inset:0;z-index:99999;background:rgba(20,12,4,.44);display:none;align-items:center;justify-content:center;padding:16px;font-family:'SF Pro Text','Inter',system-ui,sans-serif}",
+"#pc-modal{background:#fbf5ec;width:min(640px,100%);max-height:88vh;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 70px rgba(20,12,4,.4)}",
+".pc-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(0,0,0,.08)}",
+".pc-head h3{margin:0;font-size:18px;font-weight:700;color:#2a2118;font-family:'SF Pro Display','Inter',system-ui}",
+".pc-x{border:none;background:transparent;font-size:22px;cursor:pointer;color:#6a5f52;line-height:1}",
+".pc-body{padding:16px 18px;overflow:auto}",
+".pc-signin{text-align:center;padding:26px 10px}",
+".pc-btn{border:none;border-radius:12px;background:#c81a22;color:#fff;font-weight:700;font-size:16px;padding:13px 18px;cursor:pointer;font-family:inherit}",
+".pc-btn.ghost{background:transparent;color:#6a5f52;font-weight:600}",
+".pc-lbl{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6a5f52;margin:12px 0 5px;font-weight:600}",
+".pc-inp,.pc-sel,.pc-ta{width:100%;box-sizing:border-box;border:1px solid rgba(0,0,0,.14);border-radius:10px;padding:12px 12px;font-size:16px;font-family:inherit;background:#fff;color:#2a2118}",
+".pc-ta{min-height:80px;resize:vertical}",
+".pc-inp:focus,.pc-sel:focus,.pc-ta:focus{outline:none;box-shadow:0 0 0 3px rgba(200,26,34,.45);border-color:#c81a22}",
+".pc-themes{display:flex;gap:8px;margin-top:6px}",
+".pc-sw{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent}",
+".pc-sw.sel{border-color:#2a2118}",
+".pc-err{color:#c1583f;font-size:13px;margin-top:10px;min-height:16px}",
+".pc-note{font-size:11.5px;color:#8a7d6d;margin-top:8px;line-height:1.5}",
+".pc-tabs{display:flex;gap:6px;margin-bottom:8px}",
+".pc-tab{flex:1;text-align:center;padding:9px;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px;color:#6a5f52;background:transparent;border:none;font-family:inherit}",
+".pc-tab.on{background:#241d16;color:#fbf5ec}",
+".pc-card{border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 4px 14px rgba(20,12,4,.12);position:relative}",
+".pc-card .pc-route{font-size:12px;letter-spacing:.04em;opacity:.85;margin-bottom:6px;font-weight:600}",
+".pc-card .pc-msg{font-size:15.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}",
+".pc-card img{width:100%;border-radius:10px;margin-top:10px;display:block}",
+".pc-card .pc-when{font-size:11px;opacity:.6;margin-top:8px}",
+".pc-pinbtn{position:absolute;top:6px;right:8px;border:none;background:transparent;cursor:pointer;font-size:17px;opacity:.26;filter:grayscale(1);transition:opacity .15s,filter .15s,transform .15s;line-height:1;padding:2px}",
+".pc-pinbtn:hover{opacity:.65}",
+".pc-pinbtn.on{opacity:1;filter:none;transform:rotate(8deg)}",
+".pc-card.pinned{transform:rotate(-1deg);box-shadow:0 8px 22px rgba(20,12,4,.22)}",
+".pc-pinlbl{font-size:12px;font-weight:700;color:#8a7d6d;text-transform:uppercase;letter-spacing:.08em;margin:2px 0 8px}",
+".pc-pinwrap{margin-bottom:16px;padding-bottom:8px;border-bottom:1px dashed rgba(0,0,0,.16)}",
+"@keyframes pc-stick{0%{transform:scale(.82) rotate(-7deg);opacity:0}60%{transform:scale(1.03) rotate(-1deg);opacity:1}100%{transform:rotate(-1deg)}}",
+".pc-pinwrap .pc-card{animation:pc-stick .42s cubic-bezier(.2,.8,.3,1.2)}",
+"@keyframes pc-fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}",
+"#pc-feed>.pc-card{animation:pc-fadein .24s ease}",
+".pc-preview{max-width:100%;border-radius:10px;margin-top:8px;display:none}",
+"@media (prefers-reduced-motion:reduce){.pc-pinwrap .pc-card,#pc-feed>.pc-card{animation:none}.pc-pinbtn{transition:none}}",
+".pc-empty{text-align:center;color:#8a7d6d;padding:30px 10px;font-size:14px}",
+"@media (max-width:640px){#pc-modal{max-height:94vh}}"
+    ].join("\n");
+    document.head.appendChild(st);
+  }
+
+  var state={tab:"feed", themeId:"cream", file:null};
+
+  function toast(m){
+    var t=document.createElement("div");
+    t.textContent=m; t.style.cssText="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#241d16;color:#fbf5ec;padding:11px 16px;border-radius:12px;z-index:100000;font-family:'SF Pro Text','Inter',system-ui;font-size:14px;max-width:88vw;box-shadow:0 10px 30px rgba(0,0,0,.3)";
+    document.body.appendChild(t); setTimeout(function(){ t.remove(); },3600);
+  }
+
+  function open(){ var o=document.getElementById("pc-overlay"); if(o){ o.style.display="flex"; render(); } }
+  function openCompose(){ state.tab="write"; open(); }
+  function close(){ var o=document.getElementById("pc-overlay"); if(o) o.style.display="none"; }
+
+  function render(){
+    var body=document.getElementById("pc-bodyc"); if(!body) return;
+    if(!me){
+      body.innerHTML='<div class="pc-signin"><p style="color:#6a5f52;font-size:14px;margin-bottom:16px">Sign in with your Hideout Google account to send and read postcards.</p><button class="pc-btn" id="pc-signin-b">Sign in with Google</button></div>';
+      var b=document.getElementById("pc-signin-b"); if(b) b.onclick=signIn;
+      return;
+    }
+    body.innerHTML=
+      '<div class="pc-tabs"><button class="pc-tab '+(state.tab==="feed"?"on":"")+'" data-t="feed">Postcards</button><button class="pc-tab '+(state.tab==="write"?"on":"")+'" data-t="write">Write one</button></div>'+
+      '<div id="pc-tabc"></div>';
+    Array.prototype.forEach.call(body.querySelectorAll(".pc-tab"),function(el){ el.onclick=function(){ state.tab=el.getAttribute("data-t"); render(); }; });
+    if(state.tab==="write") renderWrite(); else { renderFeedInto(); }
+  }
+
+  function renderWrite(){
+    var c=document.getElementById("pc-tabc"); if(!c) return;
+    var opts=staff.filter(function(s){ return s.email!==me.email; }).map(function(s){ return '<option value="'+esc(s.email)+'">'+esc(s.name)+'</option>'; }).join("");
+    var sw=THEMES.map(function(t){ return '<div class="pc-sw'+(t.id===state.themeId?" sel":"")+'" data-th="'+t.id+'" style="background:'+t.bg+';box-shadow:inset 0 0 0 3px '+t.accent+'"></div>'; }).join("");
+    c.innerHTML=
+      '<label class="pc-lbl">To</label><select class="pc-sel" id="pc-to"><option value="">Everyone (open)</option>'+opts+'</select>'+
+      '<label class="pc-lbl">Message</label><textarea class="pc-ta" id="pc-msg" maxlength="600" placeholder="Say something kind..."></textarea>'+
+      '<label class="pc-lbl">Photo (optional)</label><input class="pc-inp" type="file" accept="image/*" id="pc-file"><img class="pc-preview" id="pc-preview" alt="">'+
+      '<label class="pc-lbl">Postcard colour</label><div class="pc-themes">'+sw+'</div>'+
+      '<div class="pc-err" id="pc-err"></div>'+
+      '<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button class="pc-btn" id="pc-send">Send postcard</button><span id="pc-status" style="font-size:13px;color:#8a7d6d"></span></div>'+
+      '<div class="pc-note">Every postcard is checked automatically before it posts. Messages meant to insult, mock or mislead won’t go through. Signed in as '+esc(me.name)+' · <a href="#" id="pc-out" style="color:#8a7d6d">sign out</a></div>';
+    Array.prototype.forEach.call(c.querySelectorAll(".pc-sw"),function(el){ el.onclick=function(){ state.themeId=el.getAttribute("data-th"); Array.prototype.forEach.call(c.querySelectorAll(".pc-sw"),function(x){ x.className="pc-sw"+(x.getAttribute("data-th")===state.themeId?" sel":""); }); }; });
+    var fileEl=document.getElementById("pc-file"), prev=document.getElementById("pc-preview");
+    if(fileEl&&prev){ fileEl.onchange=function(){ var f=(fileEl.files||[])[0]; if(f){ try{ prev.src=URL.createObjectURL(f); prev.style.display="block"; }catch(e){} } else { prev.style.display="none"; } }; }
+    var out=document.getElementById("pc-out"); if(out) out.onclick=function(e){ e.preventDefault(); signOut(); };
+    var sb=document.getElementById("pc-send");
+    sb.onclick=function(){
+      var toSel=document.getElementById("pc-to");
+      var toEmail=toSel.value, toName=toEmail?(toSel.options[toSel.selectedIndex].text):"Everyone";
+      var msg=document.getElementById("pc-msg").value;
+      var file=(document.getElementById("pc-file").files||[])[0]||null;
+      var err=document.getElementById("pc-err"), st=document.getElementById("pc-status");
+      err.textContent=""; st.textContent="Sending…"; sb.disabled=true;
+      send({toName:toName,toEmail:toEmail,message:msg,themeId:state.themeId,file:file},function(res){
+        sb.disabled=false; st.textContent="";
+        if(res.error){ err.textContent=res.error; return; }
+        if(res.blocked){ err.textContent=(res.soft?"":"Held: ")+res.reason; return; }
+        if(res.ok){ toast("Postcard sent ❤"); state.tab="feed"; render(); }
+      });
+    };
+  }
+
+  function renderFeedInto(){
+    var c=document.getElementById("pc-tabc"); if(!c) return;
+    c.innerHTML='<div id="pc-feed"></div>'; renderFeed();
+  }
+  function togglePin(id, cur){
+    if(!db||!id) return;
+    db.collection("postcards").doc(id).update({pinned:!cur, pinnedAt:firebase.firestore.FieldValue.serverTimestamp()})
+      .catch(function(e){ toast("Couldn't pin — "+((e&&e.message)||"try again")); });
+  }
+  function cardHtml(d, pinned){
+    var th=theme(d.theme);
+    var route=esc(d.fromName||"?")+" → "+esc(d.toName||"Everyone");
+    return '<div class="pc-card'+(pinned?" pinned":"")+'" style="background:'+th.bg+';color:'+th.ink+'">'+
+      '<button class="pc-pinbtn'+(pinned?" on":"")+'" data-pin="'+esc(d._id)+'" data-cur="'+(pinned?"1":"0")+'" title="'+(pinned?"Unpin":"Pin to board")+'">📌</button>'+
+      '<div class="pc-route" style="color:'+th.accent+';padding-right:22px">'+route+'</div>'+
+      '<div class="pc-msg">'+esc(d.message||"")+'</div>'+
+      (d.photoUrl?'<img src="'+esc(d.photoUrl)+'" alt="">':"")+
+      '<div class="pc-when">'+esc(fmtTime(d.createdAt))+'</div>'+
+    '</div>';
+  }
+  function renderFeed(){
+    var f=document.getElementById("pc-feed"); if(!f) return;
+    if(!feedItems.length){ f.innerHTML='<div class="pc-empty">No postcards yet. Be the first to send one!</div>'; return; }
+    var pins=feedItems.filter(function(d){ return d.pinned; });
+    var rest=feedItems.filter(function(d){ return !d.pinned; });
+    var html="";
+    if(pins.length){ html+='<div class="pc-pinlbl">📌 Pinned</div><div class="pc-pinwrap">'+pins.map(function(d){ return cardHtml(d,true); }).join("")+'</div>'; }
+    html+=rest.map(function(d){ return cardHtml(d,false); }).join("");
+    f.innerHTML=html;
+    Array.prototype.forEach.call(f.querySelectorAll(".pc-pinbtn"),function(el){ el.onclick=function(){ togglePin(el.getAttribute("data-pin"), el.getAttribute("data-cur")==="1"); }; });
+  }
+
+  function mount(){
+    injectCSS();
+    var fab=document.createElement("button"); fab.id="pc-fab"; fab.title="Staff postcards"; fab.innerHTML="✉";
+    fab.onclick=open; document.body.appendChild(fab);
+    var tryb=document.createElement("button"); tryb.id="pc-try"; tryb.title="Write a postcard"; tryb.innerHTML="✏️ TRY";
+    tryb.onclick=openCompose; document.body.appendChild(tryb);
+    var ov=document.createElement("div"); ov.id="pc-overlay";
+    ov.innerHTML='<div id="pc-modal"><div class="pc-head"><h3>Postcards</h3><button class="pc-x" id="pc-close">×</button></div><div class="pc-body"><div id="pc-bodyc"></div></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click",function(e){ if(e.target===ov) close(); });
+    document.getElementById("pc-close").onclick=close;
+    if(!initFb()){ if(!booting){ booting=true; var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } }
+  }
+
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",mount); else mount();
+  window.HideoutPostcards={open:open, compose:openCompose};
+})();
+</script>
+<!-- ================= Drag-to-pan (grab to scroll) — desktop mouse convenience, 2026-07-24 ================= -->
+<script>
+/* Grab empty background and drag to scroll the page. Mouse/pen only (touch keeps native scroll).
+   Fail-safe: fully wrapped in IIFE + try/catch; any error leaves the app untouched.
+   Does NOT touch the React tree; pure document-level vanilla. */
+(function(){
+  "use strict";
+  try{
+    if(window.__HIDEOUT_DRAGPAN__) return; window.__HIDEOUT_DRAGPAN__=true;
+
+    var THRESH=6; // px of movement before a click becomes a pan
+    // Elements / ancestors that own their own pointer interaction — never hijack these.
+    var SKIP="a,button,input,textarea,select,label,option,summary,svg,img,video,canvas,"+
+             "[contenteditable],[contenteditable=true],[draggable=true],[role=slider],[role=radiogroup],"+
+             ".pc-card,#pc-feed,#pc-modal,#pc-overlay,.pc-abs,.pc-pinbtn,"+
+             "[data-dnd],[data-drag],.kanban,.dish-card,.cursor-grab,.tilt,.vbtn-card,.twk-panel";
+
+    var armed=false, panning=false, sx=0, sy=0, pid=-1, selPrev="", curPrev="";
+
+    function isScrollable(el){
+      if(!el||el===document.body||el===document.documentElement) return false;
+      var st;
+      try{ st=getComputedStyle(el); }catch(_){ return false; }
+      var oy=st.overflowY, ox=st.overflowX;
+      var vy=(oy==="auto"||oy==="scroll")&&el.scrollHeight>el.clientHeight+1;
+      var vx=(ox==="auto"||ox==="scroll")&&el.scrollWidth>el.clientWidth+1;
+      return vy||vx;
+    }
+
+    function onDown(e){
+      try{
+        if(panning||armed) return;
+        if(e.pointerType==="touch") return;   // mobile keeps native scroll
+        if(e.button!==0) return;              // primary button only
+        var t=e.target;
+        if(!t||!t.closest) return;
+        if(t.closest(SKIP)) return;           // interactive / existing-drag element
+        // Bail if grab starts inside any inner scroll container — keep native behaviour intact.
+        var n=t;
+        while(n&&n!==document.body&&n!==document.documentElement){
+          if(isScrollable(n)) return;
+          n=n.parentElement;
+        }
+        armed=true; sx=e.clientX; sy=e.clientY; pid=(e.pointerId==null?-1:e.pointerId);
+      }catch(_){ armed=false; }
+    }
+
+    function begin(){
+      panning=true;
+      try{
+        var de=document.documentElement;
+        selPrev=de.style.userSelect; curPrev=de.style.cursor;
+        de.style.userSelect="none"; de.style.cursor="grabbing";
+        var s=window.getSelection&&window.getSelection(); if(s&&s.removeAllRanges) s.removeAllRanges();
+      }catch(_){}
+    }
+
+    function onMove(e){
+      try{
+        if(!armed) return;
+        if(pid!==-1&&e.pointerId!=null&&e.pointerId!==pid) return;
+        var dx=e.clientX-sx, dy=e.clientY-sy;
+        if(!panning){
+          if(Math.abs(dx)<THRESH&&Math.abs(dy)<THRESH) return; // still a click
+          begin();
+        }
+        window.scrollBy(-dx,-dy);
+        sx=e.clientX; sy=e.clientY;
+        if(e.cancelable) e.preventDefault();
+      }catch(_){}
+    }
+
+    function end(){
+      try{
+        if(panning){
+          var de=document.documentElement;
+          de.style.userSelect=selPrev; de.style.cursor=curPrev;
+        }
+      }catch(_){}
+      armed=false; panning=false; pid=-1;
+    }
+
+    document.addEventListener("pointerdown",onDown,true);
+    document.addEventListener("pointermove",onMove,{passive:false});
+    document.addEventListener("pointerup",end,true);
+    document.addEventListener("pointercancel",end,true);
+    window.addEventListener("blur",end);
+  }catch(_){/* never break the app */}
+})();
 </script>
 </body>
 </html>

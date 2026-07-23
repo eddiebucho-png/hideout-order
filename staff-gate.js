@@ -399,7 +399,7 @@
     },400);
   }
 
-  window.HideoutGate={signIn:signIn,signOut:signOut,user:function(){return me;}};
+  window.HideoutGate={signIn:signIn,signOut:signOut,user:function(){return me;},db:function(){return db;}};
 
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot); else boot();
 })();

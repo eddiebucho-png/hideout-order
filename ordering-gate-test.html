@@ -1900,7 +1900,7 @@ function Settings({ctx}){
   const [unlocked,setUnlocked]=useState(false); const [pw,setPw]=useState(""); const [err,setErr]=useState("");
   const [sub,setSub]=useState("items");
   const OPEN=["items","parlevels","categories"]; // day-to-day open sections
-  const SECTIONS=[["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
+  const SECTIONS=[["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["users","Users"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
   const gated = !OPEN.includes(sub) && !unlocked;
   const tryUnlock=()=>{ if(pw===SETTINGS_PASSWORD||pw===MASTER){ setUnlocked(true); setErr(""); } else setErr("Incorrect"); };
   return <div>
@@ -1918,6 +1918,7 @@ function Settings({ctx}){
       {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
       {sub==="categories" && <CategoriesCard ctx={ctx} />}
       {sub==="locations" && <LocationsCard ctx={ctx} />}
+      {sub==="users" && <UsersCard />}
       {sub==="suppliers" && <SuppliersCard ctx={ctx} />}
       {sub==="delivery" && <DeliveryCard ctx={ctx} />}
       {sub==="dailysummary" && <DailySummaryCard ctx={ctx} />}
@@ -1925,6 +1926,59 @@ function Settings({ctx}){
       {sub==="connection" && <ConnectionCard ctx={ctx} />}
     </>}
   </div>;
+}
+
+/* ---------- Users (staff Google accounts — allowlist via the sign-in gate) ---------- */
+function UsersCard(){
+  const [rows,setRows]=useState(null);
+  const [reqs,setReqs]=useState([]);
+  const VENUES=[["","—"],["b1","Edward St"],["b2","Adelaide St"],["b3","St Pauls Ter"]];
+  const vName=id=>{ const v=VENUES.find(x=>x[0]===id); return v?v[1]:id||"—"; };
+  const gdb=()=>{ try{ return window.HideoutGate&&window.HideoutGate.db&&window.HideoutGate.db(); }catch(e){ return null; } };
+  const load=()=>{
+    const db=gdb(); if(!db){ setRows("nodb"); return; }
+    db.collection("allowlist").get().then(qs=>{
+      const a=[]; qs.forEach(d=>{ if(d.id.indexOf("cfg-")===0) return; const v=d.data()||{}; a.push({email:d.id,name:v.name||"",role:v.role||"staff",branch:v.branch||"",self:!!v.self}); });
+      a.sort((x,y)=>(x.name||x.email).localeCompare(y.name||y.email)); setRows(a);
+    }).catch(e=>{ setRows("err:"+(e&&e.message||"load failed")); });
+    db.collection("accessRequests").get().then(qs=>{
+      const a=[]; qs.forEach(d=>{ const v=d.data()||{}; if(v.status==="pending") a.push({email:d.id,name:v.name||d.id}); }); setReqs(a);
+    }).catch(()=>setReqs([]));
+  };
+  useEffect(load,[]);
+  const save=(email,patch,msg)=>{ const db=gdb(); if(!db) return; db.collection("allowlist").doc(email).set(patch,{merge:true}).then(()=>{ toast(msg||"Saved ✓"); load(); }).catch(e=>toast("Save failed: "+e.message,true)); };
+  const removeUser=(u)=>{ if(!confirm(`Remove ${u.name||u.email} (${u.email}) from the staff list? They'll see the sign-up screen next time.`)) return; const db=gdb(); if(!db) return; db.collection("allowlist").doc(u.email).delete().then(()=>{ toast("Removed ✓"); load(); }).catch(e=>toast("Failed: "+e.message,true)); };
+  const approve=(r)=>{ const db=gdb(); if(!db) return; db.collection("allowlist").doc(r.email).set({name:r.name||r.email,role:"staff",branch:"",ts:Date.now()},{merge:true}).then(()=>db.collection("accessRequests").doc(r.email).set({status:"approved"},{merge:true})).then(()=>{ toast("Approved ✓"); load(); }).catch(e=>toast("Failed: "+e.message,true)); };
+  const dismiss=(r)=>{ const db=gdb(); if(!db) return; db.collection("accessRequests").doc(r.email).set({status:"rejected"},{merge:true}).then(()=>{ toast("Dismissed"); load(); }).catch(e=>toast("Failed: "+e.message,true)); };
+  if(rows==="nodb") return <Card><Empty>The Google sign-in gate isn't running on this page, so staff accounts can't be managed here.</Empty></Card>;
+  if(typeof rows==="string") return <Card><Empty>Couldn't load staff accounts — {rows.slice(4)}</Empty></Card>;
+  if(!rows) return <Card><Empty>Loading staff accounts…</Empty></Card>;
+  const selSt={...inp,width:"auto",minWidth:120,padding:"8px 10px",fontSize:13};
+  return <>
+    {reqs.length>0 && <Card style={{marginBottom:14,border:"1px solid rgba(215,0,21,.25)"}}>
+      <SectionLabel>Waiting for approval ({reqs.length})</SectionLabel>
+      {reqs.map(r=><div key={r.email} style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--color-hairline-alpha)"}}>
+        <div><div style={{fontWeight:600,fontSize:14}}>{r.name}</div><div style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>{r.email}</div></div>
+        <div style={{display:"flex",gap:8}}><Btn size="sm" onClick={()=>approve(r)}>Approve</Btn><Btn size="sm" tone="ghost" onClick={()=>dismiss(r)}>Dismiss</Btn></div>
+      </div>)}
+    </Card>}
+    <Card>
+      <SectionLabel right={<Btn size="sm" tone="ghost" onClick={load}>Refresh</Btn>}>Staff accounts · Google sign-in ({rows.length})</SectionLabel>
+      <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 12px"}}>Until 24 Aug 2026 anyone who signs in is let in automatically (open enrolment) and appears here with a "self" badge — review and adjust venue/role, or remove them. After that date, new accounts wait for approval above.</p>
+      <HScroll>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13.5}}>
+          <thead><tr><th style={th}>Name</th><th style={th}>Email</th><th style={th}>Venue</th><th style={th}>Role</th><th style={th}></th></tr></thead>
+          <tbody>{rows.map(u=><tr key={u.email} style={{borderTop:"1px solid var(--color-hairline-alpha)"}}>
+            <td style={td}><input defaultValue={u.name} placeholder="Name" style={{...inp,minWidth:130,padding:"8px 10px",fontSize:13}} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==u.name) save(u.email,{name:v}); }} />{u.self&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",background:"rgba(215,120,0,.12)",color:"#a05a00",borderRadius:999,padding:"3px 8px"}}>self</span>}</td>
+            <td style={{...td,whiteSpace:"nowrap"}}>{u.email}</td>
+            <td style={td}><select value={u.branch} onChange={e=>save(u.email,{branch:e.target.value},"Venue → "+vName(e.target.value))} style={selSt}>{VENUES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></td>
+            <td style={td}><select value={u.role} onChange={e=>save(u.email,{role:e.target.value},"Role → "+e.target.value)} style={selSt}><option value="staff">staff</option><option value="manager">manager</option></select></td>
+            <td style={{...td,textAlign:"right"}}><Btn size="sm" tone="ghost" onClick={()=>removeUser(u)} style={{color:"#d70015"}}>Remove</Btn></td>
+          </tr>)}</tbody>
+        </table>
+      </HScroll>
+    </Card>
+  </>;
 }
 
 /* ---------- AI widget ---------- */

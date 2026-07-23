@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Hideout Postcards — TEST</title>
+<!-- Firebase compat SDK (same versions as the apps) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- The widget under test (same file the real apps load) -->
+<script src="postcards.js"></script>
+<style>
+  html,body{margin:0;height:100%}
+  body{font-family:'SF Pro Text','Inter',system-ui,-apple-system,sans-serif;color:#241d16;
+    background:#f6ede1;
+    background-image:linear-gradient(rgba(200,26,34,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(200,26,34,.10) 1px,transparent 1px);
+    background-size:22px 22px;
+    display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px}
+  .box{max-width:440px}
+  h1{font-family:'Archivo',system-ui,sans-serif;font-weight:900;text-transform:uppercase;font-size:26px;margin:0 0 8px}
+  p{color:#6a5f52;line-height:1.6;font-size:15px}
+  .pill{display:inline-block;background:#c81a22;color:#fff;font-weight:700;font-size:12px;letter-spacing:.08em;
+    text-transform:uppercase;padding:5px 12px;border-radius:999px;margin-bottom:16px}
+  code{background:rgba(0,0,0,.06);padding:2px 6px;border-radius:5px;font-size:13px}
+  ol{text-align:left;color:#6a5f52;line-height:1.9;font-size:14px}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="pill">Test page</div>
+    <h1>Postcards test</h1>
+    <p>The floating <b>✏️ TRY</b> and <b>✉</b> buttons (bottom-left) are the live widget — the exact same <code>postcards.js</code> the Ordering &amp; Recipe apps load.</p>
+    <ol>
+      <li>Tap <b>TRY</b> → sign in with your Hideout Google account.</li>
+      <li>Write a postcard, add a photo + caption, pick a colour, send.</li>
+      <li>Check it appears in the feed; try pinning it (📌).</li>
+    </ol>
+    <p style="font-size:13px;margin-top:18px">This page touches nothing in the real apps. Edit <code>postcards.js</code> and re-deploy to iterate.</p>
+  </div>
+</body>
+</html>

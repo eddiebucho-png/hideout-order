@@ -449,7 +449,7 @@ async function probeFsDirect(){ if(!cfg.fsProjectId||!cfg.fsApiKey){ cfg.fsDirec
 async function kvGet(key){
   const cached=cacheGet('kv:'+key); if(cached!==undefined) return cached;
   let value=null;
-  if(cfg.fsDirect){ try{ value=await fsDirectGet(key); cachePut('kv:'+key,value); return value; }catch(e){ /* fall back to Apps Script */ } }
+  if(cfg.fsDirect){ try{ value=await fsDirectGet(key); cachePut('kv:'+key,value); return value; }catch(e){ if(!cfg.backendUrl && !hasArtifactStorage()) throw e; /* [FIX 2026-07-23 yearsim] read failure must THROW, not masquerade as empty — a null here poisoned the cache and made screens render "no data" on transient network blips, and anything saved from that screen truncated real data */ } }
   if(cfg.backendUrl){
     const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=get&key=${encodeURIComponent(key)}`),{cache:'no-store'}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
     if(json&&json.error) throw new Error(json.error);
@@ -492,7 +492,7 @@ async function kvGetBatch(keys){
   const out={}, missing=[];
   keys.forEach(k=>{ const c=cacheGet('kv:'+k); if(c!==undefined) out[k]=c; else missing.push(k); });
   if(!missing.length) return out;
-  if(cfg.fsDirect){ try{ const got=await fsDirectBatch(missing); missing.forEach(k=>{ out[k]=got[k]!==undefined?got[k]:null; cachePut('kv:'+k,out[k]); }); return out; }catch(e){ /* fall back */ } }
+  if(cfg.fsDirect){ try{ const got=await fsDirectBatch(missing); missing.forEach(k=>{ out[k]=got[k]!==undefined?got[k]:null; cachePut('kv:'+k,out[k]); }); return out; }catch(e){ if(!cfg.backendUrl && !hasArtifactStorage()) throw e; /* [FIX 2026-07-23 yearsim] batch read failure must throw — null-filling made loadCore build an empty core and reseed/overwrite paths fire on good data */ } }
   if(cfg.backendUrl){
     const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=getBatch&keys=${encodeURIComponent(JSON.stringify(missing))}`),{cache:'no-store'}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
     if(json&&json.error) throw new Error(json.error);
@@ -506,11 +506,15 @@ async function kvGetBatch(keys){
 
 /* ---- chunked array storage (CHUNK_SIZE=2, see original) ---- */
 const CHUNK_SIZE = 2;
-async function kvSetChunked(baseKey, arr){
+async function kvSetChunked(baseKey, arr, force){
     // [SAFETY GUARD 2026-07-20] Never overwrite existing non-empty data with an empty list.
     // Root-caused a Barista items wipe: on load an empty dept read initialised items=[] and
     // saved it back, deleting real data. This makes chef & barista behave identically-safe (P5).
-    if(!arr || arr.length===0){
+    // [FIX 2026-07-23 yearsim] force=true bypasses the guard for EXPLICIT user actions (deleting
+    // the last item / clear-all via the UI). Without it, a legit "delete everything" silently
+    // failed to persist and items resurrected on the next reload. Auto-init/seeding paths never
+    // pass force, so the original wipe protection is intact.
+    if((!arr || arr.length===0) && !force){
       try{
         // use FRESH (uncached) reads so a stale cached 0 can't bypass the guard
         const _flat=await kvGetFresh(baseKey);
@@ -525,10 +529,24 @@ async function kvSetChunked(baseKey, arr){
         if(_c0){ console.warn('[guard] refused empty overwrite of '+baseKey+' (orphaned chunk bodies present, count was corrupt)'); return; }
       }catch(_e){ console.warn('[guard] backend read failed, refusing empty write to '+baseKey); return; }
     }
+  // [FIX 2026-07-23 yearsim] an EMPTY list is stored as a flat '[]' marker instead of "no keys".
+  // Deleting everything used to leave count=0 + (if the sweep below was interrupted) stale chunk
+  // bodies — which the self-heal scan then resurrected wholesale. A flat '[]' short-circuits the
+  // reader before any chunk/self-heal logic can run, so deleted-all stays deleted-all.
+  if(!arr || arr.length===0){
+    await kvSet(baseKey,'[]');
+    await kvSet(`${baseKey}_chunk_count`,'0');
+    try{ for(let i=0;i<80;i++){ const k=`${baseKey}_chunk_${i}`; const v=await kvGetFresh(k); if(v==null) break; await kvDelete(k); } }catch(e){}
+    return;
+  }
   const chunks=[]; for(let i=0;i<arr.length;i+=CHUNK_SIZE) chunks.push(arr.slice(i,i+CHUNK_SIZE));
   for(let i=0;i<chunks.length;i++) await kvSet(`${baseKey}_chunk_${i}`, JSON.stringify(chunks[i]));
   await kvSet(`${baseKey}_chunk_count`, String(chunks.length));
   try{ await kvDelete(baseKey); }catch(e){}
+  // [FIX 2026-07-23 yearsim] when the list SHRINKS, stale chunk_N bodies beyond the new count used
+  // to linger forever. Normal reads ignored them, but the self-heal scan (which runs whenever
+  // _chunk_count is clobbered) walked into them and RESURRECTED long-deleted items. Sweep them.
+  try{ for(let i=chunks.length;i<chunks.length+80;i++){ const k=`${baseKey}_chunk_${i}`; const v=await kvGetFresh(k); if(v==null) break; await kvDelete(k); } }catch(e){ /* best-effort sweep; next save retries */ }
 }
 async function kvGetChunkedBatch(baseKeys){
   const flatValues=await kvGetBatch(baseKeys);
@@ -541,6 +559,11 @@ async function kvGetChunkedBatch(baseKeys){
   if(chunkKeysToFetch.length){
     const chunkValues=await kvGetBatch(chunkKeysToFetch);
     needsChunkFallback.forEach(k=>{ if(counts[k]>0){ let arr=[]; for(let i=0;i<counts[k];i++){ const raw=chunkValues[`${k}_chunk_${i}`]; if(raw){ try{ arr=arr.concat(JSON.parse(raw)); }catch(e){} } } result[k]=arr; } });
+    // [FIX 2026-07-23 yearsim] read-side janitor: if a save's shrink-sweep was interrupted by a
+    // network blip, stale chunk bodies survive past _chunk_count and a later count clobber would
+    // let self-heal resurrect them. On every healthy count-path read, probe one key past the end
+    // and sweep forward if residue is found (no-op in the normal case: one extra cached read).
+    for(const k of needsChunkFallback){ if(counts[k]>0){ (async()=>{ try{ let i=counts[k]; let v=await kvGetFresh(`${k}_chunk_${i}`); while(v!=null && i<counts[k]+80){ await kvDelete(`${k}_chunk_${i}`); i++; v=await kvGetFresh(`${k}_chunk_${i}`); } }catch(e){} })(); } }
   }
   // [SELF-HEAL 2026-07-23] A corrupted _chunk_count (clobbered to 0/missing) hides real data:
   // the chunk bodies survive but count says 0, so nothing gets read and the dept looks empty.
@@ -552,9 +575,17 @@ async function kvGetChunkedBatch(baseKeys){
     const probe=await kvGetBatch(healBases.map(k=>`${k}_chunk_0`));
     for(const k of healBases){
       if(!probe[`${k}_chunk_0`]) continue;
-      let arr=[], i=0, raw=probe[`${k}_chunk_0`];
-      while(raw){ try{ arr=arr.concat(JSON.parse(raw)); }catch(e){} i++; raw=await kvGet(`${k}_chunk_${i}`); }
-      if(arr.length){ result[k]=arr; kvSet(`${k}_chunk_count`, String(i)).catch(()=>{}); try{ console.warn('[self-heal] '+k+': recovered '+arr.length+' items from '+i+' orphaned chunks; _chunk_count repaired to '+i); }catch(_){} }
+      let arr=[], i=0, raw=probe[`${k}_chunk_0`], aborted=false;
+      while(raw){ try{ arr=arr.concat(JSON.parse(raw)); }catch(e){}
+        i++;
+        // [FIX 2026-07-23 yearsim] a transient failed read used to TERMINATE the scan early and
+        // then "repair" _chunk_count to the truncated value — permanently hiding the tail of the
+        // list. Now: a null is re-verified with a FRESH read before we trust it as end-of-data,
+        // and any thrown read error aborts the heal WITHOUT writing a repaired count.
+        try{ raw=await kvGet(`${k}_chunk_${i}`); if(raw==null) raw=await kvGetFresh(`${k}_chunk_${i}`); }
+        catch(e){ aborted=true; break; }
+      }
+      if(arr.length){ result[k]=arr; if(!aborted){ kvSet(`${k}_chunk_count`, String(i)).catch(()=>{}); try{ console.warn('[self-heal] '+k+': recovered '+arr.length+' items from '+i+' orphaned chunks; _chunk_count repaired to '+i); }catch(_){} } }
     }
   }
   return result;
@@ -2059,7 +2090,7 @@ function App(){
 
   const ctx={
     ...core, department, branch,
-    saveItems:(next)=>{ setCore(c=>({...c,items:next})); C.kvSetChunked(C.deptPrefix()+"items",next).then(()=>setSync({ok:true,err:""})).catch(e=>{ toast("Save failed: "+e.message,true); setSync({ok:false,err:e.message}); }); },
+    saveItems:(next)=>{ setCore(c=>({...c,items:next})); C.kvSetChunked(C.deptPrefix()+"items",next,next.length===0).then(()=>setSync({ok:true,err:""})).catch(e=>{ toast("Save failed: "+e.message,true); setSync({ok:false,err:e.message}); }); },
     saveCategories:(next)=>persist(C.deptPrefix()+"categories",JSON.stringify(next),"categories",next),
     saveLocations:(next)=>{ setLocations(next); persist("locations",JSON.stringify(next),"locations",next); },
     saveSuppliers:(next)=>persist("suppliers",JSON.stringify(next),"suppliers",next),

@@ -58,14 +58,18 @@
     return true;
   }
 
+  var authBusy="";
   function onAuth(u){
     /* Note: we do NOT early-return when failed. A late-arriving resolution should
        still populate identity (grantAccess). The blocking screens (showSignIn/
        showAccessNeeded) self-suppress when failed, so we never re-block ordering. */
-    if(!u){ me=null; window.HideoutUser=null; showSignIn(); return; }
+    if(!u){ authBusy=""; me=null; window.HideoutUser=null; showSignIn(); return; }
     var email=(u.email||"").toLowerCase();
+    if(authBusy===email) return;       /* dedupe concurrent resolutions for same user */
+    authBusy=email;
     /* Definitive allowlist membership check (doc must EXIST). */
     db.collection("allowlist").doc(email).get().then(function(snap){
+      authBusy="";
       if(snap&&snap.exists){
         var d=snap.data()||{};
         me={email:email,name:d.name||u.displayName||email.split("@")[0],role:d.role||"staff",branch:d.branch||""};
@@ -79,6 +83,7 @@
         showAccessNeeded(u);
       }
     }).catch(function(err){
+      authBusy="";
       /* Can't verify allowlist (rules/network). Soft-fail: don't lock out a
          possibly-valid staffer over a transient read error — let them in but
          flag unverified so the app can decide later if it wants to. */
@@ -137,7 +142,10 @@
     return false;
   }
   function autoNavigate(){
-    if(!me||!me.branch) return;
+    /* Navigate ONLY on a fully-verified profile with a known venue. An
+       unverified/blank-branch grant (transient allowlist read failure) must
+       never steer the app — that caused a wrong Submit-Order jump on 7/24. */
+    if(!me||me.unverified||!me.branch||!BRANCH_MATCH[me.branch]) return;
     var rx=BRANCH_MATCH[me.branch];
     /* 1) branch screen */
     if(!branchClicked&&rx){

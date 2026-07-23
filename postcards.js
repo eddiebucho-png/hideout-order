@@ -179,6 +179,8 @@
 ".tack-flat{width:22px;height:22px;border-radius:50%;border:2px solid rgba(154,139,118,.5);position:relative;opacity:.6;margin-top:2px}",
 ".tack-flat::after{content:'';position:absolute;left:50%;top:50%;width:5px;height:5px;border-radius:50%;background:rgba(154,139,118,.6);transform:translate(-50%,-50%)}",
 ".pc-pinbtn:hover .tack-flat{opacity:.95;border-color:var(--pc-accent)}",
+".pc-del{position:absolute;bottom:8px;right:10px;border:none;background:transparent;color:var(--pc-muted);cursor:pointer;font-size:10.5px;font-family:var(--pc-disp);font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.65;padding:10px 10px;border-radius:8px;min-height:36px}",
+".pc-del:hover{opacity:1;color:var(--pc-accent-2);background:rgba(200,26,34,.08)}",
 ".pc-pinbtn:hover .tack-flat::after{background:var(--pc-accent)}",
 ".pc-lbl{display:block;font-family:var(--pc-disp);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--pc-ink);margin:14px 0 6px;font-weight:800}",
 ".pc-inp,.pc-sel,.pc-ta{width:100%;box-sizing:border-box;border:1.5px solid rgba(36,29,22,.18);border-radius:8px;padding:12px;font-size:16px;font-family:inherit;background:#fff;color:var(--pc-ink)}",
@@ -338,6 +340,9 @@
     var c=document.getElementById("pc-tabc"); if(!c) return;
     c.innerHTML='<div id="pc-feed"></div>'; renderFeed();
   }
+  function canDelete(d){
+    return !!(me&&(me.email===(d.fromEmail||"").toLowerCase()||me.role==="manager"));
+  }
   function cardHtml(d, pinned){
     var th=theme(d.theme);
     var route=esc(d.fromName||"?")+' <span class="arw">→</span> '+esc(d.toName||"Everyone");
@@ -347,6 +352,7 @@
       '<div class="pc-msg">'+esc(d.message||"")+'</div>'+
       (d.photoUrl?('<div class="pc-photowrap" style="display:block"><img src="'+esc(d.photoUrl)+'" alt="">'+(d.caption?'<div class="pc-capov '+esc(d.capPos||"bottom")+'">'+esc(d.caption)+'</div>':"")+'</div>'):"")+
       '<div class="pc-when"><span class="stamp"></span>'+esc(fmtTime(d.createdAt))+'</div>'+
+      (canDelete(d)?'<button class="pc-del" data-del="'+esc(d._id)+'" aria-label="Remove postcard">Remove</button>':"")+
     '</div>';
   }
   function renderFeed(){
@@ -359,6 +365,15 @@
     html+=rest.map(function(d){ return cardHtml(d,false); }).join("");
     f.innerHTML=html;
     Array.prototype.forEach.call(f.querySelectorAll(".pc-pinbtn"),function(el){ el.onclick=function(){ togglePin(el.getAttribute("data-pin"), el.getAttribute("data-cur")==="1"); }; });
+    Array.prototype.forEach.call(f.querySelectorAll(".pc-del"),function(el){ el.onclick=function(){ removeCard(el.getAttribute("data-del"), el); }; });
+  }
+  function removeCard(id, el){
+    if(!db||!id) return;
+    if(!window.confirm("Remove this postcard? This can't be undone.")) return;
+    if(el) el.disabled=true;
+    db.collection("postcards").doc(id).delete()
+      .then(function(){ toast("Postcard removed"); })
+      .catch(function(e){ if(el) el.disabled=false; toast("Couldn't remove — "+((e&&e.message)||"try again")); });
   }
   function togglePin(id, cur){
     if(!db||!id) return;

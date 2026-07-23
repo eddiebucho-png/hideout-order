@@ -20,7 +20,7 @@
     {id:"sage",name:"Sage",bg:"#eaefe4",ink:"#26301f",accent:"#4f6a44"},
     {id:"sky",name:"Sky",bg:"#e6eef4",ink:"#1d2b38",accent:"#3f6f9c"}
   ];
-  var LOGO="assets/hideout-logo.png";
+  var LOGO="https://order.hideoutdb.com/hideout-logo.png";
   var ICON_MAIL='<svg class="ic" viewBox="0 0 24 24" style="font-size:26px"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
   var ICON_PEN='<svg class="ic" viewBox="0 0 24 24" style="font-size:15px"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var ICON_SEND='<svg class="ic" viewBox="0 0 24 24" style="font-size:16px"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>';
@@ -146,9 +146,11 @@
 ".pc-head .sub{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--pc-accent);font-weight:700;margin-top:4px}",
 ".pc-x{border:none;background:transparent;cursor:pointer;color:var(--pc-muted);width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:22px;border-radius:50%;line-height:1}",
 ".pc-x:hover{background:rgba(0,0,0,.06);color:var(--pc-ink)}",
-".pc-ribbon{background:var(--pc-accent);overflow:hidden;white-space:nowrap;padding:6px 0}",
-".pc-ribbon span{font-family:var(--pc-disp);font-weight:800;font-size:10px;letter-spacing:.22em;color:#fff;opacity:.92;text-transform:uppercase}",
+".pc-ribbon{background:var(--pc-accent);overflow:hidden;padding:6px 0}",
+".pc-marq{display:inline-flex;white-space:nowrap;animation:pc-marquee 24s linear infinite;will-change:transform}",
+".pc-marq span{font-family:var(--pc-disp);font-weight:800;font-size:10px;letter-spacing:.22em;color:#fff;opacity:.92;text-transform:uppercase}",
 ".pc-ribbon b{opacity:.55;margin:0 10px;font-weight:800}",
+"@keyframes pc-marquee{from{transform:translateX(-50%)}to{transform:translateX(0)}}",
 ".pc-body{padding:16px 18px 20px;overflow:auto}",
 ".pc-grid{background-color:var(--pc-cream);background-image:linear-gradient(var(--pc-line) 1px,transparent 1px),linear-gradient(90deg,var(--pc-line) 1px,transparent 1px),linear-gradient(var(--pc-line-strong) 1px,transparent 1px),linear-gradient(90deg,var(--pc-line-strong) 1px,transparent 1px);background-size:22px 22px,22px 22px,110px 110px,110px 110px}",
 ".pc-signin{text-align:center;padding:30px 12px}",
@@ -191,6 +193,19 @@
 ".pc-capov.bottom{bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.58))}",
 ".pc-capov.banner{bottom:0;background:var(--pc-accent);padding:11px 14px;text-shadow:none;font-size:16px;letter-spacing:.02em}",
 ".pc-capov.headline{top:50%;transform:translateY(-50%);text-align:center;font-size:26px;font-weight:900;letter-spacing:-.01em;text-transform:uppercase;padding:16px}",
+".pc-ed{margin-top:10px;display:none}",
+".pc-edcanvas-wrap{position:relative;border-radius:6px;overflow:hidden;border:1px solid rgba(36,29,22,.14);background:#111;touch-action:none;line-height:0}",
+".pc-ed canvas{display:block;width:100%;touch-action:none;cursor:crosshair}",
+".pc-edbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}",
+".pc-edtool{border:1.5px solid rgba(36,29,22,.2);background:#fff;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:var(--pc-disp);font-weight:800;cursor:pointer;color:var(--pc-ink)}",
+".pc-edtool.on{background:var(--pc-ink);color:#fff;border-color:var(--pc-ink)}",
+".pc-edcols{display:inline-flex;gap:5px;margin-left:2px}",
+".pc-edcol{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25)}",
+".pc-edcol.on{box-shadow:0 0 0 2px var(--pc-ink)}",
+".pc-edhint{font-size:11px;color:var(--pc-muted);margin-top:6px;line-height:1.5}",
+".pc-edfilts{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;-webkit-overflow-scrolling:touch}",
+".pc-edfilt{flex:none;border:1.5px solid rgba(36,29,22,.2);background:#fff;border-radius:8px;padding:6px 11px;font-size:12px;font-family:var(--pc-disp);font-weight:800;cursor:pointer;color:var(--pc-ink);white-space:nowrap}",
+".pc-edfilt.on{background:var(--pc-accent);color:#fff;border-color:var(--pc-accent)}",
 ".pc-themes{display:flex;gap:10px;margin-top:8px}",
 ".pc-sw{width:34px;height:34px;border-radius:6px;cursor:pointer;border:2px solid transparent;box-shadow:0 2px 5px rgba(30,18,6,.14);transition:transform .15s ease}",
 ".pc-sw:hover{transform:translateY(-2px)}.pc-sw.sel{border-color:var(--pc-ink);transform:translateY(-2px)}",
@@ -201,13 +216,14 @@
 ".pc-note svg{flex:none;margin-top:1px;color:var(--pc-accent);opacity:.8}",
 ".pc-note a{color:var(--pc-muted)}",
 ".pc-empty{text-align:center;color:var(--pc-muted);padding:34px 10px;font-size:14px}",
-"@media (prefers-reduced-motion:reduce){#pc-fab,#pc-try,.pc-card.pinned,#pc-feed>.pc-card,.pc-tab,.pc-sw,.pc-btn,.pc-pinbtn{animation:none;transition:none}}",
+"@media (prefers-reduced-motion:reduce){#pc-fab,#pc-try,.pc-card.pinned,#pc-feed>.pc-card,.pc-tab,.pc-sw,.pc-btn,.pc-pinbtn,.pc-marq{animation:none;transition:none}}",
 "@media (max-width:640px){#pc-modal{max-height:94vh}}"
     ].join("\n");
     document.head.appendChild(st);
   }
 
   var state={tab:"feed", themeId:"cream", file:null};
+  var editor=null;
 
   function toast(m){
     var t=document.createElement("div");
@@ -233,6 +249,52 @@
     if(state.tab==="write") renderWrite(); else { renderFeedInto(); }
   }
 
+  /* Instagram/Canva-style photo editor: freehand draw + draggable text, baked into the image on send. */
+  function makeEditor(file){
+    var wrap=document.getElementById("pc-ed"); if(!wrap) return;
+    wrap.style.display="block";
+    var COLORS=["#c81a22","#ffffff","#241d16","#3f6f9c","#4f6a44","#f4c20d"];
+    var FILTERS=[["Original","none"],["Vivid","saturate(1.6) contrast(1.18)"],["Clarendon","saturate(1.35) contrast(1.12) brightness(1.05)"],["Warm","sepia(.25) saturate(1.25) brightness(1.05)"],["Cool","saturate(1.1) hue-rotate(-12deg) brightness(1.03) contrast(1.05)"],["Fade","contrast(.9) brightness(1.1) saturate(.85)"],["B&W","grayscale(1) contrast(1.1)"]];
+    wrap.innerHTML='<div class="pc-edcanvas-wrap"><canvas id="pc-cv"></canvas></div>'+
+      '<div class="pc-edfilts">'+FILTERS.map(function(f,i){return '<button type="button" class="pc-edfilt'+(i===0?" on":"")+'" data-f="'+f[1]+'">'+f[0]+'</button>';}).join("")+'</div>'+
+      '<div class="pc-edbar">'+
+        '<button type="button" class="pc-edtool on" data-mode="draw">✏️ Draw</button>'+
+        '<button type="button" class="pc-edtool" data-mode="text">T Text</button>'+
+        '<span class="pc-edcols">'+COLORS.map(function(c,i){return '<span class="pc-edcol'+(i===0?" on":"")+'" data-c="'+c+'" style="background:'+c+'"></span>';}).join("")+'</span>'+
+        '<button type="button" class="pc-edtool" id="pc-edundo">↩ Undo</button>'+
+        '<button type="button" class="pc-edtool" id="pc-edclear">Clear</button>'+
+      '</div>'+
+      '<div class="pc-edhint">Draw with your finger or mouse. Tap “T Text”, then tap the photo to add words (drag to move).</div>';
+    var st={mode:"draw",color:COLORS[0],filter:"none",strokes:[],texts:[],order:[],cur:null,img:null,drag:null,doff:null};
+    var cv=wrap.querySelector("#pc-cv"), ctx=cv.getContext("2d");
+    editor={getBlob:null};
+    function drawStroke(s){ if(!s.pts.length) return; ctx.strokeStyle=s.color; ctx.lineWidth=s.w; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.beginPath(); ctx.moveTo(s.pts[0].x,s.pts[0].y); for(var i=1;i<s.pts.length;i++) ctx.lineTo(s.pts[i].x,s.pts[i].y); ctx.stroke(); }
+    function drawText(t){ ctx.font="800 "+t.size+"px 'Archivo',system-ui,sans-serif"; ctx.textBaseline="top"; ctx.fillStyle=t.color; ctx.shadowColor="rgba(0,0,0,.55)"; ctx.shadowBlur=4; ctx.fillText(t.str,t.x,t.y); ctx.shadowBlur=0; }
+    function redraw(){ if(!st.img) return; ctx.clearRect(0,0,cv.width,cv.height); try{ctx.filter=st.filter||"none";}catch(_){} ctx.drawImage(st.img,0,0,cv.width,cv.height); try{ctx.filter="none";}catch(_){} st.strokes.forEach(drawStroke); if(st.cur) drawStroke(st.cur); st.texts.forEach(drawText); }
+    function P(e){ var r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*cv.width/r.width, y:(e.clientY-r.top)*cv.height/r.height}; }
+    function hit(p){ for(var i=st.texts.length-1;i>=0;i--){ var t=st.texts[i]; ctx.font="800 "+t.size+"px 'Archivo',system-ui,sans-serif"; var w=ctx.measureText(t.str).width; if(p.x>=t.x-6&&p.x<=t.x+w+6&&p.y>=t.y-6&&p.y<=t.y+t.size*1.2+6) return t; } return null; }
+    cv.addEventListener("pointerdown",function(e){ e.preventDefault(); var p=P(e);
+      if(st.mode==="draw"){ st.cur={color:st.color,w:Math.max(2.5,cv.width/110),pts:[p]}; try{cv.setPointerCapture(e.pointerId);}catch(_){} }
+      else { var h=hit(p); if(h){ st.drag=h; st.doff={x:p.x-h.x,y:p.y-h.y}; } else { var s=window.prompt("Words to add:"); if(s&&s.trim()){ var t={str:s.trim(),x:p.x,y:p.y,color:st.color,size:Math.max(20,cv.width/13)}; st.texts.push(t); st.order.push({k:"t",v:t}); redraw(); } } }
+    });
+    cv.addEventListener("pointermove",function(e){ if(st.mode==="draw"&&st.cur){ e.preventDefault(); st.cur.pts.push(P(e)); redraw(); } else if(st.drag){ e.preventDefault(); var p=P(e); st.drag.x=p.x-st.doff.x; st.drag.y=p.y-st.doff.y; redraw(); } });
+    function endp(){ if(st.cur){ st.strokes.push(st.cur); st.order.push({k:"s",v:st.cur}); st.cur=null; } st.drag=null; }
+    cv.addEventListener("pointerup",endp); cv.addEventListener("pointercancel",endp);
+    var img=new Image();
+    img.onload=function(){ st.img=img; var maxW=wrap.clientWidth||360; var s=Math.min(1,maxW/img.width); cv.width=Math.round(img.width*s)||maxW; cv.height=Math.round(cv.width*img.height/img.width); redraw(); };
+    img.src=URL.createObjectURL(file);
+    Array.prototype.forEach.call(wrap.querySelectorAll(".pc-edtool[data-mode]"),function(b){ b.onclick=function(){ st.mode=b.getAttribute("data-mode"); Array.prototype.forEach.call(wrap.querySelectorAll(".pc-edtool[data-mode]"),function(x){ x.className="pc-edtool"+(x===b?" on":""); }); cv.style.cursor=st.mode==="draw"?"crosshair":"text"; }; });
+    Array.prototype.forEach.call(wrap.querySelectorAll(".pc-edcol"),function(cel){ cel.onclick=function(){ st.color=cel.getAttribute("data-c"); Array.prototype.forEach.call(wrap.querySelectorAll(".pc-edcol"),function(x){ x.className="pc-edcol"+(x===cel?" on":""); }); }; });
+    Array.prototype.forEach.call(wrap.querySelectorAll(".pc-edfilt"),function(fb){ fb.onclick=function(){ st.filter=fb.getAttribute("data-f"); Array.prototype.forEach.call(wrap.querySelectorAll(".pc-edfilt"),function(x){ x.className="pc-edfilt"+(x===fb?" on":""); }); redraw(); }; });
+    wrap.querySelector("#pc-edundo").onclick=function(){ var last=st.order.pop(); if(!last) return; var arr=last.k==="s"?st.strokes:st.texts; var i=arr.indexOf(last.v); if(i>=0) arr.splice(i,1); redraw(); };
+    wrap.querySelector("#pc-edclear").onclick=function(){ st.strokes=[]; st.texts=[]; st.order=[]; redraw(); };
+    editor.getBlob=function(cb){ if(!st.img){ cb(null); return; } var out=document.createElement("canvas"); var cap=1280, sc=Math.min(1,cap/Math.max(st.img.width,st.img.height)); out.width=Math.round(st.img.width*sc); out.height=Math.round(st.img.height*sc); var o=out.getContext("2d"); try{o.filter=st.filter||"none";}catch(_){} o.drawImage(st.img,0,0,out.width,out.height); try{o.filter="none";}catch(_){} var rx=out.width/cv.width, ry=out.height/cv.height;
+      st.strokes.forEach(function(s){ o.strokeStyle=s.color; o.lineWidth=s.w*rx; o.lineCap="round"; o.lineJoin="round"; o.beginPath(); o.moveTo(s.pts[0].x*rx,s.pts[0].y*ry); for(var i=1;i<s.pts.length;i++) o.lineTo(s.pts[i].x*rx,s.pts[i].y*ry); o.stroke(); });
+      st.texts.forEach(function(t){ o.font="800 "+(t.size*rx)+"px 'Archivo',system-ui,sans-serif"; o.textBaseline="top"; o.fillStyle=t.color; o.shadowColor="rgba(0,0,0,.55)"; o.shadowBlur=4*rx; o.fillText(t.str,t.x*rx,t.y*ry); o.shadowBlur=0; });
+      try{ out.toBlob(function(b){ cb(b); },"image/jpeg",0.9); }catch(_){ cb(null); }
+    };
+  }
+
   function renderWrite(){
     var c=document.getElementById("pc-tabc"); if(!c) return;
     var opts=staff.filter(function(s){ return s.email!==me.email; }).map(function(s){ return '<option value="'+esc(s.email)+'">'+esc(s.name)+'</option>'; }).join("");
@@ -240,39 +302,35 @@
     c.innerHTML=
       '<label class="pc-lbl">To</label><select class="pc-sel" id="pc-to"><option value="">Everyone (open)</option>'+opts+'</select>'+
       '<label class="pc-lbl">Message</label><textarea class="pc-ta" id="pc-msg" maxlength="600" placeholder="Say something kind…"></textarea>'+
-      '<label class="pc-lbl">Photo (optional)</label><input class="pc-inp" type="file" accept="image/*" id="pc-file">'+
-      '<div class="pc-photowrap" id="pc-prevwrap"><img id="pc-preview" alt=""><div class="pc-capov bottom" id="pc-capov"></div></div>'+
-      '<label class="pc-lbl" id="pc-caplbl" style="display:none">Words on the photo (optional)</label><input class="pc-inp" id="pc-cap" maxlength="80" placeholder="e.g. New oat milk — try it!" style="display:none">'+
-      '<div id="pc-cappos-wrap" style="display:none;margin-top:8px"><select class="pc-sel" id="pc-cappos"><option value="bottom">Bottom fade</option><option value="banner">Red banner</option><option value="headline">Big headline</option><option value="center">Centre</option><option value="top">Top fade</option></select></div>'+
+      '<label class="pc-lbl">Photo (optional — draw &amp; add text after you pick one)</label><input class="pc-inp" type="file" accept="image/*" id="pc-file">'+
+      '<div class="pc-ed" id="pc-ed"></div>'+
       '<label class="pc-lbl">Postcard colour</label><div class="pc-themes">'+sw+'</div>'+
       '<div class="pc-err" id="pc-err"></div>'+
       '<button class="pc-btn" id="pc-send">'+ICON_SEND+' Send postcard</button>'+
       '<div style="text-align:center;margin-top:8px;font-size:13px;color:var(--pc-muted)" id="pc-status"></div>'+
       '<div class="pc-note">'+ICON_SHIELD+'<span>Every postcard is checked automatically before it posts. Messages meant to insult, mock or mislead won’t go through. Signed in as '+esc(me.name)+' · <a href="#" id="pc-out">sign out</a></span></div>';
     Array.prototype.forEach.call(c.querySelectorAll(".pc-sw"),function(el){ el.onclick=function(){ state.themeId=el.getAttribute("data-th"); Array.prototype.forEach.call(c.querySelectorAll(".pc-sw"),function(x){ x.className="pc-sw"+(x.getAttribute("data-th")===state.themeId?" sel":""); }); }; });
-    var fileEl=document.getElementById("pc-file"), prev=document.getElementById("pc-preview"), pwrap=document.getElementById("pc-prevwrap");
-    var capEl=document.getElementById("pc-cap"), capLbl=document.getElementById("pc-caplbl"), capPosWrap=document.getElementById("pc-cappos-wrap"), capOv=document.getElementById("pc-capov"), capPos=document.getElementById("pc-cappos");
-    function showCapTools(on){ var v=on?"block":"none"; if(capLbl)capLbl.style.display=v; if(capEl)capEl.style.display=on?"block":"none"; if(capPosWrap)capPosWrap.style.display=v; }
-    if(fileEl){ fileEl.onchange=function(){ var f=(fileEl.files||[])[0]; if(f){ try{ prev.src=URL.createObjectURL(f); pwrap.style.display="block"; showCapTools(true); }catch(e){} } else { pwrap.style.display="none"; showCapTools(false); } }; }
-    if(capEl&&capOv){ capEl.oninput=function(){ capOv.textContent=capEl.value; }; }
-    if(capPos&&capOv){ capPos.onchange=function(){ capOv.className="pc-capov "+capPos.value; }; }
+    var fileEl=document.getElementById("pc-file");
+    if(fileEl){ fileEl.onchange=function(){ var f=(fileEl.files||[])[0]; if(f){ makeEditor(f); } else { editor=null; var w=document.getElementById("pc-ed"); if(w){ w.style.display="none"; w.innerHTML=""; } } }; }
     var out=document.getElementById("pc-out"); if(out) out.onclick=function(e){ e.preventDefault(); signOut(); };
     var sb=document.getElementById("pc-send");
     sb.onclick=function(){
       var toSel=document.getElementById("pc-to");
       var toEmail=toSel.value, toName=toEmail?(toSel.options[toSel.selectedIndex].text):"Everyone";
       var msg=document.getElementById("pc-msg").value;
-      var file=(document.getElementById("pc-file").files||[])[0]||null;
-      var capV=(document.getElementById("pc-cap")||{}).value||"";
-      var capPosV=(document.getElementById("pc-cappos")||{}).value||"bottom";
       var err=document.getElementById("pc-err"), stt=document.getElementById("pc-status");
-      err.textContent=""; stt.textContent="Sending…"; sb.disabled=true;
-      send({toName:toName,toEmail:toEmail,message:msg,themeId:state.themeId,file:file,caption:capV,capPos:capPosV},function(res){
-        sb.disabled=false; stt.textContent="";
-        if(res.error){ err.textContent=res.error; return; }
-        if(res.blocked){ err.textContent=(res.soft?"":"Held: ")+res.reason; return; }
-        if(res.ok){ toast("Postcard sent ❤"); state.tab="feed"; render(); }
-      });
+      err.textContent=""; sb.disabled=true;
+      function fire(fileToSend){
+        stt.textContent="Sending…";
+        send({toName:toName,toEmail:toEmail,message:msg,themeId:state.themeId,file:fileToSend},function(res){
+          sb.disabled=false; stt.textContent="";
+          if(res.error){ err.textContent=res.error; return; }
+          if(res.blocked){ err.textContent=(res.soft?"":"Held: ")+res.reason; return; }
+          if(res.ok){ toast("Postcard sent ❤"); state.tab="feed"; render(); }
+        });
+      }
+      if(editor&&editor.getBlob){ stt.textContent="Preparing photo…"; editor.getBlob(function(b){ fire(b?new File([b],"postcard.jpg",{type:"image/jpeg"}):null); }); }
+      else fire(null);
     };
   }
 
@@ -317,12 +375,14 @@
     var ov=document.createElement("div"); ov.id="pc-overlay";
     ov.innerHTML='<div id="pc-modal">'+
       '<div class="pc-head"><img class="brand" src="'+LOGO+'" alt="The Hideout" onerror="this.style.display=\'none\'"><div class="pc-titles"><h3>Postcards</h3><span class="sub">The Hideout · staff board</span></div><button class="pc-x" id="pc-close" aria-label="Close">×</button></div>'+
-      '<div class="pc-ribbon"><span>&nbsp;&nbsp;The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind&nbsp;&nbsp;</span></div>'+
+      '<div class="pc-ribbon"><div class="pc-marq"><span>The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind<b>✦</b></span><span>The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind<b>✦</b></span></div></div>'+
       '<div class="pc-body pc-grid"><div id="pc-bodyc"></div></div>'+
     '</div>';
     document.body.appendChild(ov);
-    ov.addEventListener("click",function(e){ if(e.target===ov) close(); });
+    /* Intentionally NO backdrop-click-to-close — an accidental outside click must never
+       throw away a postcard someone is writing. Close only via the × button (or Esc). */
     document.getElementById("pc-close").onclick=close;
+    document.addEventListener("keydown",function(e){ if(e.key==="Escape"){ var o=document.getElementById("pc-overlay"); if(o&&o.style.display==="flex") close(); } });
     if(!initFb()){ if(!booting){ booting=true; var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } }
   }
 

@@ -517,6 +517,12 @@ async function kvSetChunked(baseKey, arr){
         if(_flat){ try{ const _p=JSON.parse(_flat); if(Array.isArray(_p)&&_p.length>0){ console.warn('[guard] refused empty overwrite of '+baseKey); return; } }catch(_e){} }
         const _c=await kvGetFresh(`${baseKey}_chunk_count`);
         if(_c && (parseInt(_c,10)||0)>0){ console.warn('[guard] refused empty overwrite of '+baseKey+' chunks='+_c); return; }
+        // [FIX 2026-07-23] The _chunk_count itself can be corrupted to 0 while the chunk BODIES
+        // survive (that was the Barista wipe: count clobbered to 0, chunk_0.._15 intact). The count
+        // check above can't catch that, so probe the first chunk body directly — if it exists, real
+        // data is present and this empty write must be refused.
+        const _c0=await kvGetFresh(`${baseKey}_chunk_0`);
+        if(_c0){ console.warn('[guard] refused empty overwrite of '+baseKey+' (orphaned chunk bodies present, count was corrupt)'); return; }
       }catch(_e){ console.warn('[guard] backend read failed, refusing empty write to '+baseKey); return; }
     }
   const chunks=[]; for(let i=0;i<arr.length;i+=CHUNK_SIZE) chunks.push(arr.slice(i,i+CHUNK_SIZE));
@@ -532,9 +538,25 @@ async function kvGetChunkedBatch(baseKeys){
   const countValues=await kvGetBatch(needsChunkFallback.map(k=>`${k}_chunk_count`));
   const chunkKeysToFetch=[], counts={};
   needsChunkFallback.forEach(k=>{ const c=countValues[`${k}_chunk_count`]; counts[k]=c?parseInt(c,10)||0:0; for(let i=0;i<counts[k];i++) chunkKeysToFetch.push(`${k}_chunk_${i}`); });
-  if(!chunkKeysToFetch.length) return result;
-  const chunkValues=await kvGetBatch(chunkKeysToFetch);
-  needsChunkFallback.forEach(k=>{ if(counts[k]>0){ let arr=[]; for(let i=0;i<counts[k];i++){ const raw=chunkValues[`${k}_chunk_${i}`]; if(raw){ try{ arr=arr.concat(JSON.parse(raw)); }catch(e){} } } result[k]=arr; } });
+  if(chunkKeysToFetch.length){
+    const chunkValues=await kvGetBatch(chunkKeysToFetch);
+    needsChunkFallback.forEach(k=>{ if(counts[k]>0){ let arr=[]; for(let i=0;i<counts[k];i++){ const raw=chunkValues[`${k}_chunk_${i}`]; if(raw){ try{ arr=arr.concat(JSON.parse(raw)); }catch(e){} } } result[k]=arr; } });
+  }
+  // [SELF-HEAL 2026-07-23] A corrupted _chunk_count (clobbered to 0/missing) hides real data:
+  // the chunk bodies survive but count says 0, so nothing gets read and the dept looks empty.
+  // For any base key whose count is 0/missing, probe _chunk_0 — if it exists, scan forward to
+  // recover every chunk, then repair _chunk_count so backend readers (Daily Summary, backup,
+  // AI context) self-correct on their next run too. Writing the true count is idempotent & safe.
+  const healBases=needsChunkFallback.filter(k=>!(counts[k]>0));
+  if(healBases.length){
+    const probe=await kvGetBatch(healBases.map(k=>`${k}_chunk_0`));
+    for(const k of healBases){
+      if(!probe[`${k}_chunk_0`]) continue;
+      let arr=[], i=0, raw=probe[`${k}_chunk_0`];
+      while(raw){ try{ arr=arr.concat(JSON.parse(raw)); }catch(e){} i++; raw=await kvGet(`${k}_chunk_${i}`); }
+      if(arr.length){ result[k]=arr; kvSet(`${k}_chunk_count`, String(i)).catch(()=>{}); try{ console.warn('[self-heal] '+k+': recovered '+arr.length+' items from '+i+' orphaned chunks; _chunk_count repaired to '+i); }catch(_){} }
+    }
+  }
   return result;
 }
 
@@ -1227,6 +1249,16 @@ function HScroll({children}){ return <div style={{overflowX:"auto",WebkitOverflo
 function SectionLabel({children,right}){ return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"2px 0 12px"}}><div style={{fontSize:11,textTransform:"uppercase",letterSpacing:".14em",fontWeight:700,color:"var(--color-ink-muted-48)"}}>{children}</div>{right}</div>; }
 function catOf(ctx,id){ return ctx.categories.find(c=>c.id===id); }
 function itemsByCat(ctx){ const g={}; ctx.categories.forEach(c=>g[c.id]=[]); (ctx.items||[]).forEach(i=>{ (g[i.cat]=g[i.cat]||[]).push(i); }); return g; }
+// [FIX 2026-07-23] Items whose cat id isn't in ctx.categories were SILENTLY INVISIBLE in every
+// category-grouped view (Submit Order / Today / Stock Take) — bit us when barista:categories was
+// clobbered to defaults while items kept their custom cat ids (26 of 31 items vanished from Submit
+// Order). This appends a synthetic group per orphan cat id so data is always visible; the label
+// nudges the user to fix the category in Settings.
+function catsWithOrphans(ctx, groups){
+  const known=new Set(ctx.categories.map(c=>c.id));
+  const orphanIds=Object.keys(groups).filter(id=>!known.has(id) && (groups[id]||[]).length);
+  return ctx.categories.concat(orphanIds.map((id,i)=>({id, label:"Uncategorized"+(orphanIds.length>1?" "+(i+1):"")+" — reassign in Items tab", color:"#8a8a8a", __orphan:true})));
+}
 // group items sharing a base word (Croissant, Cookie, Chia pot…) into a stable colour so families
 // read at a glance. Vertical column rule for matrix/order tables.
 const vline="1px solid var(--color-hairline-alpha)";
@@ -1257,7 +1289,7 @@ function TodaySummary({ctx}){
   const grandTotal = ctx.locations.reduce((a,l)=>{ const o=data[l.id]||{}; return a+Object.keys(o).reduce((s,k)=>s+(k==="_note"?0:(Number(o[k].needed)||0)),0); },0);
   // per-category matrix rows
   const groups=itemsByCat(ctx);
-  const cats = ctx.categories.map(cat=>{
+  const cats = catsWithOrphans(ctx, groups).map(cat=>{
     const rows=(groups[cat.id]||[]).map(item=>{
       let total=0; const perLoc=ctx.locations.map(l=>{ const o=data[l.id]; if(!o) return {submitted:false,need:0}; const e=o[item.id]; const need=e?Number(e.needed)||0:0; total+=need; return {submitted:true,need}; });
       return {item,total,perLoc};
@@ -1365,7 +1397,7 @@ function TodaySummary({ctx}){
           <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th></tr></thead>
           <tbody>{list.map(g=>{ const mixed=g.units.size>1; const u=mixed?"mixed":([...g.units][0]||""); return (<tr key={g.label} className="row-live">
             <td style={{...td,fontWeight:600}}>{g.label}</td>
-            <td style={{...td,textAlign:"center",fontWeight:700}}>{g.total}<span style={{fontSize:10,fontWeight:500,color:mixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={mixed?"이 그룹에 단위가 섞여 있어요 — 합계 해석 주의":undefined}>{u}</span></td>
+            <td style={{...td,textAlign:"center",fontWeight:700}}>{g.total}<span style={{fontSize:10,fontWeight:500,color:mixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={mixed?"This group mixes units — total may be misleading":undefined}>{u}</span></td>
           </tr>); })}</tbody>
         </table></HScroll>
       </Card>; })()}
@@ -1398,7 +1430,7 @@ function TodaySummary({ctx}){
             <tfoot><tr style={{background:"var(--color-canvas)"}}>
               <td style={{...td,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1,fontWeight:800,borderTop:"2px solid var(--color-hairline)"}}>Category total</td>
               {colSums.map((s,i)=><td key={i} style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800,color:s>0?"var(--color-ink)":"var(--color-ink-muted-48)"}}>{s>0?Math.round(s*1000)/1000:"·"}</td>)}
-              <td style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800}}>{Math.round(catTotal*1000)/1000}<span style={{fontSize:10,fontWeight:500,color:catMixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={catMixed?"이 카테고리에 단위가 섞여 있어요 — 합계 해석 주의":undefined}>{catUnit}</span></td>
+              <td style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800}}>{Math.round(catTotal*1000)/1000}<span style={{fontSize:10,fontWeight:500,color:catMixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={catMixed?"This category mixes units — total may be misleading":undefined}>{catUnit}</span></td>
             </tr></tfoot>
           </table></HScroll>
         </Card>
@@ -1437,7 +1469,7 @@ function SubmitOrder({ctx}){
       <Field label="Order for"><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...inp,width:170}} /></Field>
       <div style={{fontSize:12,color:"var(--color-ink-muted-48)",paddingBottom:9}}>{C.DAY_LABELS[dayKey]} · par levels for this day auto-fill “Needed”.</div>
     </Card>
-    {loaded.loading ? <Skeleton /> : ctx.categories.map(cat=>{
+    {loaded.loading ? <Skeleton /> : catsWithOrphans(ctx, groups).map(cat=>{
       const list=(groups[cat.id]||[]); if(!list.length) return null; const dup=dupFamilies(list);
       return <Card key={cat.id} style={{marginBottom:14,padding:0,overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 16px",borderBottom:"1px solid var(--color-hairline-alpha)"}}>
@@ -1545,7 +1577,7 @@ function StockTake({ctx}){
       <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"var(--color-ink-muted-48)",marginBottom:6,textTransform:"uppercase",letterSpacing:".1em"}}>Counted {counted} of {total}</div><Bar pct={total?counted/total*100:0} height={10} color={counted===total&&total?"#3f9e63":"var(--color-primary)"} /></div>
       <CountUp value={total?Math.round(counted/total*100):0} fmt={n=>Math.round(n)+"%"} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:24,color:"var(--color-ink)"}} />
     </Card>; })()}
-    {loaded.loading?<Skeleton />: ctx.categories.map(cat=>{ const list=groups[cat.id]||[]; if(!list.length) return null; const dup=dupFamilies(list);
+    {loaded.loading?<Skeleton />: catsWithOrphans(ctx, groups).map(cat=>{ const list=groups[cat.id]||[]; if(!list.length) return null; const dup=dupFamilies(list);
       return <Card key={cat.id} style={{marginBottom:14,padding:0,overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 16px",borderBottom:"1px solid var(--color-hairline-alpha)"}}><span style={{width:10,height:10,borderRadius:3,background:cat.color||"var(--color-primary)"}}></span><span style={{fontWeight:700,fontSize:14}}>{cat.label}</span></div>
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:340}}>
@@ -1997,7 +2029,18 @@ function App(){
         qcNotes:parse(vals.qcNotes,[]),
       };
       // seed defaults if empty (matches original)
-      if(C.isConnected()){ if(!vals[catKey]) C.kvSet(catKey,JSON.stringify(C.defaultCategoriesForDept())).catch(()=>{}); if(!itemVals[itemKey]||!itemVals[itemKey].length) C.kvSetChunked(itemKey,C.defaultItemsForDept()).catch(()=>{}); }
+      // seed defaults if empty (matches original) — [FIX 2026-07-23] only seed items when the
+      // dept actually HAS defaults. Barista's default list is empty ([]), so the old code fired
+      // kvSetChunked(itemKey, []) on any transient empty read → wrote chunk_count=0 over real data.
+      // Chef has defaults so it "recovered" visibly; barista silently wiped. This removes the asymmetry.
+      // [FIX 2026-07-23] categories reseed also needs a guard: a transient failed/empty batch read
+      // made vals[catKey] falsy and OVERWROTE real custom categories with defaults (that's how
+      // barista:categories became just [general] on 7/21 — 26 items with custom cat ids went
+      // invisible). Re-verify with a FRESH single read before seeding; only seed if truly absent.
+      if(C.isConnected()){
+        if(!vals[catKey]) C.kvGetFresh(catKey).then(fresh=>{ if(!fresh) return C.kvSet(catKey,JSON.stringify(C.defaultCategoriesForDept())); }).catch(()=>{});
+        const _def=C.defaultItemsForDept(); if((!itemVals[itemKey]||!itemVals[itemKey].length) && _def && _def.length) C.kvSetChunked(itemKey,_def).catch(()=>{});
+      }
       setLocations(locs); setCore(c); setSync({ok:true,err:""});
     }catch(e){ setSync({ok:false,err:e.message}); setCore(prev=>prev||{locations,categories:C.defaultCategoriesForDept(),items:C.defaultItemsForDept(),suppliers:[],senderName:"",fromDisplayName:"",stockTakeLinked:false,weeklyDeliveryInfo:{mon:"",tue:"",wed:"",thu:"",fri:"",sat:"",sun:""},deliveryOverrides:{},qcNotes:[],dailySummaryRecipient:"",dailySummarySendTime:"18:00",dailySummaryChefEnabled:true,dailySummaryBaristaEnabled:true}); }
   };

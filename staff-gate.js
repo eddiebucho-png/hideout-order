@@ -31,6 +31,13 @@
      (non-members get the "access needed" screen). Brisbane time (UTC+10). */
   var OPEN_ENROLL_UNTIL=new Date("2026-08-24T23:59:59+10:00");
   function openEnroll(){ return Date.now() < OPEN_ENROLL_UNTIL.getTime(); }
+  /* Venues — ids match the RCC allowlist branch codes; names match what staff
+     see on the Ordering app's branch screen. b1=100 Edward, b2=340 Adelaide,
+     b3=515 St Pauls Ter (Fortitude Valley). */
+  var BRANCHES=[{id:"b1",name:"Edward St"},{id:"b2",name:"Adelaide St"},{id:"b3",name:"St Pauls Ter"}];
+  /* Regexes to find each venue's button on the app's "Select your branch" screen. */
+  var BRANCH_MATCH={b1:/edward/i,b2:/adelaide/i,b3:/pauls|valley/i};
+  var ADELAIDE="b2"; /* Adelaide St stays on the default "Today" tab; others jump to Submit Order */
 
   var app,auth,db,me=null,firstAuth=false,failed=false,requesting=false,lastReqEmail="";
 
@@ -64,11 +71,10 @@
         me={email:email,name:d.name||u.displayName||email.split("@")[0],role:d.role||"staff",branch:d.branch||""};
         grantAccess();
       } else if(openEnroll()){
-        /* Open-enrollment month: let anyone signed in through, but log them for
-           Ju An to verify later. */
-        me={email:email,name:u.displayName||email.split("@")[0],role:"staff",branch:"",autoEnrolled:true};
-        saveRequest(u,"auto");
-        grantAccess();
+        /* Open-enrollment month: first sign-in → pick a nickname, then straight in.
+           Saved to allowlist with self:true (matches RCC self-enrol pattern) so
+           Ju An can review the accounts later and postcards shows the nickname. */
+        showNickname(u);
       } else {
         showAccessNeeded(u);
       }
@@ -87,6 +93,86 @@
     window.HideoutUser={email:me.email,name:me.name,role:me.role,branch:me.branch,unverified:!!me.unverified,autoEnrolled:!!me.autoEnrolled};
     removeGate();
     try{ document.dispatchEvent(new CustomEvent("hideout-auth",{detail:window.HideoutUser})); }catch(e){}
+    startAutofill();
+  }
+
+  /* ---- Autofill "Ordered by" (etc.) with the nickname ------------------
+     The ordering app's React inputs are untouched source — instead of editing
+     index.html we fill any empty text input whose surrounding label mentions
+     "Ordered by" / "your name", using the native value setter + input event so
+     React state picks it up. Runs on grant + whenever the app re-renders. */
+  var autofillObs=null;
+  function setNativeValue(inp,val){
+    try{
+      var d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value");
+      d.set.call(inp,val);
+      inp.dispatchEvent(new Event("input",{bubbles:true}));
+      inp.dispatchEvent(new Event("change",{bubbles:true}));
+    }catch(e){ try{ inp.value=val; }catch(_){} }
+  }
+  function fillOrderedBy(){
+    if(!me||!me.name) return;
+    var inputs=document.querySelectorAll('input[type="text"],input:not([type])');
+    for(var i=0;i<inputs.length;i++){
+      var inp=inputs[i];
+      if(inp.__hgFilled||inp.value) continue;
+      if(inp.id&&inp.id.indexOf("hg-")===0) continue;          /* skip our own UI */
+      var el=inp,txt="",hops=0;
+      while(el&&hops<4){ el=el.parentElement; hops++;
+        if(el){ var t=(el.textContent||""); if(t.length<260){ txt=t; } else break; } }
+      if(/ordered\s*by|your\s*name/i.test(txt)){ setNativeValue(inp,me.name); inp.__hgFilled=true; }
+    }
+  }
+  /* ---- Auto-navigate after sign-in --------------------------------------
+     1) On the app's "Select your branch" screen, click the button matching the
+        user's profile venue (one-shot per page load).
+     2) Once the tab bar appears, jump to "Submit Order" — EXCEPT Adelaide St,
+        which stays on the default "Today" tab (Ju An, 2026-07-24).
+     One-shot flags mean later manual navigation is never hijacked. */
+  var branchClicked=false, tabClicked=false;
+  function textNear(el,hops,needle){
+    var n=el,h=0;
+    while(n&&h<hops){ n=n.parentElement; h++;
+      if(n&&(n.textContent||"").indexOf(needle)!==-1) return true; }
+    return false;
+  }
+  function autoNavigate(){
+    if(!me||!me.branch) return;
+    var rx=BRANCH_MATCH[me.branch];
+    /* 1) branch screen */
+    if(!branchClicked&&rx){
+      var btns=document.querySelectorAll("button");
+      for(var i=0;i<btns.length;i++){
+        var t=(btns[i].textContent||"").trim();
+        if(t.length<40&&rx.test(t)&&textNear(btns[i],7,"Select your branch")){
+          branchClicked=true;
+          try{ btns[i].click(); }catch(e){}
+          break;
+        }
+      }
+    }
+    /* 2) tab bar → Submit Order (skip for Adelaide St = keep Today first) */
+    if(!tabClicked&&me.branch!==ADELAIDE){
+      var all=document.querySelectorAll("button");
+      var seenTabs=false, target=null;
+      for(var j=0;j<all.length;j++){
+        var tt=(all[j].textContent||"").trim();
+        if(tt==="Today") seenTabs=true;                 /* tab bar is mounted */
+        if(tt==="Submit Order") target=all[j];
+      }
+      if(seenTabs&&target){ tabClicked=true; try{ target.click(); }catch(e){} }
+    }
+  }
+  var autofillTimer=null;
+  function integrationPass(){ fillOrderedBy(); autoNavigate(); }
+  function startAutofill(){
+    integrationPass();
+    if(autofillObs||!window.MutationObserver) return;
+    autofillObs=new MutationObserver(function(){
+      if(autofillTimer) clearTimeout(autofillTimer);
+      autofillTimer=setTimeout(integrationPass,350);
+    });
+    try{ autofillObs.observe(document.body,{childList:true,subtree:true}); }catch(e){}
   }
 
   /* ---- Sign in / out ---- */
@@ -128,6 +214,7 @@
       try{ rec.ua=(navigator.userAgent||"").slice(0,300); }catch(e){}
       if(!exists){ rec.status=newStatus; rec.requestedAt=firebase.firestore.FieldValue.serverTimestamp(); }
       else if(!prev.status){ rec.status=newStatus; }   /* legacy doc w/o status */
+      else if(newStatus==="auto"&&prev.status==="pending"){ rec.status="auto"; } /* self-enrolled now — clear stale approval queue entry */
       /* else: leave existing (Ju An-set) status untouched */
       return ref.set(rec,{merge:true});
     }).then(function(){ requesting=false; lastReqEmail=email; return true; })
@@ -141,7 +228,8 @@
     st.textContent=[
 "@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&display=swap');",
 "#hg-gate{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));background:#f6ede1;background-image:linear-gradient(rgba(200,26,34,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(200,26,34,.10) 1px,transparent 1px),linear-gradient(rgba(200,26,34,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(200,26,34,.16) 1px,transparent 1px);background-size:22px 22px,22px 22px,110px 110px,110px 110px;font-family:'SF Pro Text','Inter',system-ui,-apple-system,sans-serif;color:#241d16;-webkit-font-smoothing:antialiased}",
-"#hg-card{width:min(430px,100%);max-height:calc(100vh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fdf8ef;border:1.5px solid rgba(200,26,34,.18);border-radius:24px;box-shadow:0 34px 80px rgba(30,18,6,.42);padding:34px 28px 28px;text-align:center;animation:hg-in .35s cubic-bezier(.2,.85,.3,1.15)}",
+"#hg-gate{overflow-y:auto}",
+"#hg-card{width:min(430px,100%);margin:auto;max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fdf8ef;border:1.5px solid rgba(200,26,34,.18);border-radius:24px;box-shadow:0 34px 80px rgba(30,18,6,.42);padding:34px 28px 28px;text-align:center;animation:hg-in .35s cubic-bezier(.2,.85,.3,1.15)}",
 "@keyframes hg-in{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}",
 "#hg-card .brand{height:46px;width:46px;object-fit:contain;margin:0 auto 14px;display:block}",
 "#hg-card .pill{display:inline-block;background:#c81a22;color:#fff;font-family:'Archivo',system-ui,sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 12px;border-radius:999px;margin-bottom:16px}",
@@ -151,6 +239,10 @@
 "#hg-btn{border:none;border-radius:12px;background:#c81a22;color:#fff;font-family:'Archivo',system-ui,sans-serif;font-weight:800;font-size:15px;letter-spacing:.03em;text-transform:uppercase;padding:14px 22px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 24px rgba(150,16,21,.32);transition:transform .18s ease}",
 "@media(hover:hover){#hg-btn:hover{transform:translateY(-2px)}}#hg-btn:active{transform:scale(.98)}#hg-btn[disabled]{opacity:.6;cursor:default}",
 "#hg-btn svg{width:18px;height:18px;display:block}",
+"#hg-card .lbl{display:block;text-align:left;font-family:'Archivo',system-ui,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#241d16;margin:14px 0 6px;font-weight:800}",
+"#hg-card input[type=text],#hg-card select{width:100%;box-sizing:border-box;border:1.5px solid rgba(36,29,22,.18);border-radius:8px;padding:12px;font-size:16px;font-family:inherit;background:#fff;color:#241d16;text-align:left}",
+"#hg-card input[type=text]:focus,#hg-card select:focus{outline:none;border-color:#c81a22;box-shadow:0 0 0 3px rgba(200,26,34,.14)}",
+"#hg-err{color:#8f1015;font-size:13px;margin-top:10px;min-height:16px;font-weight:600}",
 "#hg-alt{margin-top:12px;font-size:13px}",
 "#hg-alt a{display:inline-flex;align-items:center;min-height:44px;padding:8px 14px;color:#6a5f52;text-decoration:underline;cursor:pointer}",
 "#hg-note{display:flex;gap:8px;text-align:left;font-size:11.5px;color:#6a5f52;margin-top:20px;line-height:1.55;background:rgba(200,26,34,.06);border-radius:10px;padding:11px 12px}",
@@ -192,12 +284,64 @@
     c.innerHTML=logoTag()+
       '<div class="pill">Staff only</div>'+
       '<h1>Sign in to order</h1>'+
-      '<p>Use your Hideout Google account. You’ll only need to do this once on this device.</p>'+
+      '<p>Use your Google account. New here? Sign up once and you can start ordering right away.</p>'+
       '<button id="hg-btn">'+GOOGLE_G+'Sign in with Google</button>'+
-      '<div id="hg-note">'+SHIELD+'<span>This just confirms who’s ordering — it doesn’t change how orders are sent.</span></div>';
+      '<div id="hg-note">'+SHIELD+'<span>Your login details are never stored — sign-in is handled securely by Google. You’ll stay signed in on this device.</span></div>';
     var b=document.getElementById("hg-btn"); if(b) b.onclick=signIn;
     focusCard();
   }
+  /* First sign-in during open enrollment: pick nickname + venue, then straight in. */
+  function showNickname(u){
+    var c=ensureGate(); if(!c){ /* gate failed open — still record identity silently */ return; }
+    var email=(u.email||"").toLowerCase();
+    var def=esc((u.displayName||email.split("@")[0]||"").trim());
+    var opts=BRANCHES.map(function(b){ return '<option value="'+b.id+'">'+esc(b.name)+'</option>'; }).join("");
+    c.innerHTML=logoTag()+
+      '<div class="pill">First sign-in</div>'+
+      '<h1>Create your profile</h1>'+
+      '<p>Signed in as <span class="who">'+esc(email)+'</span>. Pick a nickname — that’s the name your team will see.</p>'+
+      '<label class="lbl" for="hg-nick">Nickname</label>'+
+      '<input type="text" id="hg-nick" maxlength="30" value="'+def+'" autocomplete="off">'+
+      '<label class="lbl" for="hg-venue">Your venue</label>'+
+      '<select id="hg-venue"><option value="">Choose your venue…</option>'+opts+'</select>'+
+      '<div id="hg-err" aria-live="polite"></div>'+
+      '<button id="hg-btn">Sign up &amp; start ordering</button>'+
+      '<div id="hg-alt"><a id="hg-switch" role="button" tabindex="0">Use a different account</a></div>'+
+      '<div id="hg-note">'+SHIELD+'<span>Your login details are never stored — Google handles sign-in securely. Sign up and you’re in — no waiting for approval.</span></div>';
+    var sw=document.getElementById("hg-switch");
+    if(sw){ sw.onclick=signOut; sw.onkeydown=function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); signOut(); } }; }
+    var nick=document.getElementById("hg-nick"); if(nick){ try{ nick.focus(); nick.select(); }catch(e){} }
+    var b=document.getElementById("hg-btn");
+    if(b) b.onclick=function(){
+      var err=document.getElementById("hg-err");
+      var name=(document.getElementById("hg-nick").value||"").trim();
+      var venue=document.getElementById("hg-venue").value;
+      if(name.length<2){ if(err) err.textContent="Nickname needs at least 2 characters."; return; }
+      if(!venue){ if(err) err.textContent="Choose your venue."; return; }
+      if(err) err.textContent="";
+      b.disabled=true; b.textContent="Setting up…";
+      var ref=db.collection("allowlist").doc(email);
+      /* Re-check right before writing: if Ju An added/edited this email while the
+         form sat open, keep the admin-set doc — never clobber role/branch. */
+      ref.get().then(function(snap){
+        if(snap&&snap.exists&&!(snap.data()||{}).self){
+          var d=snap.data()||{};
+          me={email:email,name:d.name||name,role:d.role||"staff",branch:d.branch||venue};
+          grantAccess(); return null;
+        }
+        return ref.set({name:name,role:"staff",branch:venue,self:true,ts:Date.now()},{merge:true}).then(function(){
+          me={email:email,name:name,role:"staff",branch:venue,autoEnrolled:true};
+          saveRequest(u,"auto");
+          grantAccess();
+        });
+      }).catch(function(e2){
+        b.disabled=false; b.innerHTML="Sign up &amp; start ordering";
+        if(err) err.textContent="Couldn’t save right now — check your connection and try again.";
+        try{console.warn("[gate] self-enrol failed:",e2&&e2.code);}catch(e3){}
+      });
+    };
+  }
+
   function showAccessNeeded(u){
     var c=ensureGate(); if(!c) return;
     var email=esc((u.email||"").toLowerCase());
@@ -211,7 +355,8 @@
       '<div id="hg-note">'+SHIELD+'<span>Ask Ju An to approve <b>'+email+'</b>. Once added, tap “try again”.</span></div>';
     var b=document.getElementById("hg-btn"); if(b) b.onclick=signOut;
     var r=document.getElementById("hg-retry");
-    if(r){ var retry=function(){ var uu=auth&&auth.currentUser; if(uu){ showLoading(); onAuth(uu); } }; r.onclick=retry; r.onkeydown=function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); retry(); } }; }
+    var retrying=false;
+    if(r){ var retry=function(){ if(retrying) return; retrying=true; var uu=auth&&auth.currentUser; if(uu){ showLoading(); onAuth(uu); } }; r.onclick=retry; r.onkeydown=function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); retry(); } }; }
     focusCard();
     saveRequest(u,"pending").then(function(ok){
       var s=document.getElementById("hg-reqstate"); if(!s) return;

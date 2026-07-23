@@ -34,6 +34,27 @@
     <h1>The Hideout · Ordering</h1>
     <p class="sub">If you can read this, the gate has lifted (you’re signed in &amp; on the staff list).</p>
 
+    <!-- Dummy branch screen: the gate should auto-click your profile venue. -->
+    <div class="row" style="display:block" id="branch-demo">
+      <b style="display:block;margin-bottom:8px">Select your branch</b>
+      <div style="display:grid;gap:6px">
+        <button class="btn" style="background:#272729;text-align:left" onclick="branchPicked('St Pauls Ter')">St Pauls Ter ›</button>
+        <button class="btn" style="background:#272729;text-align:left" onclick="branchPicked('Edward St')">Edward St ›</button>
+        <button class="btn" style="background:#272729;text-align:left" onclick="branchPicked('Adelaide St')">Adelaide St ›</button>
+      </div>
+    </div>
+    <!-- Dummy tab bar: non-Adelaide profiles should auto-jump to Submit Order. -->
+    <div class="row" id="tab-demo" style="display:none">
+      <b>Tabs:</b>
+      <span>
+        <button class="btn" id="tab-today" style="background:#0066cc">Today</button>
+        <button class="btn" id="tab-order" style="background:#272729">Submit Order</button>
+      </span>
+    </div>
+    <div class="row" style="display:block">
+      <label for="ob-input"><b style="display:block;margin-bottom:8px">Ordered by — your name (required)</b></label>
+      <input type="text" id="ob-input" placeholder="Should auto-fill with your nickname" style="width:100%;box-sizing:border-box;border:1.5px solid #d8d8d8;border-radius:10px;padding:11px;font-size:16px">
+    </div>
     <div class="row"><b>Kitchen order</b><span>demo row</span></div>
     <div class="row"><b>Barista order</b><span>demo row</span></div>
     <div class="row"><b>Inventory count</b><span>demo row</span></div>
@@ -44,8 +65,8 @@
     <div class="steps">
       <h3>What to test</h3>
       <ol>
-        <li><b>Open-enrollment month (until 24 Aug 2026):</b> ANY signed-in Google account is let straight in — allowlisted or not. Non-listed accounts are logged to <code>accessRequests</code> with status <code>auto</code> (shows "unverified" below) so you can verify them later.</li>
-        <li><b>Allowlisted account</b> → gate lifts, name + role show below (no "unverified" flag).</li>
+        <li><b>Open-enrollment month (until 24 Aug 2026):</b> first sign-in with a NEW Google account → "Create your profile" screen (nickname pre-filled from the Google account, editable + venue picker) → saved to <code>allowlist</code> with <code>self:true</code> → straight in. Also logged to <code>accessRequests</code> (<code>auto</code>).</li>
+        <li><b>Allowlisted account</b> → gate lifts immediately, name + role show below. The "Ordered by" box above should auto-fill with the nickname.</li>
         <li>Tap <b>Sign out</b> → the gate should reappear (login screen).</li>
         <li>Turn Wi-Fi off &amp; reload → after ~16s the gate should fail open (dummy app shows) so ordering is never blocked.</li>
         <li><i>After 24 Aug:</i> non-listed accounts get the "Access needed" screen instead (request saved as <code>pending</code>).</li>
@@ -64,6 +85,15 @@
     // In case auth resolved before this listener attached:
     if(window.HideoutUser) paint(window.HideoutUser);
     document.getElementById("out").onclick=function(){ if(window.HideoutGate) window.HideoutGate.signOut(); };
+    // Dummy branch/tab harness for auto-navigate testing.
+    window.branchPicked=function(name){
+      document.getElementById("branch-demo").innerHTML="<b>Branch auto-selected: "+name+"</b> ✓";
+      document.getElementById("tab-demo").style.display="flex";
+    };
+    document.getElementById("tab-order").onclick=function(){
+      this.style.background="#0066cc"; document.getElementById("tab-today").style.background="#272729";
+      this.textContent="Submit Order ✓ (auto-jumped)";
+    };
   </script>
 </body>
 </html>

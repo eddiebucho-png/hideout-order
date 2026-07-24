@@ -48,7 +48,7 @@
   }
 
   function onAuth(u){
-    if(!u){ me=null; render(); return; }
+    if(!u){ me=null; render(); try{ renderTray(); }catch(e){} return; }
     db.collection("allowlist").doc((u.email||"").toLowerCase()).get().then(function(snap){
       var d=snap&&snap.exists?snap.data():{};
       me={email:(u.email||"").toLowerCase(),name:(d&&d.name)||u.displayName||(u.email||"").split("@")[0],role:(d&&d.role)||"staff",branch:(d&&d.branch)||""};
@@ -129,7 +129,7 @@
     if(feedUnsub){ try{ feedUnsub(); }catch(e){} feedUnsub=null; }
     feedUnsub=db.collection("postcards").orderBy("createdAt","desc").limit(60).onSnapshot(function(qs){
       var arr=[]; qs.forEach(function(doc){ var d=doc.data()||{}; d._id=doc.id; arr.push(d); });
-      feedItems=arr; renderFeed();
+      feedItems=arr; renderFeed(); renderTray(); /* keep the always-on top tray fresh even when the modal is closed */
     }, function(){ });
   }
 
@@ -287,11 +287,30 @@
 /* ---- P6: story tray ---- */
 ".pc-tray{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 14px;margin-bottom:8px;touch-action:pan-x;-webkit-overflow-scrolling:touch;border-bottom:1px solid rgba(200,26,34,.14)}",
 ".pc-trayitem{flex:none;display:flex;flex-direction:column;align-items:center;gap:5px;width:66px;cursor:pointer;background:none;border:none;padding:0}",
-".pc-ring{width:60px;height:60px;border-radius:999px;padding:3px;display:flex;align-items:center;justify-content:center;background:rgba(154,139,118,.35)}",
-".pc-ring.unseen{background:conic-gradient(from 210deg,#ff6b60,var(--pc-accent),#8f1015,#ff6b60)}",
+".pc-ring{position:relative;width:60px;height:60px;border-radius:999px;padding:3px;display:flex;align-items:center;justify-content:center;background:rgba(154,139,118,.35)}",
+/* Ring rotation: unseen rings spin a conic-gradient on a ::before layer under the avatar (avatar lifted to z-index:1 covers the centre, so only the 3px rim appears to turn). */
+".pc-ring.unseen{background:transparent}",
+".pc-ring.unseen::before{content:'';position:absolute;inset:0;border-radius:999px;background:conic-gradient(from 210deg,#ff6b60,var(--pc-accent),#8f1015,#ff6b60);animation:pc-ringspin 7s linear infinite;z-index:0}",
+"@keyframes pc-ringspin{to{transform:rotate(360deg)}}",
+".pc-ring .pc-avatar{position:relative;z-index:1}",
 ".pc-avatar{width:100%;height:100%;border-radius:999px;object-fit:cover;background:#fff;border:2px solid var(--pc-paper);display:flex;align-items:center;justify-content:center;font-family:var(--pc-disp);font-weight:900;font-size:20px;color:#fff;overflow:hidden}",
 ".pc-avatar img{width:100%;height:100%;object-fit:cover;border:none;margin:0;border-radius:0}",
 ".pc-trayname{font-family:var(--pc-disp);font-weight:700;font-size:11px;color:var(--pc-ink);max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+/* ---- top tray: always-on story strip inserted at the very top of the page (outside the modal). Normal flow → sits above the app's sticky dark header, so it never covers it. ---- */
+"#pc-toptray{display:none;background:var(--pc-paper);border-bottom:2px solid var(--pc-accent);box-shadow:0 2px 8px rgba(30,18,6,.12);font-family:'SF Pro Text','Inter',system-ui,sans-serif;padding:7px 12px 2px}",
+"#pc-toptray .pc-tray{margin-bottom:0;padding:2px 2px 8px;border-bottom:none;gap:12px}",
+"#pc-toptray .pc-trayitem{width:56px;gap:3px}",
+"#pc-toptray .pc-ring{width:46px;height:46px;padding:2.5px}",
+"#pc-toptray .pc-avatar{font-size:16px}",
+"#pc-toptray .pc-trayname{font-size:10px;max-width:54px}",
+/* ---- app-provided top slot: Instagram-style story row rendered inside the host's #pc-tray-host (sits under the title band, cream background). Preferred over the body strip; empty → hidden. ---- */
+"#pc-tray-host{background:var(--pc-cream);font-family:'SF Pro Text','Inter',system-ui,sans-serif}",
+"#pc-tray-host:empty{display:none}",
+"#pc-tray-host .pc-tray{margin-bottom:0;padding:9px 12px 11px;border-bottom:1px solid rgba(200,26,34,.12);gap:14px;justify-content:flex-start}",
+"#pc-tray-host .pc-trayitem{width:58px;gap:4px}",
+"#pc-tray-host .pc-ring{width:46px;height:46px;padding:2.5px}",
+"#pc-tray-host .pc-avatar{font-size:16px}",
+"#pc-tray-host .pc-trayname{font-size:10px;max-width:56px}",
 /* ---- P6: story viewer ---- */
 "#pc-story{position:fixed;inset:0;z-index:100002;background:rgba(10,6,2,.94);display:none;flex-direction:column;font-family:'SF Pro Text','Inter',system-ui,sans-serif}",
 "#pc-story .sbars{display:flex;gap:4px;padding:10px 12px 4px}",
@@ -307,7 +326,7 @@
 "#pc-story .stonav{position:absolute;top:0;bottom:0;width:34%;cursor:pointer;z-index:2}",
 "#pc-story .stonav.prev{left:0}",
 "#pc-story .stonav.next{right:0;width:66%}",
-"@media (prefers-reduced-motion:reduce){#pc-fab,#pc-try,.pc-card.pinned,#pc-feed>.pc-card,#pc-flow>.pc-card,.pc-tab,.pc-sw,.pc-btn,.pc-pinbtn,.pc-marq{animation:none;transition:none}}",
+"@media (prefers-reduced-motion:reduce){#pc-fab,#pc-try,.pc-card.pinned,#pc-feed>.pc-card,#pc-flow>.pc-card,.pc-tab,.pc-sw,.pc-btn,.pc-pinbtn,.pc-marq{animation:none;transition:none}.pc-ring.unseen::before{animation:none}}",
 "@media (max-width:640px){#pc-modal{max-height:94vh}}"
     ].join("\n");
     document.head.appendChild(st);
@@ -908,10 +927,11 @@
     groups.sort(function(a,b){ if(a.email===mine&&b.email!==mine) return -1; if(b.email===mine&&a.email!==mine) return 1; return b.latest-a.latest; });
     return groups;
   }
-  function renderTray(){
-    var host=document.getElementById("pc-tray-c"); if(!host) return;
+  /* Build the tray HTML once (empty string when there are no stories) so the modal tray
+     and the always-on top tray share the exact same markup + ordering. */
+  function trayHtml(){
     var groups=buildStoryGroups();
-    if(!groups.length){ host.innerHTML=""; return; }
+    if(!groups.length) return "";
     var seen=seenMap(), mine=(me&&me.email)||"";
     var html='<div class="pc-tray">';
     groups.forEach(function(g){
@@ -920,8 +940,31 @@
       var nm=(g.email===mine)?"You":(st.name||g.name);
       html+='<button class="pc-trayitem" data-story="'+esc(g.email)+'"><span class="pc-ring'+(unseen?" unseen":"")+'">'+avatarHtml(g.email, st.name||g.name, st.photoURL, "")+'</span><span class="pc-trayname">'+esc(nm)+'</span></button>';
     });
-    host.innerHTML=html+'</div>';
-    Array.prototype.forEach.call(host.querySelectorAll(".pc-trayitem"),function(el){ el.onclick=function(){ openStory(el.getAttribute("data-story")); }; });
+    return html+'</div>';
+  }
+  function bindTray(root){
+    if(!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll(".pc-trayitem"),function(el){ el.onclick=function(){ openStory(el.getAttribute("data-story")); }; });
+  }
+  /* Renders BOTH the modal tray (#pc-tray-c, when the modal is open) and the always-on
+     page-top tray (#pc-toptray). Each is guarded independently so either can be absent. */
+  function renderTray(){
+    var html=trayHtml();
+    var host=document.getElementById("pc-tray-c");
+    if(host){ host.innerHTML=html; bindTray(host); }
+    /* App-provided top slot under the header (Instagram-style). Preferred target: the host
+       app renders an empty <div id="pc-tray-host"> just below the title band and keeps it
+       across tab switches; postcards only fills its innerHTML. Empty → :empty CSS hides it. */
+    var slot=document.getElementById("pc-tray-host");
+    if(slot){
+      if(html&&me){ slot.innerHTML=html; bindTray(slot); }
+      else { slot.innerHTML=""; }
+    }
+    var top=document.getElementById("pc-toptray"), topc=document.getElementById("pc-toptray-c");
+    if(top&&topc){
+      if(html&&me){ topc.innerHTML=html; bindTray(topc); top.style.display="block"; }
+      else { topc.innerHTML=""; top.style.display="none"; }
+    }
   }
   var storyState=null;
   function storyCardHtml(d){
@@ -973,6 +1016,20 @@
       '<div class="pc-body pc-grid"><div id="pc-bodyc"></div></div>'+
     '</div>';
     document.body.appendChild(ov);
+    /* Always-on story tray at the very top of the page. Inserted as body's FIRST child in
+       normal flow so it sits ABOVE the host app's sticky dark header (never covering it) and
+       is visible immediately without opening the mail modal. Stays hidden until there are
+       stories AND the user is signed in (renderTray toggles display). Fail-safe: if anything
+       fails it is just an empty hidden div and the app is unaffected. */
+    try{
+      /* Skip the body strip entirely when the host app provides its own #pc-tray-host slot
+         (avoids a duplicate tray). Only fall back to the body-top strip for older hosts. */
+      if(!document.getElementById("pc-tray-host")){
+        var tt=document.createElement("div"); tt.id="pc-toptray"; tt.style.display="none";
+        tt.innerHTML='<div id="pc-toptray-c"></div>';
+        document.body.insertBefore(tt, document.body.firstChild);
+      }
+    }catch(e){}
     /* P6: full-screen story viewer overlay (hidden until an avatar is tapped). */
     var sov=document.createElement("div"); sov.id="pc-story"; document.body.appendChild(sov);
     /* Intentionally NO backdrop-click-to-close — an accidental outside click must never

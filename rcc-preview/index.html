@@ -2880,7 +2880,14 @@ __ds_ns.StoreCard = __ds_scope.StoreCard;
   }
   :root{ --bg:var(--color-canvas-parchment); --surface:var(--color-canvas); --line:var(--color-hairline-alpha); --ink:var(--color-ink); --muted:var(--color-ink-muted-48); --accent:var(--color-primary); --dish-col:248px; }
   *{ -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
-  body{ background:var(--bg); color:var(--ink); font-family:var(--font-text); font-feature-settings:var(--font-features); letter-spacing:-0.2px; }
+  body{ background-color:var(--bg);
+    background-image:
+      linear-gradient(rgba(200,26,34,.055) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(200,26,34,.055) 1px,transparent 1px),
+      linear-gradient(rgba(200,26,34,.09) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(200,26,34,.09) 1px,transparent 1px);
+    background-size:22px 22px,22px 22px,110px 110px,110px 110px;
+    background-position:center top; background-attachment:fixed; color:var(--ink); font-family:var(--font-text); font-feature-settings:var(--font-features); letter-spacing:-0.2px; }
   html,body{ max-width:100%; overflow-x:hidden; } /* prevent page-level horizontal shift */
   #root{ position:relative; z-index:1; }
   h1,h2,h3{ font-family:var(--font-display); }

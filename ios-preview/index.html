@@ -297,7 +297,14 @@
   }
   *{ box-sizing:border-box; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
   html,body{ margin:0; }
-  body{ background:var(--color-canvas-parchment); color:var(--color-ink); font-family:var(--font-text); letter-spacing:-0.1px; }
+  body{ background-color:var(--color-canvas-parchment);
+    background-image:
+      linear-gradient(rgba(200,26,34,.055) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(200,26,34,.055) 1px,transparent 1px),
+      linear-gradient(rgba(200,26,34,.09) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(200,26,34,.09) 1px,transparent 1px);
+    background-size:22px 22px,22px 22px,110px 110px,110px 110px;
+    background-position:center top; background-attachment:fixed; color:var(--color-ink); font-family:var(--font-text); letter-spacing:-0.1px; }
   h1,h2,h3{ font-family:var(--font-display); }
   a{ color:var(--color-primary); text-decoration:none; } a:hover{ text-decoration:underline; }
   .card{ background:var(--color-canvas); border:1px solid var(--color-hairline-alpha); border-radius:16px; }

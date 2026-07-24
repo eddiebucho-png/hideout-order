@@ -3037,7 +3037,7 @@ body{
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Cg fill='none' stroke='%23ec3013' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' opacity='0.16'%3E%3Cellipse cx='150' cy='150' rx='48' ry='11'/%3E%3Cpath d='M102 150 C104 178 116 196 122 200 C130 205 170 205 178 200 C184 196 196 178 198 150'/%3E%3Cpath d='M132 128 C127 120 137 114 132 104 M150 128 C145 120 155 114 150 104 M168 128 C163 120 173 114 168 104'/%3E%3C/g%3E%3C/svg%3E"),
     linear-gradient(rgba(236,48,19,.10) 1px, transparent 1px),
     linear-gradient(90deg, rgba(236,48,19,.10) 1px, transparent 1px);
-  background-size:300px 300px, 24px 24px, 24px 24px;
+  background-size:440px 440px, 24px 24px, 24px 24px;
   background-position:center top;
   background-attachment:fixed;
   color:var(--hd-ink);
@@ -4665,7 +4665,7 @@ function LoginScreen({branches, onUnlock}){
 /* Gate-style auth screens — visual match to the IOS ordering app's staff gate (staff-gate.js). Login/pending/denied first screens ONLY; app interior untouched. */
 const GATE_CSS = [
 "@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&display=swap');",
-".rcc-gate{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));background:#f3f2f2;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27300%27 viewBox=%270 0 300 300%27%3E%3Cg fill=%27none%27 stroke=%27%23ec3013%27 stroke-width=%272.4%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 opacity=%270.16%27%3E%3Cellipse cx=%27150%27 cy=%27150%27 rx=%2748%27 ry=%2711%27/%3E%3Cpath d=%27M102 150 C104 178 116 196 122 200 C130 205 170 205 178 200 C184 196 196 178 198 150%27/%3E%3Cpath d=%27M132 128 C127 120 137 114 132 104 M150 128 C145 120 155 114 150 104 M168 128 C163 120 173 114 168 104%27/%3E%3C/g%3E%3C/svg%3E'),linear-gradient(rgba(236,48,19,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(236,48,19,.16) 1px,transparent 1px);background-size:300px 300px,24px 24px,24px 24px;background-position:center top;font-family:'Archivo',system-ui,-apple-system,sans-serif;color:#201e1d;-webkit-font-smoothing:antialiased}",
+".rcc-gate{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));background:#f3f2f2;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27300%27 height=%27300%27 viewBox=%270 0 300 300%27%3E%3Cg fill=%27none%27 stroke=%27%23ec3013%27 stroke-width=%272.4%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 opacity=%270.16%27%3E%3Cellipse cx=%27150%27 cy=%27150%27 rx=%2748%27 ry=%2711%27/%3E%3Cpath d=%27M102 150 C104 178 116 196 122 200 C130 205 170 205 178 200 C184 196 196 178 198 150%27/%3E%3Cpath d=%27M132 128 C127 120 137 114 132 104 M150 128 C145 120 155 114 150 104 M168 128 C163 120 173 114 168 104%27/%3E%3C/g%3E%3C/svg%3E'),linear-gradient(rgba(236,48,19,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(236,48,19,.16) 1px,transparent 1px);background-size:440px 440px,24px 24px,24px 24px;background-position:center top;font-family:'Archivo',system-ui,-apple-system,sans-serif;color:#201e1d;-webkit-font-smoothing:antialiased}",
 ".rcc-gate-card{width:min(430px,100%);margin:auto;max-height:calc(100dvh - 48px);overflow-y:auto;-webkit-overflow-scrolling:touch;background:#f3f2f2;border:2px solid #201e1d;border-radius:0;box-shadow:none;padding:34px 28px 28px;text-align:center;animation:rccGateIn .35s cubic-bezier(.2,.85,.3,1.15)}",
 "@keyframes rccGateIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}",
 ".rcc-gate-card .brand{height:46px;width:46px;object-fit:contain;margin:0 auto 14px;display:block}",
@@ -5131,7 +5131,7 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
   const fmtTime=d=>d.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"});
   const noteAccent={urgent:"var(--color-primary)", warn:"var(--color-ink)", info:"var(--color-ink-muted-48)"};
   const rest=alerts.slice(1);
-  return <div className="space-y-6">
+  return <div className="space-y-6" style={{background:"var(--color-canvas)", border:"2px solid var(--color-ink)", padding:"clamp(16px,2.6vw,30px)"}}>
     <div className="tab-in">
       <div className="flex items-end justify-between gap-3 flex-wrap pb-3" style={{borderBottom:"2px solid var(--color-ink)"}}>
         <div>

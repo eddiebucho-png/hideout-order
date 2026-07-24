@@ -45,9 +45,82 @@
     if(!isAuthed()){
       var o=document.getElementById("pc-overlay"); if(o) o.style.display="none";
       var s=document.getElementById("pc-story"); if(s) s.style.display="none";
+      var cm=document.getElementById("pc-comments"); if(cm){ try{ if(cm.__close) cm.__close(); else if(cm.parentNode) cm.parentNode.removeChild(cm); }catch(e){} }
       storyState=null;
     }
     try{ renderTray(); }catch(e){}
+  }
+
+  /* ===================== SSO (2026-07-24): reuse the host app's Google session =====================
+     RCC loads its own DEFAULT firebase app (same hideout-recipe-cost project); postcards runs its
+     own "postcards" app, so their auth sessions are separate and staff were asked to sign in TWICE.
+     Fix (extremely conservative): when OUR postcards app has no session, look for an already
+     signed-in user in ANY other firebase app and reuse that identity (email) for onAuth. Firestore
+     reads/writes stay on the postcards-app db (rules/permission consistency). The original self
+     sign-in path is NEVER removed — if no host session is found we fall back to the Sign-in button
+     / signInWithPopup exactly as before. Everything is try/catch'd so it can never stall the app.
+     IOS already shares APP="postcards", so its own callback fires with a user and none of this runs. */
+  function hostUser(){
+    try{
+      var apps=(window.firebase&&firebase.apps)||[];
+      for(var i=0;i<apps.length;i++){
+        var a=apps[i]; if(!a||a.name===APP) continue;
+        try{
+          var au=a.auth&&a.auth();
+          var u=au&&au.currentUser;
+          if(u&&u.email) return u;
+        }catch(e){}
+      }
+    }catch(e){}
+    return null;
+  }
+  var hostWatched=false;
+  function watchHostApps(){
+    /* Observe other apps' auth so a host session that resolves slightly AFTER us is still adopted.
+       Only adopts while our OWN app has no user (never fights our own login). Fail-safe throughout. */
+    if(hostWatched) return;
+    try{
+      var apps=(window.firebase&&firebase.apps)||[];
+      for(var i=0;i<apps.length;i++){
+        (function(a){
+          if(!a||a.name===APP) return;
+          try{
+            var au=a.auth&&a.auth();
+            if(!au||!au.onAuthStateChanged) return;
+            au.onAuthStateChanged(function(hu){
+              try{
+                if(auth&&auth.currentUser) return; /* our own postcards session wins */
+                if(hu&&hu.email){ if(!me||me.email!==(hu.email||"").toLowerCase()){ stopAdopt(); onAuth(hu); } }
+                else if(me&&(!auth||!auth.currentUser)){ onAuth(null); } /* host signed out */
+              }catch(e){}
+            });
+          }catch(e){}
+        })(apps[i]);
+      }
+      hostWatched=true;
+    }catch(e){}
+  }
+  var adoptTimer=null, adoptTries=0;
+  function stopAdopt(){ try{ if(adoptTimer){ clearInterval(adoptTimer); adoptTimer=null; } }catch(e){} }
+  function adoptHostSession(){
+    /* Bounded (~8s) search for an existing host session so viewing/writing works without a 2nd popup.
+       Stops as soon as our own app logs in, a host session is adopted, or the budget runs out. */
+    try{
+      watchHostApps();
+      var hu0=hostUser();
+      if(hu0){ onAuth(hu0); return; }
+      if(adoptTimer) return;
+      adoptTries=0;
+      adoptTimer=setInterval(function(){
+        try{
+          adoptTries++;
+          if((auth&&auth.currentUser)||me){ stopAdopt(); return; }
+          var hu=hostUser();
+          if(hu){ stopAdopt(); onAuth(hu); return; }
+          if(adoptTries>=20){ stopAdopt(); }
+        }catch(e){ stopAdopt(); }
+      },400);
+    }catch(e){}
   }
 
   function initFb(){
@@ -58,7 +131,16 @@
     }catch(e){ try{ app=firebase.app(APP); }catch(e2){ return false; } }
     try{ auth=app.auth(); db=app.firestore(); }catch(e){ return false; }
     try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
-    auth.onAuthStateChanged(function(u){ onAuth(u); });
+    auth.onAuthStateChanged(function(u){
+      try{
+        if(u){ stopAdopt(); onAuth(u); return; }
+        /* No session on our own app — reuse a host app's session (SSO) if one exists, else fall back. */
+        var hu=hostUser();
+        if(hu){ onAuth(hu); return; }
+        onAuth(null);
+        adoptHostSession();
+      }catch(e){ try{ onAuth(u||null); }catch(_){} }
+    });
     return true;
   }
 
@@ -91,6 +173,8 @@
 
   function signIn(){
     if(!auth){ toast("Not ready — reload the page."); return; }
+    /* SSO: if a host app is already signed in, reuse it — no second Google popup. Fail-safe. */
+    try{ var hu=hostUser(); if(hu&&hu.email){ onAuth(hu); return; } }catch(e){}
     var pr=new firebase.auth.GoogleAuthProvider();
     auth.signInWithPopup(pr).catch(function(e){
       toast("Sign-in failed: "+(e&&e.message?e.message:e)+" (open the app from its web address, not a file).");
@@ -258,8 +342,6 @@
 "#pc-fabgroup.hidden{display:none}",
 "#pc-addfab{width:56px;height:56px;border:none;border-radius:0;background:var(--pc-accent);color:#fff;font-size:32px;font-weight:400;line-height:1;cursor:pointer;box-shadow:0 12px 26px rgba(174,24,0,.42);display:flex;align-items:center;justify-content:center;transition:transform .18s ease,box-shadow .18s ease}",
 "#pc-addfab:hover{transform:translateY(-2px) scale(1.05);box-shadow:0 16px 30px rgba(174,24,0,.5)}#pc-addfab:active{transform:scale(.95)}",
-"#pc-emojifab{width:46px;height:46px;border:1.5px solid rgba(236,48,19,.22);border-radius:0;background:var(--pc-paper);color:var(--pc-ink);font-size:22px;line-height:1;cursor:pointer;box-shadow:0 8px 20px rgba(32,30,29,.26);display:flex;align-items:center;justify-content:center;transition:transform .18s ease}",
-"#pc-emojifab:hover{transform:translateY(-2px)}#pc-emojifab:active{transform:scale(.95)}",
 ".pc-backbtn{border:none;background:transparent;color:var(--pc-muted);font-family:var(--pc-disp);font-weight:800;font-size:12px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;padding:6px 0;margin:2px 0 4px;display:inline-flex;align-items:center;gap:6px}",
 ".pc-backbtn:hover{color:var(--pc-accent)}",
 "#pc-feed{position:relative;min-height:150vh}",
@@ -316,6 +398,34 @@
 "#pc-stkedit .sfoot button{flex:1;border:none;border-radius:0;font-family:var(--pc-disp);font-weight:800;font-size:14px;letter-spacing:.04em;text-transform:uppercase;padding:13px;cursor:pointer}",
 "#pc-stkedit .sfoot .save{background:var(--pc-accent);color:#fff}",
 "#pc-stkedit .sfoot .cancel{background:rgba(32,30,29,.08);color:var(--pc-ink)}",
+/* ---- SOCIAL (2026-07-24): reactions + comments ---- */
+".pc-social{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}",
+".pc-reacts{display:flex;flex-wrap:wrap;gap:5px}",
+".pc-react{display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(32,30,29,.14);background:#fff;border-radius:0;padding:5px 8px;font-size:15px;line-height:1;cursor:pointer;color:var(--pc-ink);min-height:32px}",
+".pc-react:hover{border-color:var(--pc-accent)}",
+".pc-react.on{background:rgba(236,48,19,.12);border-color:var(--pc-accent)}",
+".pc-rn{font-family:var(--pc-disp);font-weight:800;font-size:11px;color:var(--pc-muted)}",
+".pc-react.on .pc-rn{color:var(--pc-accent-2)}",
+".pc-cbtn{display:inline-flex;align-items:center;gap:5px;border:1.5px solid rgba(32,30,29,.14);background:#fff;border-radius:0;padding:5px 9px;font-family:var(--pc-disp);font-weight:800;font-size:12px;letter-spacing:.03em;cursor:pointer;color:var(--pc-ink);min-height:32px;margin-left:auto}",
+".pc-cbtn:hover{border-color:var(--pc-accent);color:var(--pc-accent)}",
+".pc-cbtnl{text-transform:uppercase;letter-spacing:.06em}",
+"#pc-comments{position:fixed;inset:0;z-index:100001;background:rgba(32,30,29,.72);display:flex;align-items:flex-end;justify-content:center;padding:0;font-family:var(--pc-disp)}",
+"#pc-comments .sheet{background:var(--pc-paper);width:min(520px,100vw);max-height:88vh;border-radius:0;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 -12px 60px rgba(32,30,29,.5)}",
+"#pc-comments .shead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:2px solid var(--pc-ink)}",
+"#pc-comments .shead h4{margin:0;flex:1;font-family:var(--pc-disp);font-weight:900;font-size:16px;text-transform:uppercase;color:var(--pc-ink)}",
+"#pc-comments .cbody{padding:6px 14px 10px;overflow:auto;flex:1;min-height:120px}",
+"#pc-comments .cfoot{border-top:1px solid rgba(32,30,29,.14);padding:10px 14px;display:flex;flex-direction:column;gap:6px}",
+".pc-cmtta{width:100%;box-sizing:border-box;border:1.5px solid rgba(32,30,29,.18);border-radius:0;padding:10px;font-size:16px;font-family:inherit;background:#fff;color:var(--pc-ink);min-height:60px;resize:vertical;line-height:1.4}",
+".pc-cmtta:focus{outline:none;border-color:var(--pc-accent);box-shadow:0 0 0 3px rgba(236,48,19,.14)}",
+".pc-cmtsend{border:none;border-radius:0;background:var(--pc-accent);color:#fff;font-family:var(--pc-disp);font-weight:800;font-size:13px;letter-spacing:.04em;text-transform:uppercase;padding:11px;cursor:pointer}",
+".pc-cmtsend:disabled{opacity:.6;cursor:default}",
+".pc-cmt{display:flex;gap:9px;padding:9px 0;border-bottom:1px solid rgba(32,30,29,.08)}",
+"#pc-comments .pc-cmt .pc-avatar{width:34px;height:34px;font-size:13px;flex:none}",
+".pc-cmtmain{flex:1;min-width:0}",
+".pc-cmthead{display:flex;align-items:baseline;gap:8px}",
+".pc-cmtname{font-family:var(--pc-disp);font-weight:800;font-size:13px;color:var(--pc-ink)}",
+".pc-cmtt{font-family:var(--pc-disp);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--pc-muted)}",
+".pc-cmttext{font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;margin-top:2px;color:var(--pc-ink)}",
 /* ---- P6: story tray ---- */
 ".pc-tray{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 14px;margin-bottom:8px;touch-action:pan-x;-webkit-overflow-scrolling:touch;border-bottom:1px solid rgba(236,48,19,.14)}",
 ".pc-trayitem{flex:none;display:flex;flex-direction:column;align-items:center;gap:5px;width:66px;cursor:pointer;background:none;border:none;padding:0}",
@@ -632,6 +742,9 @@
         stickerLayerHtml(stk)+
         (mine?'<button class="pc-stkbtn" data-stk="'+esc(d._id)+'" title="Add stickers" aria-label="Add stickers">😀</button>':"")+
       '</div>'):"")+
+      '<div class="pc-social">'+reactionBarHtml(d)+
+        '<button type="button" class="pc-cbtn" data-comments="'+esc(d._id)+'" aria-label="Comments">💬<span class="pc-cbtnl">Comments</span>'+(commentCount(d)?'<span class="pc-rn">'+commentCount(d)+'</span>':"")+'</button>'+
+      '</div>'+
       '<div class="pc-foot">'+
         '<div class="pc-when"><span class="stamp"></span>'+esc(fmtTime(d.createdAt))+(d.editedAt?'<span class="pc-editbadge">edited</span>':"")+'</div>'+
         (mine?('<div class="pc-acts">'+
@@ -658,6 +771,8 @@
     Array.prototype.forEach.call(f.querySelectorAll(".pc-del"),function(el){ el.onclick=function(){ removeCard(el.getAttribute("data-del"), el); }; });
     Array.prototype.forEach.call(f.querySelectorAll(".pc-edit"),function(el){ el.onclick=function(){ startEdit(el.getAttribute("data-edit")); }; });
     Array.prototype.forEach.call(f.querySelectorAll(".pc-stkbtn"),function(el){ el.onclick=function(e){ e.preventDefault(); e.stopPropagation(); openStickerEditor(el.getAttribute("data-stk")); }; });
+    Array.prototype.forEach.call(f.querySelectorAll(".pc-react"),function(el){ el.onclick=function(e){ e.preventDefault(); e.stopPropagation(); toggleReaction(el.getAttribute("data-rid"), el.getAttribute("data-emo")); }; });
+    Array.prototype.forEach.call(f.querySelectorAll(".pc-cbtn"),function(el){ el.onclick=function(e){ e.preventDefault(); e.stopPropagation(); openComments(el.getAttribute("data-comments")); }; });
     Array.prototype.forEach.call(f.querySelectorAll(".pc-card[data-id]"),function(el){ enableDrag(el,f); enableResize(el,f); });
     renderTray();
     try{ requestAnimationFrame(function(){ fitBoard(f); }); }catch(e){}
@@ -837,6 +952,102 @@
     if(!db||!id) return;
     db.collection("postcards").doc(id).update({pinned:!cur, pinnedAt:firebase.firestore.FieldValue.serverTimestamp()})
       .catch(function(e){ toast("Couldn't pin — "+((e&&e.message)||"try again")); });
+  }
+
+  /* ===================== SOCIAL: emoji reactions (2026-07-24) =====================
+     Stored on the postcard doc as reactions map {emoji:[email,...]}, merged in with
+     arrayUnion/arrayRemove so a toggle never clobbers other people's reactions. The existing
+     onSnapshot feed keeps counts live. Fail-safe: bad/missing data renders as no reactions. */
+  var REACTIONS=["👍","❤️","😂","🔥","👏"];
+  function getReactions(d){
+    try{
+      var r=d&&d.reactions; if(!r||typeof r!=="object") return {};
+      var out={};
+      for(var k in r){ if(!r.hasOwnProperty(k)) continue; var a=r[k]; if(Object.prototype.toString.call(a)==="[object Array]"){ var em=[]; for(var i=0;i<a.length;i++){ if(typeof a[i]==="string") em.push(a[i].toLowerCase()); } out[k]=em; } }
+      return out;
+    }catch(e){ return {}; }
+  }
+  function reactionBarHtml(d){
+    try{
+      var map=getReactions(d), myEmail=(me&&me.email)||"";
+      var h='<div class="pc-reacts">';
+      for(var i=0;i<REACTIONS.length;i++){
+        var emo=REACTIONS[i], arr=map[emo]||[], n=arr.length, on=myEmail&&arr.indexOf(myEmail)>=0;
+        h+='<button type="button" class="pc-react'+(on?" on":"")+'" data-rid="'+esc(d._id)+'" data-emo="'+esc(emo)+'" aria-label="React '+esc(emo)+'">'+emo+(n?'<span class="pc-rn">'+n+'</span>':"")+'</button>';
+      }
+      return h+'</div>';
+    }catch(e){ return ""; }
+  }
+  function toggleReaction(id, emo){
+    if(!db||!id||!me||!me.email) return;
+    try{
+      var d=docById(id), arr=(getReactions(d)[emo])||[];
+      var on=arr.indexOf(me.email)>=0;
+      var val=on?firebase.firestore.FieldValue.arrayRemove(me.email):firebase.firestore.FieldValue.arrayUnion(me.email);
+      db.collection("postcards").doc(id).update(new firebase.firestore.FieldPath("reactions",emo), val)
+        .catch(function(e){ toast("Couldn't react — "+((e&&e.message)||"try again")); });
+    }catch(e){}
+  }
+
+  /* ===================== SOCIAL: comments (2026-07-24) =====================
+     Comments live in the subcollection postcards/{id}/comments ({text,byEmail,byName,ts}) to keep
+     the parent doc small. A live commentCount on the parent (FieldValue.increment) drives the feed
+     badge without extra reads. The thread opens in a dedicated modal with its own onSnapshot that is
+     unsubscribed on close. Every message runs through the same moderate() check as postcards. */
+  var CMT_MAX=500;
+  function commentCount(d){ try{ var n=Number(d&&d.commentCount); return isFinite(n)&&n>0?n:0; }catch(e){ return 0; } }
+  function openComments(id){
+    var d=docById(id); if(!d){ toast("Couldn't open that card"); return; }
+    if(!me){ toast("Sign in to comment"); return; }
+    var unsub=null;
+    var host=document.createElement("div"); host.id="pc-comments";
+    host.innerHTML='<div class="sheet">'+
+      '<div class="shead"><h4>Comments</h4><button class="pc-x" id="pc-cmtx" aria-label="Close">×</button></div>'+
+      '<div class="cbody" id="pc-cmtlist"><div class="pc-empty" style="padding:20px 10px">Loading…</div></div>'+
+      '<div class="cfoot"><textarea class="pc-cmtta" id="pc-cmtinput" maxlength="'+CMT_MAX+'" placeholder="Write a comment…"></textarea>'+
+        '<div class="pc-err" id="pc-cmterr" style="margin:2px 0 0"></div>'+
+        '<button type="button" class="pc-cmtsend" id="pc-cmtsend">Post comment</button></div>'+
+    '</div>';
+    document.body.appendChild(host);
+    function close(){ try{ if(unsub) unsub(); }catch(e){} unsub=null; if(host.parentNode) host.parentNode.removeChild(host); }
+    host.__close=close; /* so global Escape / auth-loss handlers can unsubscribe cleanly */
+    var listEl=host.querySelector("#pc-cmtlist");
+    function renderList(items){
+      if(!items.length){ listEl.innerHTML='<div class="pc-empty" style="padding:24px 10px">No comments yet. Say something kind.</div>'; return; }
+      listEl.innerHTML=items.map(function(c){
+        var st=staffMap[String(c.byEmail||"").toLowerCase()]||{};
+        var nm=st.name||c.byName||c.byEmail||"Someone";
+        return '<div class="pc-cmt">'+avatarHtml(c.byEmail,nm,st.photoURL,"")+
+          '<div class="pc-cmtmain"><div class="pc-cmthead"><span class="pc-cmtname">'+esc(nm)+'</span><span class="pc-cmtt">'+esc(fmtTime(c.ts))+'</span></div>'+
+          '<div class="pc-cmttext">'+esc(c.text||"")+'</div></div></div>';
+      }).join("");
+      listEl.scrollTop=listEl.scrollHeight;
+    }
+    try{
+      unsub=db.collection("postcards").doc(id).collection("comments").orderBy("ts","asc").limit(200)
+        .onSnapshot(function(qs){ var arr=[]; qs.forEach(function(doc){ var c=doc.data()||{}; arr.push(c); }); renderList(arr); },
+          function(){ listEl.innerHTML='<div class="pc-empty" style="padding:24px 10px">Couldn\'t load comments right now.</div>'; });
+    }catch(e){ listEl.innerHTML='<div class="pc-empty" style="padding:24px 10px">Couldn\'t load comments right now.</div>'; }
+    var ta=host.querySelector("#pc-cmtinput"), errEl=host.querySelector("#pc-cmterr"), sendB=host.querySelector("#pc-cmtsend");
+    sendB.onclick=function(){
+      var text=(ta.value||"").trim();
+      errEl.textContent="";
+      if(!text){ errEl.textContent="Write something first."; return; }
+      if(text.length>CMT_MAX){ text=text.slice(0,CMT_MAX); }
+      sendB.disabled=true; sendB.textContent="Checking…";
+      moderate(text).then(function(mod){
+        if(!mod.allow){ sendB.disabled=false; sendB.textContent="Post comment"; errEl.textContent=(mod._soft?"":"Held: ")+(mod.reason||"That comment can't be posted."); return; }
+        var rec={text:text, byEmail:me.email, byName:me.name, ts:firebase.firestore.FieldValue.serverTimestamp()};
+        db.collection("postcards").doc(id).collection("comments").add(rec)
+          .then(function(){
+            try{ db.collection("postcards").doc(id).set({commentCount:firebase.firestore.FieldValue.increment(1)},{merge:true}); }catch(e){}
+            ta.value=""; sendB.disabled=false; sendB.textContent="Post comment";
+          })
+          .catch(function(e){ sendB.disabled=false; sendB.textContent="Post comment"; errEl.textContent=(e&&e.message)||"Couldn't post. Try again."; });
+      });
+    };
+    host.querySelector("#pc-cmtx").onclick=close;
+    host.addEventListener("click",function(e){ if(e.target===host) close(); });
   }
 
   /* ===================== P4: sticker editor ===================== */
@@ -1059,7 +1270,7 @@
       '<div class="pc-head"><img class="brand" src="'+LOGO+'" alt="The Hideout" onerror="this.style.display=\'none\'"><div class="pc-titles"><h3>Postcards</h3><span class="sub">The Hideout · staff board</span></div><button class="pc-x" id="pc-close" aria-label="Close">×</button></div>'+
       '<div class="pc-ribbon"><div class="pc-marq"><span>The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind<b>✦</b></span><span>The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind<b>✦</b></span></div></div>'+
       '<div class="pc-body pc-grid"><div id="pc-bodyc"></div></div>'+
-      '<div id="pc-fabgroup" class="hidden"><button id="pc-emojifab" type="button" title="Write a postcard (add a photo &amp; stickers)" aria-label="Write a postcard with a photo and stickers">😊</button><button id="pc-addfab" type="button" title="Write a postcard" aria-label="Write a postcard">+</button></div>'+
+      '<div id="pc-fabgroup" class="hidden"><button id="pc-addfab" type="button" title="Write a postcard" aria-label="Write a postcard">+</button></div>'+
     '</div>';
     document.body.appendChild(ov);
     /* Always-on story tray at the very top of the page. Inserted as body's FIRST child in
@@ -1081,12 +1292,12 @@
     /* Intentionally NO backdrop-click-to-close — an accidental outside click must never
        throw away a postcard someone is writing. Close only via the × button (or Esc). */
     document.getElementById("pc-close").onclick=close;
-    /* FAB group → open the write form (openCompose logic, modal already open). Emoji button leads to the same form (photo/stickers live inside it). */
+    /* FAB group → open the write form (openCompose logic, modal already open). */
     var addfab=document.getElementById("pc-addfab"); if(addfab) addfab.onclick=function(){ state.editId=null; state.tab="write"; render(); };
-    var emofab=document.getElementById("pc-emojifab"); if(emofab) emofab.onclick=function(){ state.editId=null; state.tab="write"; render(); };
     document.addEventListener("keydown",function(e){
       if(e.key==="Escape"){
         var so=document.getElementById("pc-story"); if(so&&so.style.display==="flex"){ closeStory(); return; }
+        var cm=document.getElementById("pc-comments"); if(cm){ if(cm.__close) cm.__close(); else cm.parentNode&&cm.parentNode.removeChild(cm); return; }
         var se=document.getElementById("pc-stkedit"); if(se){ se.parentNode&&se.parentNode.removeChild(se); return; }
         var o=document.getElementById("pc-overlay"); if(o&&o.style.display==="flex") close();
       }

@@ -312,6 +312,8 @@
   h1,h2,h3{ font-family:var(--font-display); }
   body *{ font-family:var(--font-text)!important; }
   [style*="border-radius: 999"]:not(img),[style*="border-radius:999"]:not(img),[style*="border-radius: 9999"]:not(img),[style*="border-radius:9999"]:not(img){ border-radius:0!important; }
+  [class*="rounded"]:not(img){ border-radius:0!important; }
+  @media (max-width:640px){ .notes-row{ grid-template-columns:1fr!important; } .notes-row>div:first-child{ border-right:none!important; border-bottom:1px solid #ece6da!important; min-width:0!important; } }
   a{ color:var(--color-primary); text-decoration:none; } a:hover{ text-decoration:underline; }
   .card{ background:var(--color-canvas); border:1.5px solid var(--color-hairline-alpha); border-radius:0; box-shadow:none; }
   .card,.vbtn-card,button,input,select,textarea,.pill,[class*="radius"]{ border-radius:0!important; }
@@ -1430,7 +1432,7 @@ function TodaySummary({ctx}){
           <span style={{fontSize:13,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#6f665a"}}>Notes from locations</span>
         </div>
         <div style={{display:"grid",gap:12}}>{withNotes.map(l=>{ const by=data[l.id]._by; return (
-          <div key={l.id} style={{display:"grid",gridTemplateColumns:"auto 1fr",background:"#fff",border:"1px solid #ece6da",borderRadius:14,overflow:"hidden"}}>
+          <div key={l.id} className="notes-row" style={{display:"grid",gridTemplateColumns:"auto 1fr",background:"#fff",border:"1px solid #ece6da",borderRadius:14,overflow:"hidden"}}>
             <div style={{padding:"14px 18px",background:"#f4e3e0",display:"flex",flexDirection:"column",gap:4,justifyContent:"center",borderRight:"1px solid #ece6da",minWidth:130}}>
               <span style={{fontSize:14,fontWeight:800,color:"#9c2a22"}}>{l.name.replace(/\s*\(.*\)/,"")}</span>
               {by&&<span style={{fontSize:12,color:"#9c5a52"}}>by {by}</span>}

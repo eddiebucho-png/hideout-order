@@ -286,28 +286,34 @@
 
 </style>
 <style>
-  /* ---- Hideout brand overrides (shared with Recipe Cost app) ---- */
+  /* ---- Hideout PACKAGING design language (bean red · paper · Archivo · sharp) ---- */
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap');
   :root{
-    --color-primary:#c81a22; --color-primary-focus:#dc2830; --color-primary-on-dark:#ff8a80;
-    --color-canvas:#fffdf9; --color-canvas-parchment:#f5efe6; --color-surface-pearl:#faf6ef;
-    --color-surface-tile-1:#39312a; --color-surface-tile-2:#453b31; --color-surface-tile-3:#2f2820; --color-surface-black:#241d16;
-    --color-ink:#26201a; --color-body:#26201a; --color-body-muted:#e0d6c9;
-    --color-ink-muted-80:#4a4136; --color-ink-muted-48:#8a7d6d;
-    --color-divider-soft:#efe7da; --color-hairline:#e3d9ca; --color-hairline-alpha:rgba(70,45,20,.10);
+    --font-display:"Archivo", system-ui, -apple-system, sans-serif;
+    --font-text:"Archivo", system-ui, -apple-system, sans-serif;
+    --color-primary:#ec3013; --color-primary-focus:#dd2b0f; --color-primary-on-dark:#ff9783;
+    --color-canvas:#f3f2f2; --color-canvas-parchment:#eae9e9; --color-surface-pearl:#f8f4f4;
+    --color-surface-tile-1:#201e1d; --color-surface-tile-2:#2d2b2b; --color-surface-tile-3:#171615; --color-surface-black:#201e1d;
+    --color-ink:#201e1d; --color-body:#201e1d; --color-body-muted:#d7d3d3;
+    --color-ink-muted-80:#444141; --color-ink-muted-48:#7d7979;
+    --color-divider-soft:#eae9e9; --color-hairline:#cfcbcb; --color-hairline-alpha:rgba(32,30,29,.18);
+    /* Modernist: zero radius everywhere */
+    --radius-none:0px; --radius-xs:0px; --radius-sm:0px; --radius-md:0px; --radius-lg:0px; --radius-pill:0px; --radius-full:0px;
   }
   *{ box-sizing:border-box; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
   html,body{ margin:0; }
-  body{ background-color:var(--color-canvas-parchment);
+  body{ background-color:var(--color-canvas);
     background-image:
-      linear-gradient(rgba(200,26,34,.055) 1px,transparent 1px),
-      linear-gradient(90deg,rgba(200,26,34,.055) 1px,transparent 1px),
-      linear-gradient(rgba(200,26,34,.09) 1px,transparent 1px),
-      linear-gradient(90deg,rgba(200,26,34,.09) 1px,transparent 1px);
-    background-size:22px 22px,22px 22px,110px 110px,110px 110px;
-    background-position:center top; background-attachment:fixed; color:var(--color-ink); font-family:var(--font-text); letter-spacing:-0.1px; }
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Cg fill='none' stroke='%23ec3013' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' opacity='0.16'%3E%3Cellipse cx='150' cy='150' rx='48' ry='11'/%3E%3Cpath d='M102 150 C104 178 116 196 122 200 C130 205 170 205 178 200 C184 196 196 178 198 150'/%3E%3Cpath d='M132 128 C127 120 137 114 132 104 M150 128 C145 120 155 114 150 104 M168 128 C163 120 173 114 168 104'/%3E%3C/g%3E%3C/svg%3E"),
+      linear-gradient(rgba(236,48,19,.10) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(236,48,19,.10) 1px,transparent 1px);
+    background-size:300px 300px,24px 24px,24px 24px;
+    background-position:center top; background-attachment:fixed; color:var(--color-ink); font-family:var(--font-text); letter-spacing:0; }
   h1,h2,h3{ font-family:var(--font-display); }
   a{ color:var(--color-primary); text-decoration:none; } a:hover{ text-decoration:underline; }
-  .card{ background:var(--color-canvas); border:1px solid var(--color-hairline-alpha); border-radius:16px; }
+  .card{ background:var(--color-canvas); border:1.5px solid var(--color-hairline-alpha); border-radius:0; box-shadow:none; }
+  .card,.vbtn-card,button,input,select,textarea,.pill,[class*="radius"]{ border-radius:0!important; }
+  h1,h2,h3,h4{ letter-spacing:-0.02em; }
   input,select,textarea,button{ font-family:var(--font-text); }
   input:focus,select:focus,textarea:focus{ border-color:var(--color-primary-focus)!important; box-shadow:0 0 0 1px var(--color-primary-focus); }
   ::-webkit-scrollbar{height:8px;width:8px} ::-webkit-scrollbar-thumb{background:#d9cdbb;border-radius:8px} ::-webkit-scrollbar-track{background:transparent}

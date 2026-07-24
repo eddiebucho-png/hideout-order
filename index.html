@@ -297,7 +297,14 @@
   }
   *{ box-sizing:border-box; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
   html,body{ margin:0; }
-  body{ background:var(--color-canvas-parchment); color:var(--color-ink); font-family:var(--font-text); letter-spacing:-0.1px; }
+  body{ background-color:var(--color-canvas-parchment);
+    background-image:
+      linear-gradient(rgba(200,26,34,.055) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(200,26,34,.055) 1px,transparent 1px),
+      linear-gradient(rgba(200,26,34,.09) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(200,26,34,.09) 1px,transparent 1px);
+    background-size:22px 22px,22px 22px,110px 110px,110px 110px;
+    background-position:center top; background-attachment:fixed; color:var(--color-ink); font-family:var(--font-text); letter-spacing:-0.1px; }
   h1,h2,h3{ font-family:var(--font-display); }
   a{ color:var(--color-primary); text-decoration:none; } a:hover{ text-decoration:underline; }
   .card{ background:var(--color-canvas); border:1px solid var(--color-hairline-alpha); border-radius:16px; }
@@ -855,6 +862,8 @@ window.OrderCore = {
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
 "#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
+/* AUTH GATE (2026-07-24): hide the chatbot launcher/panel unless the host app is authed (belt-and-suspenders; the launcher is also only mounted after login). */
+"html:not(.hideout-authed) #hb-fab,html:not(.hideout-authed) #hb-panel{display:none!important}",
 "#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
 "#hb-fab:active{transform:scale(.96)}",
 "#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
@@ -1898,9 +1907,9 @@ function AiTrainingCard({ctx}){
 /* ---------- Settings shell ---------- */
 function Settings({ctx}){
   const [unlocked,setUnlocked]=useState(false); const [pw,setPw]=useState(""); const [err,setErr]=useState("");
-  const [sub,setSub]=useState("items");
-  const OPEN=["items","parlevels","categories"]; // day-to-day open sections
-  const SECTIONS=[["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["users","Users"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
+  const [sub,setSub]=useState("profile");
+  const OPEN=["profile","items","parlevels","categories"]; // day-to-day open sections (P5: Profile has no lock)
+  const SECTIONS=[["profile","Profile"],["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["users","Users"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
   const gated = !OPEN.includes(sub) && !unlocked;
   const tryUnlock=()=>{ if(pw===SETTINGS_PASSWORD||pw===MASTER){ setUnlocked(true); setErr(""); } else setErr("Incorrect"); };
   return <div>
@@ -1914,6 +1923,7 @@ function Settings({ctx}){
       {err && <div style={{fontSize:12,color:"#d70015",marginBottom:8}}>{err}</div>}
       <Btn onClick={tryUnlock} style={{width:"100%"}}>Unlock</Btn>
     </Card> : <>
+      {sub==="profile" && <ProfileCard />}
       {sub==="items" && <ItemsCard ctx={ctx} />}
       {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
       {sub==="categories" && <CategoriesCard ctx={ctx} />}
@@ -1926,6 +1936,89 @@ function Settings({ctx}){
       {sub==="connection" && <ConnectionCard ctx={ctx} />}
     </>}
   </div>;
+}
+
+/* ---------- Profile (P5: own avatar, no password — saves allowlist/{email}.photoURL) ---------- */
+function ProfileCard(){
+  const gdb=()=>{ try{ return window.HideoutGate&&window.HideoutGate.db&&window.HideoutGate.db(); }catch(e){ return null; } };
+  const me = window.HideoutUser || null;
+  const email = (me&&me.email) ? String(me.email).toLowerCase() : "";
+  const [rec,setRec]=useState(null);   // null=loading | "noauth" | "nodb" | {name,photoURL}
+  const [busy,setBusy]=useState(false);
+  const [nameDraft,setNameDraft]=useState(""); const [savingName,setSavingName]=useState(false);
+  const load=()=>{
+    if(!email){ setRec("noauth"); return; }
+    const db=gdb(); if(!db){ setRec("nodb"); return; }
+    db.collection("allowlist").doc(email).get().then(snap=>{
+      const v=(snap&&snap.exists)?(snap.data()||{}):{};
+      const nm=v.name||(me&&me.name)||email; setRec({name:nm, photoURL:(typeof v.photoURL==="string"?v.photoURL:"")}); setNameDraft(nm);
+    }).catch(()=>{ const nm=(me&&me.name)||email; setRec({name:nm, photoURL:""}); setNameDraft(nm); });
+  };
+  useEffect(load,[]);
+  const saveName=()=>{
+    const nm=String(nameDraft||"").trim(); if(!nm){ toast("Name can't be empty",true); return; }
+    if(nm===(rec&&rec.name)){ return; }
+    const db=gdb(); if(!db){ toast("No database connection",true); return; }
+    setSavingName(true);
+    db.collection("allowlist").doc(email).set({name:nm,nameBy:email,nameAt:Date.now()},{merge:true}).then(()=>{
+      setSavingName(false); setRec(r=>({...(r||{}),name:nm})); toast("Name updated ✓");
+      try{ if(window.HideoutUser) window.HideoutUser.name=nm; }catch(_){}
+    }).catch(e=>{ setSavingName(false); toast("Save failed: "+e.message,true); });
+  };
+  const initials=(nm)=>{ const n=String(nm||email||"?").trim(); const p=n.split(/\s+/); return (p.length>=2?(p[0][0]+p[1][0]):n.slice(0,2)).toUpperCase(); };
+  const pickFile=(file)=>{
+    if(!file) return;
+    if(!window.HideoutPostcards||!window.HideoutPostcards.uploadPhoto){ toast("Photo uploader isn't ready — reload the page.",true); return; }
+    setBusy(true);
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const S=512, cv=document.createElement("canvas"); cv.width=S; cv.height=S;
+        const g=cv.getContext("2d"), side=Math.min(img.width,img.height);
+        g.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,S,S);
+        cv.toBlob(blob=>{
+          const f=blob?new File([blob],"avatar.jpg",{type:"image/jpeg"}):file;
+          window.HideoutPostcards.uploadPhoto(f).then(url=>{
+            const db=gdb(); if(!db){ setBusy(false); toast("No database connection",true); return; }
+            db.collection("allowlist").doc(email).set({photoURL:url,photoBy:email,photoAt:Date.now()},{merge:true}).then(()=>{
+              setBusy(false); setRec(r=>({...(r||{}),photoURL:url})); toast("Profile photo updated ✓");
+              try{ if(window.HideoutUser) window.HideoutUser.photoURL=url; }catch(_){}
+            }).catch(e=>{ setBusy(false); toast("Save failed: "+e.message,true); });
+          }).catch(e=>{ setBusy(false); toast("Upload failed: "+((e&&e.message)||"try again"),true); });
+        },"image/jpeg",0.85);
+      }catch(e){ setBusy(false); toast("Couldn't process that image",true); }
+    };
+    img.onerror=()=>{ setBusy(false); toast("Couldn't read that image",true); };
+    img.src=URL.createObjectURL(file);
+  };
+  if(rec==="noauth") return <Card><Empty>Sign in with your Hideout Google account to set a profile photo.</Empty></Card>;
+  if(rec==="nodb") return <Card><Empty>The Google sign-in gate isn't running on this page, so a profile photo can't be saved here.</Empty></Card>;
+  if(!rec) return <Card><Empty>Loading your profile…</Empty></Card>;
+  const avatar = rec.photoURL
+    ? <img src={rec.photoURL} alt="" style={{width:96,height:96,borderRadius:"50%",objectFit:"cover",border:"2px solid var(--color-hairline-alpha)"}} onError={e=>{e.target.style.display="none";}} />
+    : <div style={{width:96,height:96,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-surface-black)",color:"#fff",fontFamily:"var(--font-display)",fontWeight:900,fontSize:34}}>{initials(rec.name)}</div>;
+  return <Card style={{maxWidth:420,margin:"0 auto"}}>
+    <SectionLabel>Your profile</SectionLabel>
+    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 14px"}}>Set the photo and name your team sees on the staff postcards board. Signed in as {email||"—"}.</p>
+    <div style={{display:"flex",alignItems:"center",gap:16}}>
+      {avatar}
+      <div style={{flex:1}}>
+        <label style={{display:"inline-block"}}>
+          <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{ const f=(e.target.files||[])[0]; e.target.value=""; pickFile(f); }} disabled={busy} />
+          <span className="vbtn-card" style={{display:"inline-block",border:"1px solid var(--color-hairline-alpha)",borderRadius:10,padding:"10px 16px",fontWeight:600,cursor:busy?"default":"pointer",background:"var(--color-surface-black)",color:"#fff",opacity:busy?0.6:1}}>{busy?"Uploading…":(rec.photoURL?"Change photo":"Upload photo")}</span>
+        </label>
+        <div style={{fontSize:11.5,color:"var(--color-ink-muted-48)",marginTop:8,lineHeight:1.5}}>Square crop, stored on the shared image CDN. No password needed — you can only change your own.</div>
+      </div>
+    </div>
+    <div style={{marginTop:18}}>
+      <SectionLabel>Display name</SectionLabel>
+      <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 8px"}}>The name shown next to your posts and photo.</p>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <input value={nameDraft} onChange={e=>setNameDraft(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName()} maxLength={40} placeholder="Your name" style={{...inp,flex:1}} disabled={savingName} />
+        <Btn onClick={saveName} disabled={savingName||!String(nameDraft||"").trim()||String(nameDraft||"").trim()===(rec.name||"")}>{savingName?"Saving…":"Save"}</Btn>
+      </div>
+    </div>
+  </Card>;
 }
 
 /* ---------- Users (staff Google accounts — allowlist via the sign-in gate) ---------- */
@@ -2075,6 +2168,71 @@ function DeptPick({onPick}){
   </div>;
 }
 
+/* ---- Power button dropdown: lock device + Google sign-out / switch account ----
+   Uses window.HideoutGate (staff-gate.js). Gate is fail-open: if it never loaded,
+   only the original Lock action is shown and the app is never blocked. */
+function PowerMenu(){
+  const [open,setOpen]=useState(false);
+  const [user,setUser]=useState(window.HideoutUser||null);
+  const ref=useRef(null);
+  useEffect(()=>{
+    const onAuth=(e)=>setUser((e&&e.detail)||window.HideoutUser||null);
+    document.addEventListener("hideout-auth",onAuth);
+    return ()=>document.removeEventListener("hideout-auth",onAuth);
+  },[]);
+  useEffect(()=>{
+    if(!open) return;
+    const onDoc=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",onDoc); document.addEventListener("touchstart",onDoc);
+    return ()=>{ document.removeEventListener("mousedown",onDoc); document.removeEventListener("touchstart",onDoc); };
+  },[open]);
+  const gate=(window.HideoutGate&&typeof window.HideoutGate.signOut==="function")?window.HideoutGate:null;
+  const it={display:"block",width:"100%",textAlign:"left",background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:500,padding:"9px 14px",whiteSpace:"nowrap"};
+  return <div ref={ref} style={{position:"relative",display:"inline-flex"}}>
+    <button onClick={()=>setOpen(o=>!o)} title="Lock / account" style={{background:"none",border:"none",color:open?"#fff":"var(--color-body-muted)",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center"}}><Ico name="power" size={15} /></button>
+    {open && <div className="modal-pop" style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:60,minWidth:190,maxWidth:260,background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"5px 0",boxShadow:"0 10px 28px rgba(0,0,0,.45)"}}>
+      {gate&&user ? <div style={{padding:"7px 14px 8px",borderBottom:"1px solid rgba(255,255,255,.08)",marginBottom:4}}>
+        <div style={{color:"var(--color-body-muted)",fontSize:10,textTransform:"uppercase",letterSpacing:".07em"}}>Signed in as</div>
+        <div style={{color:"#fff",fontSize:12,fontWeight:600,marginTop:2,overflow:"hidden",textOverflow:"ellipsis"}}>{user.name||user.email||""}</div>
+        {user.name&&user.email ? <div style={{color:"var(--color-body-muted)",fontSize:11,overflow:"hidden",textOverflow:"ellipsis"}}>{user.email}</div> : null}
+      </div> : null}
+      <button style={it} onClick={()=>{ setOpen(false); if(confirm("Lock this device? You’ll need the passcode again.")) location.reload(); }}>Lock device</button>
+      {gate ? <button style={it} onClick={()=>{ setOpen(false); try{ gate.signOut(); }catch(e){} }}>Sign out (Google)</button> : null}
+      {gate ? <button style={it} onClick={()=>{ setOpen(false); try{ gate.signOut(); gate.signIn(); }catch(e){} }}>Switch account</button> : null}
+    </div>}
+  </div>;
+}
+
+// Top-left location display → tap to switch branch (passcode-aware; MASTER always works)
+function LocMenu({locations, branch, onSwitch}){
+  const [open,setOpen]=useState(false);
+  const [pend,setPend]=useState(null); const [code,setCode]=useState(""); const [err,setErr]=useState("");
+  const ref=useRef(null);
+  const nm=(l)=>(l&&l.name?l.name.replace(/\s*\(.*\)/,""):"");
+  const cur=locations.find(l=>l.id===branch);
+  useEffect(()=>{ if(!open) return; const onDoc=(e)=>{ if(ref.current&&!ref.current.contains(e.target)){ setOpen(false); setPend(null); setCode(""); setErr(""); } }; document.addEventListener("mousedown",onDoc); document.addEventListener("touchstart",onDoc); return ()=>{ document.removeEventListener("mousedown",onDoc); document.removeEventListener("touchstart",onDoc); }; },[open]);
+  const choose=(l)=>{ if(l.id===branch){ setOpen(false); return; } if(l.passcode){ setPend(l.id); setCode(""); setErr(""); } else { onSwitch(l.id); setOpen(false); } };
+  const confirmCode=()=>{ const l=locations.find(x=>x.id===pend); if(!l) return; const c=code.trim(); if(c!==MASTER && l.passcode && String(l.passcode)!==c){ setErr("Incorrect passcode"); return; } onSwitch(pend); setOpen(false); setPend(null); setCode(""); setErr(""); };
+  return <div ref={ref} style={{position:"relative",display:"inline-flex"}}>
+    <button onClick={()=>setOpen(o=>!o)} title="Switch branch" style={{background:"none",border:"none",cursor:"pointer",color:open?"#fff":"var(--color-body-muted)",fontSize:12,display:"inline-flex",alignItems:"center",gap:3,padding:0,fontFamily:"inherit"}}>
+      {nm(cur)||"Select branch"}<span style={{fontSize:9,opacity:.7}}>▾</span>
+    </button>
+    {open && <div className="modal-pop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,zIndex:60,minWidth:190,maxWidth:260,background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"5px 0",boxShadow:"0 10px 28px rgba(0,0,0,.45)"}}>
+      {!pend ? locations.map(l=>(<button key={l.id} onClick={()=>choose(l)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",textAlign:"left",background:l.id===branch?"rgba(255,255,255,.10)":"none",border:"none",cursor:"pointer",color:"#fff",fontSize:13,padding:"9px 14px",whiteSpace:"nowrap"}}><span>{nm(l)}</span>{l.passcode?<span style={{fontSize:10,opacity:.55}}>🔒</span>:null}</button>)) : (
+        <div style={{padding:"8px 12px"}}>
+          <div style={{color:"var(--color-body-muted)",fontSize:11,marginBottom:6}}>Passcode · {nm(locations.find(x=>x.id===pend))}</div>
+          <input autoFocus inputMode="numeric" value={code} onChange={e=>{ setCode(e.target.value.replace(/\D/g,"")); setErr(""); }} onKeyDown={e=>e.key==="Enter"&&confirmCode()} placeholder="••••" style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.06)",color:"#fff",padding:"9px 10px",fontSize:15}} />
+          {err?<div style={{color:"#ff8a80",fontSize:11,marginTop:5}}>{err}</div>:null}
+          <div style={{display:"flex",gap:6,marginTop:9}}>
+            <button onClick={()=>{ setPend(null); setCode(""); setErr(""); }} style={{flex:1,background:"none",border:"1px solid rgba(255,255,255,.2)",color:"var(--color-body-muted)",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12}}>Back</button>
+            <button onClick={confirmCode} style={{flex:1,background:"var(--color-primary)",border:"none",color:"#fff",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12,fontWeight:700}}>Enter</button>
+          </div>
+        </div>
+      )}
+    </div>}
+  </div>;
+}
+
 function App(){
   const [phase,setPhase]=useState("loading"); // loading | gate | dept | app
   const [locations,setLocations]=useState([]);
@@ -2087,7 +2245,11 @@ function App(){
   const corePromise=useRef(null);
   const ensureCore=(d)=>{ if(!corePromise.current) corePromise.current=loadCore(d); return corePromise.current; };
 
-  useEffect(()=>{ if(window.HideoutBot) window.HideoutBot.mount({source:"ordering", cfg:()=>window.__ORD_CFG||{}, backendUrl:()=>C.cfg.backendUrl, token:C.API_SECRET, greeting:"Ask about orders, items, allergens, delivery or recipes."}); },[]);
+  const botMounted=useRef(false);
+  // AUTH GATE (2026-07-24): mount the AI chatbot only after the passcode gate is cleared (phase==="app"); never re-mount.
+  useEffect(()=>{ if(phase==="app" && !botMounted.current && window.HideoutBot){ botMounted.current=true; window.HideoutBot.mount({source:"ordering", cfg:()=>window.__ORD_CFG||{}, backendUrl:()=>C.cfg.backendUrl, token:C.API_SECRET, greeting:"Ask about orders, items, allergens, delivery or recipes."}); } },[phase]);
+  // AUTH GATE (2026-07-24): flag the document authed so gated staff widgets (postcards FAB/tray, chatbot) can show. Toggles on every phase change; also notifies postcards.js via the 'hideout-authed' event.
+  useEffect(()=>{ try{ document.documentElement.classList.toggle("hideout-authed", phase==="app"); document.dispatchEvent(new Event("hideout-authed")); }catch(e){} },[phase]);
 
   // initial: set backend from LS, load locations (dept-independent)
   useEffect(()=>{ C.cfg.backendUrl=LS.get("hideout_ord_backendUrl","")||C.DEFAULT_BACKEND_URL;
@@ -2140,6 +2302,7 @@ function App(){
   };
 
   const onUnlock=(bid)=>{ setBranch(bid); if(department){ ensureCore(department).then(()=>setPhase("app")); } else setPhase("dept"); };
+  const switchBranch=(bid)=>{ if(bid===branch) return; setBranch(bid); setTick(t=>t+1); };
   const onPickDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); corePromise.current=loadCore(d); corePromise.current.then(()=>setPhase("app")); };
   const switchDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); setCore(null); corePromise.current=loadCore(d); corePromise.current.then(()=>setTick(t=>t+1)); };
 
@@ -2172,15 +2335,16 @@ function App(){
       <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"6px 14px",padding:"9px 16px",minHeight:52}}>
         <div style={{display:"flex",alignItems:"center",gap:10,order:1}}>
           {LOGO?<img src={LOGO} alt="" style={{height:26,filter:"brightness(0) invert(1)"}} />:<span style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:700}}>Hideout</span>}
-          <span style={{color:"var(--color-body-muted)",fontSize:12}}>{locations.find(l=>l.id===branch)?.name?.replace(/\s*\(.*\)/,"")||""}</span>
+          <LocMenu locations={locations} branch={branch} onSwitch={switchBranch} />
         </div>
         <div style={{order:2,marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
           <div style={{display:"inline-flex",background:"rgba(255,255,255,.08)",borderRadius:999,padding:2}}>
             {[["chef","Chef"],["barista","Barista"]].map(([k,l])=>(<button key={k} onClick={()=>k!==department&&switchDept(k)} style={{border:"none",cursor:"pointer",borderRadius:999,padding:"5px 12px",fontSize:12,fontWeight:600,background:department===k?"var(--color-primary)":"transparent",color:department===k?"#fff":"var(--color-body-muted)"}}>{l}</button>))}
           </div>
+          <button onClick={()=>{ try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }} title="Staff board" style={{background:"rgba(255,255,255,.08)",border:"none",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:999}}>Board</button>
           <button onClick={refresh} title="Refresh" style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center"}}><Ico name="refresh" size={16} /></button>
           <span title={sync.err||"synced"} style={{width:8,height:8,borderRadius:"50%",background:sync.ok===false?"#ff8a80":sync.ok?"#74d99f":"#c9b",display:"inline-block"}}></span>
-          <button onClick={()=>{ if(confirm("Lock this device? You’ll need the passcode again.")) location.reload(); }} title="Lock" style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center"}}><Ico name="power" size={15} /></button>
+          <PowerMenu />
         </div>
         {/* tab bar */}
         <div style={{order:3,width:"100%",display:"flex",gap:4,overflowX:"auto",scrollbarWidth:"none",paddingTop:4}}>
@@ -2195,6 +2359,9 @@ function App(){
         <p style={{margin:"4px 0 0",color:"var(--color-body-muted)",fontSize:"clamp(12px,2.3vw,14px)",letterSpacing:"-0.1px"}}>{TT[tab][1]}{["daily","order","stock"].includes(tab)?" · "+(locations.find(l=>l.id===branch)?.name?.replace(/\s*\(.*\)/,"")||""):""}</p>
       </div>
     </div>
+
+    {/* Instagram-style staff story row — filled by postcards.js (persists across tab changes) */}
+    <div id="pc-tray-host"></div>
 
     {sync.ok===false && <div style={{background:"#fbeceb",color:"#b23b3b",padding:"8px 16px",fontSize:12.5,textAlign:"center"}}>Showing last-known data — couldn’t reach the backend ({sync.err}). Check Settings › Connection.</div>}
 
@@ -2484,6 +2651,96 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",mount); else mount();
   window.HideoutPostcards={open:open, compose:openCompose};
+})();
+</script>
+<!-- ================= Drag-to-pan (grab to scroll) — desktop mouse convenience, 2026-07-24 ================= -->
+<script>
+/* Grab empty background and drag to scroll the page. Mouse/pen only (touch keeps native scroll).
+   Fail-safe: fully wrapped in IIFE + try/catch; any error leaves the app untouched.
+   Does NOT touch the React tree; pure document-level vanilla. */
+(function(){
+  "use strict";
+  try{
+    if(window.__HIDEOUT_DRAGPAN__) return; window.__HIDEOUT_DRAGPAN__=true;
+
+    var THRESH=6; // px of movement before a click becomes a pan
+    // Elements / ancestors that own their own pointer interaction — never hijack these.
+    var SKIP="a,button,input,textarea,select,label,option,summary,svg,img,video,canvas,"+
+             "[contenteditable],[contenteditable=true],[draggable=true],[role=slider],[role=radiogroup],"+
+             ".pc-card,#pc-feed,#pc-modal,#pc-overlay,.pc-abs,.pc-pinbtn,"+
+             "[data-dnd],[data-drag],.kanban,.dish-card,.cursor-grab,.tilt,.vbtn-card,.twk-panel";
+
+    var armed=false, panning=false, sx=0, sy=0, pid=-1, selPrev="", curPrev="";
+
+    function isScrollable(el){
+      if(!el||el===document.body||el===document.documentElement) return false;
+      var st;
+      try{ st=getComputedStyle(el); }catch(_){ return false; }
+      var oy=st.overflowY, ox=st.overflowX;
+      var vy=(oy==="auto"||oy==="scroll")&&el.scrollHeight>el.clientHeight+1;
+      var vx=(ox==="auto"||ox==="scroll")&&el.scrollWidth>el.clientWidth+1;
+      return vy||vx;
+    }
+
+    function onDown(e){
+      try{
+        if(panning||armed) return;
+        if(e.pointerType==="touch") return;   // mobile keeps native scroll
+        if(e.button!==0) return;              // primary button only
+        var t=e.target;
+        if(!t||!t.closest) return;
+        if(t.closest(SKIP)) return;           // interactive / existing-drag element
+        // Bail if grab starts inside any inner scroll container — keep native behaviour intact.
+        var n=t;
+        while(n&&n!==document.body&&n!==document.documentElement){
+          if(isScrollable(n)) return;
+          n=n.parentElement;
+        }
+        armed=true; sx=e.clientX; sy=e.clientY; pid=(e.pointerId==null?-1:e.pointerId);
+      }catch(_){ armed=false; }
+    }
+
+    function begin(){
+      panning=true;
+      try{
+        var de=document.documentElement;
+        selPrev=de.style.userSelect; curPrev=de.style.cursor;
+        de.style.userSelect="none"; de.style.cursor="grabbing";
+        var s=window.getSelection&&window.getSelection(); if(s&&s.removeAllRanges) s.removeAllRanges();
+      }catch(_){}
+    }
+
+    function onMove(e){
+      try{
+        if(!armed) return;
+        if(pid!==-1&&e.pointerId!=null&&e.pointerId!==pid) return;
+        var dx=e.clientX-sx, dy=e.clientY-sy;
+        if(!panning){
+          if(Math.abs(dx)<THRESH&&Math.abs(dy)<THRESH) return; // still a click
+          begin();
+        }
+        window.scrollBy(-dx,-dy);
+        sx=e.clientX; sy=e.clientY;
+        if(e.cancelable) e.preventDefault();
+      }catch(_){}
+    }
+
+    function end(){
+      try{
+        if(panning){
+          var de=document.documentElement;
+          de.style.userSelect=selPrev; de.style.cursor=curPrev;
+        }
+      }catch(_){}
+      armed=false; panning=false; pid=-1;
+    }
+
+    document.addEventListener("pointerdown",onDown,true);
+    document.addEventListener("pointermove",onMove,{passive:false});
+    document.addEventListener("pointerup",end,true);
+    document.addEventListener("pointercancel",end,true);
+    window.addEventListener("blur",end);
+  }catch(_){/* never break the app */}
 })();
 </script>
 </body>

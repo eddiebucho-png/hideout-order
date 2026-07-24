@@ -147,7 +147,7 @@
 "#pc-try:hover{transform:translateY(-2px)}#pc-try:active{transform:scale(.97)}",
 ".ic{width:1em;height:1em;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}",
 "#pc-overlay{position:fixed;inset:0;z-index:99999;background:rgba(20,12,4,.48);display:none;align-items:center;justify-content:center;padding:16px;font-family:'SF Pro Text','Inter',system-ui,sans-serif}",
-"#pc-modal{background:var(--pc-paper);width:min(940px,96vw);max-height:92vh;border-radius:24px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 34px 80px rgba(30,18,6,.42);border:1.5px solid rgba(200,26,34,.18)}",
+"#pc-modal{position:relative;background:var(--pc-paper);width:min(940px,96vw);max-height:92vh;border-radius:24px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 34px 80px rgba(30,18,6,.42);border:1.5px solid rgba(200,26,34,.18)}",
 ".pc-head{position:relative;display:flex;align-items:center;gap:12px;padding:16px 18px 15px;background:var(--pc-paper);border-bottom:2px solid var(--pc-ink)}",
 ".pc-head .brand{height:34px;width:34px;object-fit:contain;flex:none}",
 ".pc-titles{display:flex;flex-direction:column;line-height:1;margin-right:auto}",
@@ -155,9 +155,9 @@
 ".pc-head .sub{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--pc-accent);font-weight:700;margin-top:4px}",
 ".pc-x{border:none;background:transparent;cursor:pointer;color:var(--pc-muted);width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:22px;border-radius:50%;line-height:1}",
 ".pc-x:hover{background:rgba(0,0,0,.06);color:var(--pc-ink)}",
-".pc-ribbon{background:var(--pc-accent);overflow:hidden;padding:6px 0}",
-".pc-marq{display:inline-flex;white-space:nowrap;animation:pc-marquee 24s linear infinite;will-change:transform}",
-".pc-marq span{font-family:var(--pc-disp);font-weight:800;font-size:10px;letter-spacing:.22em;color:#fff;opacity:.92;text-transform:uppercase}",
+".pc-ribbon{background:var(--pc-accent);overflow:hidden;display:flex;align-items:center;min-height:26px;padding:0}",
+".pc-marq{display:inline-flex;align-items:center;white-space:nowrap;animation:pc-marquee 24s linear infinite;will-change:transform;line-height:1}",
+".pc-marq span{display:inline-flex;align-items:center;font-family:var(--pc-disp);font-weight:800;font-size:10px;line-height:26px;letter-spacing:.22em;color:#fff;opacity:.92;text-transform:uppercase}",
 ".pc-ribbon b{opacity:.55;margin:0 10px;font-weight:800}",
 /* P2: marquee flows to the LEFT (from 0 → -50%; track is 2x-duplicated so it loops seamlessly). */
 "@keyframes pc-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}",
@@ -181,6 +181,10 @@
 ".pc-card img{width:100%;border-radius:4px;margin-top:11px;display:block;border:1px solid rgba(36,29,22,.1)}",
 ".pc-when{display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-family:var(--pc-disp);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--pc-muted);border:1.5px solid rgba(154,139,118,.4);border-radius:3px;padding:3px 7px;transform:rotate(-1.5deg)}",
 ".pc-when .stamp{width:9px;height:9px;border-radius:50%;background:var(--pc-accent);opacity:.7}",
+/* Card footer: timestamp (left) and Edit/Remove actions (right) on one row so they never overlap. */
+".pc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}",
+".pc-foot .pc-when{margin-top:0}",
+".pc-acts{display:flex;align-items:center;gap:2px;flex:none;margin-left:auto}",
 ".pc-pinbtn{position:absolute;top:-13px;right:16px;width:44px;height:44px;border:none;background:transparent;cursor:pointer;display:flex;align-items:flex-start;justify-content:center;padding:0;transition:transform .18s ease}",
 ".pc-pinbtn:hover{transform:translateY(-2px)}",
 ".tack{width:26px;height:30px;position:relative}",
@@ -189,7 +193,7 @@
 ".tack-flat{width:22px;height:22px;border-radius:50%;border:2px solid rgba(154,139,118,.5);position:relative;opacity:.6;margin-top:2px}",
 ".tack-flat::after{content:'';position:absolute;left:50%;top:50%;width:5px;height:5px;border-radius:50%;background:rgba(154,139,118,.6);transform:translate(-50%,-50%)}",
 ".pc-pinbtn:hover .tack-flat{opacity:.95;border-color:var(--pc-accent)}",
-".pc-del{position:absolute;bottom:8px;right:10px;border:none;background:transparent;color:var(--pc-muted);cursor:pointer;font-size:10.5px;font-family:var(--pc-disp);font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.65;padding:10px 10px;border-radius:8px;min-height:36px}",
+".pc-del{border:none;background:transparent;color:var(--pc-muted);cursor:pointer;font-size:10.5px;font-family:var(--pc-disp);font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.65;padding:8px 9px;border-radius:8px;min-height:36px}",
 ".pc-del:hover{opacity:1;color:var(--pc-accent-2);background:rgba(200,26,34,.08)}",
 ".pc-pinbtn:hover .tack-flat::after{background:var(--pc-accent)}",
 ".pc-lbl{display:block;font-family:var(--pc-disp);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--pc-ink);margin:14px 0 6px;font-weight:800}",
@@ -230,6 +234,15 @@
 ".pc-empty{text-align:center;color:var(--pc-muted);padding:34px 10px;font-size:14px}",
 ".pc-tabs{max-width:430px;margin-left:auto;margin-right:auto}",
 ".pc-write{max-width:430px;margin:0 auto}",
+/* FAB group: floating + / emoji buttons anchored to the bottom-right of the modal (feed view only). */
+"#pc-fabgroup{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;align-items:center;gap:12px}",
+"#pc-fabgroup.hidden{display:none}",
+"#pc-addfab{width:56px;height:56px;border:none;border-radius:999px;background:var(--pc-accent);color:#fff;font-size:32px;font-weight:400;line-height:1;cursor:pointer;box-shadow:0 12px 26px rgba(150,16,21,.42);display:flex;align-items:center;justify-content:center;transition:transform .18s ease,box-shadow .18s ease}",
+"#pc-addfab:hover{transform:translateY(-2px) scale(1.05);box-shadow:0 16px 30px rgba(150,16,21,.5)}#pc-addfab:active{transform:scale(.95)}",
+"#pc-emojifab{width:46px;height:46px;border:1.5px solid rgba(200,26,34,.22);border-radius:999px;background:var(--pc-paper);color:var(--pc-ink);font-size:22px;line-height:1;cursor:pointer;box-shadow:0 8px 20px rgba(30,18,6,.26);display:flex;align-items:center;justify-content:center;transition:transform .18s ease}",
+"#pc-emojifab:hover{transform:translateY(-2px)}#pc-emojifab:active{transform:scale(.95)}",
+".pc-backbtn{border:none;background:transparent;color:var(--pc-muted);font-family:var(--pc-disp);font-weight:800;font-size:12px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;padding:6px 0;margin:2px 0 4px;display:inline-flex;align-items:center;gap:6px}",
+".pc-backbtn:hover{color:var(--pc-accent)}",
 "#pc-feed{position:relative;min-height:150vh}",
 "#pc-flow{max-width:430px}",
 ".pc-card.pc-abs{position:absolute;width:min(330px,72%);margin:0;box-shadow:0 10px 24px rgba(30,18,6,.22)}",
@@ -246,10 +259,10 @@
 ".pc-card.pc-resizing{z-index:1000;box-shadow:0 22px 44px rgba(30,18,6,.38)}",
 ".pc-scalebadge{position:absolute;top:4px;right:4px;background:var(--pc-ink);color:#fff;font-family:var(--pc-disp);font-weight:800;font-size:11px;letter-spacing:.04em;padding:3px 7px;border-radius:6px;z-index:7;pointer-events:none}",
 /* ---- P3: edit button (author/manager) ---- */
-".pc-edit{position:absolute;bottom:8px;right:78px;border:none;background:transparent;color:var(--pc-muted);cursor:pointer;font-size:10.5px;font-family:var(--pc-disp);font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.65;padding:10px 10px;border-radius:8px;min-height:36px}",
+".pc-edit{border:none;background:transparent;color:var(--pc-muted);cursor:pointer;font-size:10.5px;font-family:var(--pc-disp);font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.65;padding:8px 9px;border-radius:8px;min-height:36px}",
 ".pc-edit:hover{opacity:1;color:var(--pc-accent);background:rgba(200,26,34,.08)}",
-".pc-card.pc-abs .pc-del{right:auto;left:10px}",
-".pc-card.pc-abs .pc-edit{right:auto;left:74px}",
+/* Placed (free-positioned) cards carry a bottom-right resize handle — keep the footer actions clear of it. */
+".pc-card.pc-abs .pc-foot{padding-right:38px}",
 ".pc-editbadge{display:inline-block;margin-left:6px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--pc-muted);opacity:.7}",
 /* ---- P4: sticker overlay on posted photos ---- */
 ".pc-stklayer{position:absolute;inset:0;pointer-events:none;z-index:2}",
@@ -354,15 +367,16 @@
   function render(){
     var body=document.getElementById("pc-bodyc"); if(!body) return;
     if(!me){
+      var fg0=document.getElementById("pc-fabgroup"); if(fg0) fg0.classList.add("hidden");
       body.innerHTML='<div class="pc-signin"><p style="color:var(--pc-muted);font-size:14px;margin-bottom:18px;line-height:1.5">Sign in with your Hideout Google account to send and read postcards.</p><button class="pc-btn" id="pc-signin-b" style="width:auto;display:inline-flex">Sign in with Google</button></div>';
       var b=document.getElementById("pc-signin-b"); if(b) b.onclick=signIn;
       return;
     }
-    body.innerHTML=
-      '<div class="pc-tabs"><button class="pc-tab '+(state.tab==="feed"?"on":"")+'" data-t="feed">Postcards</button><button class="pc-tab '+(state.tab==="write"?"on":"")+'" data-t="write">Write one</button></div>'+
-      '<div id="pc-tabc"></div>';
-    Array.prototype.forEach.call(body.querySelectorAll(".pc-tab"),function(el){ el.onclick=function(){ var t=el.getAttribute("data-t"); if(t==="write") state.editId=null; state.tab=t; render(); }; });
-    if(state.tab==="write") renderWrite(); else { renderFeedInto(); }
+    body.innerHTML='<div id="pc-tabc"></div>';
+    /* Tab bar removed — feed is the default view; the "+" FAB group (bottom-right) opens the write form. */
+    var fg=document.getElementById("pc-fabgroup");
+    if(state.tab==="write"){ if(fg) fg.classList.add("hidden"); renderWrite(); }
+    else { if(fg) fg.classList.remove("hidden"); renderFeedInto(); }
   }
 
   /* Instagram/Canva-style photo editor: freehand draw + draggable text, baked into the image on send. */
@@ -419,6 +433,7 @@
     var sw=THEMES.map(function(t){ return '<div class="pc-sw'+(t.id===state.themeId?" sel":"")+'" data-th="'+t.id+'" style="background:'+t.bg+'"></div>'; }).join("");
     c.innerHTML=
       '<div class="pc-write">'+
+      '<button type="button" class="pc-backbtn" id="pc-back">← Back to board</button>'+
       (editing
         ? '<div class="pc-pinlbl" style="justify-content:space-between">Editing your postcard<a href="#" id="pc-canceledit" style="color:var(--pc-muted);text-transform:none;letter-spacing:0;font-weight:700">cancel</a></div>'
         : '<label class="pc-lbl">To</label><select class="pc-sel" id="pc-to"><option value="">Everyone (open)</option>'+opts+'</select>')+
@@ -434,6 +449,7 @@
     var fileEl=document.getElementById("pc-file");
     if(fileEl){ fileEl.onchange=function(){ var f=(fileEl.files||[])[0]; if(f){ makeEditor(f); } else { editor=null; var w=document.getElementById("pc-ed"); if(w){ w.style.display="none"; w.innerHTML=""; } } }; }
     var ce=document.getElementById("pc-canceledit"); if(ce) ce.onclick=function(e){ e.preventDefault(); state.editId=null; state.tab="feed"; render(); };
+    var bk=document.getElementById("pc-back"); if(bk) bk.onclick=function(){ state.editId=null; state.tab="feed"; render(); };
     var out=document.getElementById("pc-out"); if(out) out.onclick=function(e){ e.preventDefault(); signOut(); };
     var sb=document.getElementById("pc-send");
     sb.onclick=function(){
@@ -597,9 +613,13 @@
         stickerLayerHtml(stk)+
         (mine?'<button class="pc-stkbtn" data-stk="'+esc(d._id)+'" title="Add stickers" aria-label="Add stickers">😀</button>':"")+
       '</div>'):"")+
-      '<div class="pc-when"><span class="stamp"></span>'+esc(fmtTime(d.createdAt))+(d.editedAt?'<span class="pc-editbadge">edited</span>':"")+'</div>'+
-      (mine?'<button class="pc-edit" data-edit="'+esc(d._id)+'" aria-label="Edit postcard">Edit</button>':"")+
-      (mine?'<button class="pc-del" data-del="'+esc(d._id)+'" aria-label="Remove postcard">Remove</button>':"")+
+      '<div class="pc-foot">'+
+        '<div class="pc-when"><span class="stamp"></span>'+esc(fmtTime(d.createdAt))+(d.editedAt?'<span class="pc-editbadge">edited</span>':"")+'</div>'+
+        (mine?('<div class="pc-acts">'+
+          '<button class="pc-edit" data-edit="'+esc(d._id)+'" aria-label="Edit postcard">Edit</button>'+
+          '<button class="pc-del" data-del="'+esc(d._id)+'" aria-label="Remove postcard">Remove</button>'+
+        '</div>'):"")+
+      '</div>'+
       (pos?'<span class="pc-resize" data-resize="'+esc(d._id)+'" title="Drag to resize" aria-hidden="true"></span>':"")+
     '</div>';
   }
@@ -1014,6 +1034,7 @@
       '<div class="pc-head"><img class="brand" src="'+LOGO+'" alt="The Hideout" onerror="this.style.display=\'none\'"><div class="pc-titles"><h3>Postcards</h3><span class="sub">The Hideout · staff board</span></div><button class="pc-x" id="pc-close" aria-label="Close">×</button></div>'+
       '<div class="pc-ribbon"><div class="pc-marq"><span>The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind<b>✦</b></span><span>The Hideout staff board<b>✦</b>Say something kind<b>✦</b>The Hideout staff board<b>✦</b>Say something kind<b>✦</b></span></div></div>'+
       '<div class="pc-body pc-grid"><div id="pc-bodyc"></div></div>'+
+      '<div id="pc-fabgroup" class="hidden"><button id="pc-emojifab" type="button" title="Write a postcard (add a photo &amp; stickers)" aria-label="Write a postcard with a photo and stickers">😊</button><button id="pc-addfab" type="button" title="Write a postcard" aria-label="Write a postcard">+</button></div>'+
     '</div>';
     document.body.appendChild(ov);
     /* Always-on story tray at the very top of the page. Inserted as body's FIRST child in
@@ -1035,6 +1056,9 @@
     /* Intentionally NO backdrop-click-to-close — an accidental outside click must never
        throw away a postcard someone is writing. Close only via the × button (or Esc). */
     document.getElementById("pc-close").onclick=close;
+    /* FAB group → open the write form (openCompose logic, modal already open). Emoji button leads to the same form (photo/stickers live inside it). */
+    var addfab=document.getElementById("pc-addfab"); if(addfab) addfab.onclick=function(){ state.editId=null; state.tab="write"; render(); };
+    var emofab=document.getElementById("pc-emojifab"); if(emofab) emofab.onclick=function(){ state.editId=null; state.tab="write"; render(); };
     document.addEventListener("keydown",function(e){
       if(e.key==="Escape"){
         var so=document.getElementById("pc-story"); if(so&&so.style.display==="flex"){ closeStory(); return; }

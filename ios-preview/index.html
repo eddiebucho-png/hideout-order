@@ -1936,15 +1936,26 @@ function ProfileCard(){
   const email = (me&&me.email) ? String(me.email).toLowerCase() : "";
   const [rec,setRec]=useState(null);   // null=loading | "noauth" | "nodb" | {name,photoURL}
   const [busy,setBusy]=useState(false);
+  const [nameDraft,setNameDraft]=useState(""); const [savingName,setSavingName]=useState(false);
   const load=()=>{
     if(!email){ setRec("noauth"); return; }
     const db=gdb(); if(!db){ setRec("nodb"); return; }
     db.collection("allowlist").doc(email).get().then(snap=>{
       const v=(snap&&snap.exists)?(snap.data()||{}):{};
-      setRec({name:v.name||(me&&me.name)||email, photoURL:(typeof v.photoURL==="string"?v.photoURL:"")});
-    }).catch(()=>setRec({name:(me&&me.name)||email, photoURL:""}));
+      const nm=v.name||(me&&me.name)||email; setRec({name:nm, photoURL:(typeof v.photoURL==="string"?v.photoURL:"")}); setNameDraft(nm);
+    }).catch(()=>{ const nm=(me&&me.name)||email; setRec({name:nm, photoURL:""}); setNameDraft(nm); });
   };
   useEffect(load,[]);
+  const saveName=()=>{
+    const nm=String(nameDraft||"").trim(); if(!nm){ toast("Name can't be empty",true); return; }
+    if(nm===(rec&&rec.name)){ return; }
+    const db=gdb(); if(!db){ toast("No database connection",true); return; }
+    setSavingName(true);
+    db.collection("allowlist").doc(email).set({name:nm,nameBy:email,nameAt:Date.now()},{merge:true}).then(()=>{
+      setSavingName(false); setRec(r=>({...(r||{}),name:nm})); toast("Name updated ✓");
+      try{ if(window.HideoutUser) window.HideoutUser.name=nm; }catch(_){}
+    }).catch(e=>{ setSavingName(false); toast("Save failed: "+e.message,true); });
+  };
   const initials=(nm)=>{ const n=String(nm||email||"?").trim(); const p=n.split(/\s+/); return (p.length>=2?(p[0][0]+p[1][0]):n.slice(0,2)).toUpperCase(); };
   const pickFile=(file)=>{
     if(!file) return;
@@ -1978,8 +1989,8 @@ function ProfileCard(){
     ? <img src={rec.photoURL} alt="" style={{width:96,height:96,borderRadius:"50%",objectFit:"cover",border:"2px solid var(--color-hairline-alpha)"}} onError={e=>{e.target.style.display="none";}} />
     : <div style={{width:96,height:96,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-surface-black)",color:"#fff",fontFamily:"var(--font-display)",fontWeight:900,fontSize:34}}>{initials(rec.name)}</div>;
   return <Card style={{maxWidth:420,margin:"0 auto"}}>
-    <SectionLabel>Your profile photo</SectionLabel>
-    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 14px"}}>This is the avatar your team sees on the staff postcards board. Signed in as {email||"—"}.</p>
+    <SectionLabel>Your profile</SectionLabel>
+    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 14px"}}>Set the photo and name your team sees on the staff postcards board. Signed in as {email||"—"}.</p>
     <div style={{display:"flex",alignItems:"center",gap:16}}>
       {avatar}
       <div style={{flex:1}}>
@@ -1988,6 +1999,14 @@ function ProfileCard(){
           <span className="vbtn-card" style={{display:"inline-block",border:"1px solid var(--color-hairline-alpha)",borderRadius:10,padding:"10px 16px",fontWeight:600,cursor:busy?"default":"pointer",background:"var(--color-surface-black)",color:"#fff",opacity:busy?0.6:1}}>{busy?"Uploading…":(rec.photoURL?"Change photo":"Upload photo")}</span>
         </label>
         <div style={{fontSize:11.5,color:"var(--color-ink-muted-48)",marginTop:8,lineHeight:1.5}}>Square crop, stored on the shared image CDN. No password needed — you can only change your own.</div>
+      </div>
+    </div>
+    <div style={{marginTop:18}}>
+      <SectionLabel>Display name</SectionLabel>
+      <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 8px"}}>The name shown next to your posts and photo.</p>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <input value={nameDraft} onChange={e=>setNameDraft(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName()} maxLength={40} placeholder="Your name" style={{...inp,flex:1}} disabled={savingName} />
+        <Btn onClick={saveName} disabled={savingName||!String(nameDraft||"").trim()||String(nameDraft||"").trim()===(rec.name||"")}>{savingName?"Saving…":"Save"}</Btn>
       </div>
     </div>
   </Card>;
@@ -2309,6 +2328,7 @@ function App(){
           <div style={{display:"inline-flex",background:"rgba(255,255,255,.08)",borderRadius:999,padding:2}}>
             {[["chef","Chef"],["barista","Barista"]].map(([k,l])=>(<button key={k} onClick={()=>k!==department&&switchDept(k)} style={{border:"none",cursor:"pointer",borderRadius:999,padding:"5px 12px",fontSize:12,fontWeight:600,background:department===k?"var(--color-primary)":"transparent",color:department===k?"#fff":"var(--color-body-muted)"}}>{l}</button>))}
           </div>
+          <button onClick={()=>{ try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }} title="Staff board" style={{background:"rgba(255,255,255,.08)",border:"none",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:999}}>Board</button>
           <button onClick={refresh} title="Refresh" style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center"}}><Ico name="refresh" size={16} /></button>
           <span title={sync.err||"synced"} style={{width:8,height:8,borderRadius:"50%",background:sync.ok===false?"#ff8a80":sync.ok?"#74d99f":"#c9b",display:"inline-block"}}></span>
           <PowerMenu />

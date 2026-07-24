@@ -1957,7 +1957,6 @@ function ProfileCard(){
   useEffect(load,[]);
   const saveName=()=>{
     const nm=String(nameDraft||"").trim(); if(!nm){ toast("Name can't be empty",true); return; }
-    if(nm===(rec&&rec.name)){ return; }
     const db=gdb(); if(!db){ toast("No database connection",true); return; }
     setSavingName(true);
     db.collection("allowlist").doc(email).set({name:nm,nameBy:email,nameAt:Date.now()},{merge:true}).then(()=>{
@@ -2015,7 +2014,7 @@ function ProfileCard(){
       <p style={{fontSize:12,color:"var(--color-ink-muted-48)",margin:"0 0 8px"}}>The name shown next to your posts and photo.</p>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <input value={nameDraft} onChange={e=>setNameDraft(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName()} maxLength={40} placeholder="Your name" style={{...inp,flex:1}} disabled={savingName} />
-        <Btn onClick={saveName} disabled={savingName||!String(nameDraft||"").trim()||String(nameDraft||"").trim()===(rec.name||"")}>{savingName?"Saving…":"Save"}</Btn>
+        <Btn onClick={saveName} disabled={savingName||!String(nameDraft||"").trim()}>{savingName?"Saving…":(String(nameDraft||"").trim()===(rec.name||"")?"Saved":"Save")}</Btn>
       </div>
     </div>
   </Card>;

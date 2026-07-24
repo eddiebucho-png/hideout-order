@@ -35,6 +35,21 @@
   function theme(id){ for(var i=0;i<THEMES.length;i++){ if(THEMES[i].id===id) return THEMES[i]; } return THEMES[0]; }
   function fmtTime(ts){ try{ var d=ts&&ts.toDate?ts.toDate():(ts?new Date(ts):new Date()); return d.toLocaleString("en-AU",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
 
+  /* AUTH GATE (2026-07-24): the host app adds html.hideout-authed after its own Google-login
+     gate is cleared. All staff widgets stay hidden (CSS) until then. Secure-by-default: if the
+     class check throws we treat the session as NOT authed (widgets stay hidden). */
+  function isAuthed(){ try{ return document.documentElement.classList.contains("hideout-authed"); }catch(e){ return false; } }
+  /* When auth is lost (logout / gate screen shown), force any open modal or story viewer shut
+     and re-render the tray so its contents are cleared. Fail-safe: wrapped so it can't break the app. */
+  function enforceAuthGate(){
+    if(!isAuthed()){
+      var o=document.getElementById("pc-overlay"); if(o) o.style.display="none";
+      var s=document.getElementById("pc-story"); if(s) s.style.display="none";
+      storyState=null;
+    }
+    try{ renderTray(); }catch(e){}
+  }
+
   function initFb(){
     if(!window.firebase||!firebase.initializeApp){ return false; }
     try{
@@ -141,6 +156,10 @@
 /* P4: sticker text font presets (loaded once, small subset for size). */
 "@import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Playfair+Display:wght@700;900&family=Space+Mono:wght@700&family=Caveat:wght@700&display=swap');",
 ":root{--pc-cream:#f6ede1;--pc-paper:#fdf8ef;--pc-ink:#241d16;--pc-accent:#c81a22;--pc-accent-2:#8f1015;--pc-muted:#9a8b76;--pc-line:rgba(200,26,34,.11);--pc-line-strong:rgba(200,26,34,.16);--pc-disp:'Archivo',system-ui,sans-serif}",
+/* ---- AUTH GATE (2026-07-24): staff widgets are hidden until the host app adds html.hideout-authed (after its Google-login gate). Default = hidden; revealed only when authed. ---- */
+"#pc-fab,#pc-try,#pc-toptray{display:none!important}",
+"html.hideout-authed #pc-fab,html.hideout-authed #pc-try{display:flex!important}",
+"html:not(.hideout-authed) #pc-tray-host,html:not(.hideout-authed) #pc-overlay,html:not(.hideout-authed) #pc-story{display:none!important}",
 "#pc-fab{position:fixed;left:20px;bottom:20px;z-index:99998;width:60px;height:60px;border:none;border-radius:999px;cursor:pointer;background:var(--pc-accent);color:#fff;box-shadow:0 12px 26px rgba(150,16,21,.42);display:flex;align-items:center;justify-content:center;transition:transform .18s ease,box-shadow .18s ease}",
 "#pc-fab:hover{transform:translateY(-2px) scale(1.04);box-shadow:0 16px 30px rgba(150,16,21,.5)}#pc-fab:active{transform:scale(.96)}",
 "#pc-try{position:fixed;left:20px;bottom:92px;z-index:99998;border:none;border-radius:999px;cursor:pointer;background:var(--pc-ink);color:var(--pc-cream);font-family:var(--pc-disp);font-weight:800;font-size:13px;letter-spacing:.06em;padding:11px 17px 11px 14px;box-shadow:0 8px 20px rgba(20,12,4,.3);display:flex;align-items:center;gap:7px;transition:transform .18s ease}",
@@ -970,20 +989,26 @@
      page-top tray (#pc-toptray). Each is guarded independently so either can be absent. */
   function renderTray(){
     var html=trayHtml();
+    var authed=isAuthed(); /* AUTH GATE: only expose tray content once the host app is authed */
     var host=document.getElementById("pc-tray-c");
-    if(host){ host.innerHTML=html; bindTray(host); }
+    if(host){ if(html&&me&&authed){ host.innerHTML=html; bindTray(host); } else { host.innerHTML=""; } }
     /* App-provided top slot under the header (Instagram-style). Preferred target: the host
        app renders an empty <div id="pc-tray-host"> just below the title band and keeps it
-       across tab switches; postcards only fills its innerHTML. Empty → :empty CSS hides it. */
+       across tab switches; postcards only fills its innerHTML. Empty → :empty CSS hides it.
+       When this slot exists it WINS: remove the legacy body-top strip so the tray never
+       renders twice (the mount-time strip is created before React renders this slot). */
     var slot=document.getElementById("pc-tray-host");
-    if(slot){
-      if(html&&me){ slot.innerHTML=html; bindTray(slot); }
-      else { slot.innerHTML=""; }
-    }
     var top=document.getElementById("pc-toptray"), topc=document.getElementById("pc-toptray-c");
+    if(slot){
+      if(top){ try{ top.parentNode&&top.parentNode.removeChild(top); }catch(e){ try{ top.style.setProperty("display","none","important"); }catch(_){} } }
+      if(html&&me&&authed){ slot.innerHTML=html; bindTray(slot); }
+      else { slot.innerHTML=""; }
+      return;
+    }
     if(top&&topc){
-      if(html&&me){ topc.innerHTML=html; bindTray(topc); top.style.display="block"; }
-      else { topc.innerHTML=""; top.style.display="none"; }
+      /* setProperty(...,"important") so this inline value wins over the base #pc-toptray{display:none!important} gate. */
+      if(html&&me&&authed){ topc.innerHTML=html; bindTray(topc); top.style.setProperty("display","block","important"); }
+      else { topc.innerHTML=""; top.style.setProperty("display","none","important"); }
     }
   }
   var storyState=null;
@@ -1080,6 +1105,11 @@
         e.preventDefault(); doUndo();
       }
     });
+    /* AUTH GATE: react to the host app toggling html.hideout-authed (custom event) and, as a
+       fail-safe, observe the <html> class directly. Either way, losing auth closes any open
+       modal/story and clears the tray; gaining auth lets renderTray fill it. */
+    try{ document.addEventListener("hideout-authed", enforceAuthGate); }catch(e){}
+    try{ var _authMo=new MutationObserver(function(){ enforceAuthGate(); }); _authMo.observe(document.documentElement,{attributes:true,attributeFilter:["class"]}); }catch(e){}
     if(!initFb()){ if(!booting){ booting=true; var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } }
   }
 

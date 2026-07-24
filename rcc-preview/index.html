@@ -3167,6 +3167,8 @@ __ds_ns.StoreCard = __ds_scope.StoreCard;
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
 "#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
+/* AUTH GATE (2026-07-24): hide the chatbot launcher/panel unless the app is authed (belt-and-suspenders; the launcher is also only mounted after login). */
+"html:not(.hideout-authed) #hb-fab,html:not(.hideout-authed) #hb-panel{display:none!important}",
 "#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
 "#hb-fab:active{transform:scale(.96)}",
 "#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
@@ -4654,8 +4656,10 @@ function App(){
       remember:(text)=>{ const t=(typeof text==="string"?text:JSON.stringify(text)).trim(); if(!t) return; update(s=>{ if(!Array.isArray(s.botMemory)) s.botMemory=[]; if(s.botMemory.some(n=>((typeof n==="string"?n:(n&&n.text)||"").toLowerCase()===t.toLowerCase()))) return; s.botMemory.push({ts:Date.now(), text:t, by:"bot"}); if(s.botMemory.length>300) s.botMemory=s.botMemory.slice(-300); }); },
       logQuestion:(e)=>{ update(s=>{ if(!Array.isArray(s.botLog)) s.botLog=[]; s.botLog.push(e); if(s.botLog.length>400) s.botLog=s.botLog.slice(-400); }); }
     };
-    if(window.HideoutBot) window.HideoutBot.mount({ source:"rcc", logo:()=>window.HIDEOUT_LOGO, backendUrl:()=>{ const DEF="https://script.google.com/macros/s/AKfycbyT4pJ5QuF1HwLCBzbSS2eXcQoAwCNjeE2WqNucJcG20JQ5hlG3BBuBLWDA50llNZCh/exec"; try{ return (JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}").backendUrl)||DEF; }catch(e){ return DEF; } }, token:()=>{ try{ return (JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}").token)||""; }catch(e){ return ""; } }, greeting:"Ask me about any dish \u2014 ingredients, method, allergens or cost. Or say \u201cmake a recipe for\u2026\u201d and I\u2019ll draft one you can save." });
   }, []);
+  const botMounted=useRef(false);
+  // AUTH GATE (2026-07-24): flag the document authed + mount the AI chatbot only once the user is an allowed, signed-in staff member (me is a valid object, not null/"denied"/"error"). Fires when me changes; never re-mounts.
+  useEffect(()=>{ const ok=!!(me&&typeof me==="object"); try{ document.documentElement.classList.toggle("hideout-authed", ok); document.dispatchEvent(new Event("hideout-authed")); }catch(e){} if(ok && !botMounted.current && window.HideoutBot){ botMounted.current=true; window.HideoutBot.mount({ source:"rcc", logo:()=>window.HIDEOUT_LOGO, backendUrl:()=>{ const DEF="https://script.google.com/macros/s/AKfycbyT4pJ5QuF1HwLCBzbSS2eXcQoAwCNjeE2WqNucJcG20JQ5hlG3BBuBLWDA50llNZCh/exec"; try{ return (JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}").backendUrl)||DEF; }catch(e){ return DEF; } }, token:()=>{ try{ return (JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}").token)||""; }catch(e){ return ""; } }, greeting:"Ask me about any dish \u2014 ingredients, method, allergens or cost. Or say \u201cmake a recipe for\u2026\u201d and I\u2019ll draft one you can save." }); } }, [me]);
   useEffect(()=>{ // Push a compact live snapshot to the IOS backend so BOTH chatbots see recipe/cost data (fire-and-forget)
     if(cloud.status==="on" && !hydrated.current) return; // don't overwrite KV with pre-hydration (possibly empty) state
     const t=setTimeout(()=>{ try{

@@ -862,6 +862,8 @@ window.OrderCore = {
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
 "#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
+/* AUTH GATE (2026-07-24): hide the chatbot launcher/panel unless the host app is authed (belt-and-suspenders; the launcher is also only mounted after login). */
+"html:not(.hideout-authed) #hb-fab,html:not(.hideout-authed) #hb-panel{display:none!important}",
 "#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
 "#hb-fab:active{transform:scale(.96)}",
 "#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
@@ -2243,7 +2245,11 @@ function App(){
   const corePromise=useRef(null);
   const ensureCore=(d)=>{ if(!corePromise.current) corePromise.current=loadCore(d); return corePromise.current; };
 
-  useEffect(()=>{ if(window.HideoutBot) window.HideoutBot.mount({source:"ordering", cfg:()=>window.__ORD_CFG||{}, backendUrl:()=>C.cfg.backendUrl, token:C.API_SECRET, greeting:"Ask about orders, items, allergens, delivery or recipes."}); },[]);
+  const botMounted=useRef(false);
+  // AUTH GATE (2026-07-24): mount the AI chatbot only after the passcode gate is cleared (phase==="app"); never re-mount.
+  useEffect(()=>{ if(phase==="app" && !botMounted.current && window.HideoutBot){ botMounted.current=true; window.HideoutBot.mount({source:"ordering", cfg:()=>window.__ORD_CFG||{}, backendUrl:()=>C.cfg.backendUrl, token:C.API_SECRET, greeting:"Ask about orders, items, allergens, delivery or recipes."}); } },[phase]);
+  // AUTH GATE (2026-07-24): flag the document authed so gated staff widgets (postcards FAB/tray, chatbot) can show. Toggles on every phase change; also notifies postcards.js via the 'hideout-authed' event.
+  useEffect(()=>{ try{ document.documentElement.classList.toggle("hideout-authed", phase==="app"); document.dispatchEvent(new Event("hideout-authed")); }catch(e){} },[phase]);
 
   // initial: set backend from LS, load locations (dept-independent)
   useEffect(()=>{ C.cfg.backendUrl=LS.get("hideout_ord_backendUrl","")||C.DEFAULT_BACKEND_URL;

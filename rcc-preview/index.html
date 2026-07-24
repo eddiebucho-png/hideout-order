@@ -3035,16 +3035,17 @@ body{
   background-color:var(--hd-paper);
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Cg fill='none' stroke='%23ec3013' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' opacity='0.16'%3E%3Cellipse cx='150' cy='150' rx='48' ry='11'/%3E%3Cpath d='M102 150 C104 178 116 196 122 200 C130 205 170 205 178 200 C184 196 196 178 198 150'/%3E%3Cpath d='M132 128 C127 120 137 114 132 104 M150 128 C145 120 155 114 150 104 M168 128 C163 120 173 114 168 104'/%3E%3C/g%3E%3C/svg%3E"),
-    linear-gradient(var(--hd-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--hd-grid) 1px, transparent 1px);
-  background-size:300px 300px, var(--hd-cell) var(--hd-cell), var(--hd-cell) var(--hd-cell);
+    linear-gradient(rgba(236,48,19,.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(236,48,19,.10) 1px, transparent 1px);
+  background-size:300px 300px, 24px 24px, 24px 24px;
   background-position:center top;
   background-attachment:fixed;
   color:var(--hd-ink);
   font-family:var(--hd-font);
 }
 
-/* Modernist rounding: zero the big-radius primitives (0–2px language) */
+/* Modernist rounding: zero-radius language, matching the packaging reference */
+.card,.vbtn-card,button,input,select,textarea,.pill,[class*="radius"]{ border-radius:0!important; }
 .card,[data-density="compact"] .card{ border-radius:0; }
 .inp{ border-radius:0; }
 </style>

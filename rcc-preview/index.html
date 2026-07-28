@@ -12,6 +12,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<!-- Staff Postcards widget — single canonical source, hosted with the Ordering app. Restored 2026-07-28 (was dropped in the 0728 build). -->
+<script src="https://order.hideoutdb.com/postcards.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={theme:{extend:{colors:{stone:{50:"#fbf8f3",100:"#f4eee5",200:"#e9e0d2",300:"#d7c9b5",400:"#a49685",500:"#857867",600:"#5f5546",700:"#463e33",800:"#28221c",900:"#1a1510"}}}}};</script>
 <style>
@@ -4847,7 +4849,12 @@ function App(){
   const branchName = (branches.find(b=>b.id===curBranch)||{}).name||"";
   const dot = cloud.status==="on"?"bg-emerald-500":cloud.status==="error"?"bg-red-500":cloud.status==="signedout"?"bg-amber-400":"bg-stone-400";
   // DEV BYPASS: skip the Google gate when running embedded in the design-editor preview (iframe). Top-level (deployed/local) use keeps the normal login.
-  const DEV_BYPASS=(()=>{ try{ return window.self!==window.top; }catch(e){ return true; } })();
+  const DEV_BYPASS=(()=>{ try{
+    if(window.self===window.top) return false;                 // top-level: always require login
+    var PROD=["hideout-recipe-cost.web.app","hideout-recipe-cost.firebaseapp.com","order.hideoutdb.com"];
+    if(PROD.indexOf(location.hostname)>=0) return false;        // SECURITY 2026-07-28: never bypass the gate on production hosts (iframe clickjack/data-leak guard)
+    return true;                                               // dev/design-editor preview only
+  }catch(e){ return false; } })();
   // In preview-bypass mode, hydrate real data from the Firestore REST endpoint (public read, same doc the cloud sync uses).
   useEffect(()=>{ if(!DEV_BYPASS) return; (async()=>{ try{
     const cfg=loadCfg(); const url="https://firestore.googleapis.com/v1/projects/"+cfg.projectId+"/databases/(default)/documents/"+CLOUD_DOC().col+"/"+CLOUD_DOC().doc+"?key="+cfg.apiKey;

@@ -4229,6 +4229,10 @@ function unitCost(ing){ return (ing.purchaseQty>0) ? ing.purchasePrice / ing.pur
 const U_MASS={mg:0.001,g:1,gram:1,grams:1,kg:1000,kgs:1000,kilo:1000,kilogram:1000,oz:28.3495,lb:453.592}, U_VOL={ml:1,millilitre:1,millilitres:1,cl:10,dl:100,l:1000,litre:1000,liter:1000,litres:1000};
 function normU(u){ return String(u||"").trim().toLowerCase(); }
 function toUnit(qty, from, to){ const f=normU(from), t=normU(to); if(!f||!t||f===t) return qty; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[t]!=null) return qty*tbl[f]/tbl[t]; } return qty; }
+/* True only when toUnit() can really convert between the two units. toUnit falls back to the input
+   value for unknown/cross-family pairs (box↔each, portion↔ml), which is fine for quantities but
+   dangerous for prices — callers that write money must gate on this first. */
+function unitsComparable(from, to){ const f=normU(from), t=normU(to); if(!f||!t) return false; if(f===t) return true; return [U_MASS,U_VOL].some(tbl=>tbl[f]!=null && tbl[t]!=null); }
 const EACH_U=new Set(["each","ea","pc","pcs","piece","pieces","unit","units","ct","count"]);
 function convItemQty(qty, from, ing){ const f=normU(from), to=normU(ing.useUnit); if(!f||!to||f===to) return qty; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return qty*tbl[f]/tbl[to]; } if(ing.gramsPerEach>0){ if(U_MASS[f]!=null && EACH_U.has(to)) return (qty*U_MASS[f])/ing.gramsPerEach; if(EACH_U.has(f) && U_MASS[to]!=null) return (qty*ing.gramsPerEach)/U_MASS[to]; } return qty; }
 function unitResolvable(it, ing){ if(!it||!it.rawUnit||!ing) return true; const f=normU(it.rawUnit), to=normU(ing.useUnit); if(!f||!to||f===to) return true; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return true; } const cross=(U_MASS[f]!=null&&EACH_U.has(to))||(EACH_U.has(f)&&U_MASS[to]!=null); if(cross) return ing.gramsPerEach>0; return false; }
@@ -6284,17 +6288,63 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
     }); });
     return id;
   }
+  /* Apply this invoice line's price to the ingredient it is (now) linked to.
+     row.new is the invoice price per row.unit; the ingredient stores purchasePrice per purchaseQty
+     of its own useUnit — so convert first and keep the ingredient's own unit/pack untouched.
+     Returns {ok, old, next} so the caller can report exactly what changed. */
+  function applyPriceTo(s, tgtId){
+    const g=(s.ingredients||[]).find(x=>x.id===tgtId); if(!g) return {ok:false, why:"not found"};
+    const price=Number(row.new); if(!(price>0)) return {ok:false, why:"no price on this line"};
+    const qty=Math.abs(Number(g.purchaseQty))||1;
+    const from=row.unit||g.useUnit||"", to=g.useUnit||row.unit||"";
+    // toUnit() silently returns the input when two units share no table (box↔each, portion↔ml …).
+    // Without this explicit gate that fallback would be saved as a real price — e.g. $45/box on an
+    // ingredient priced per each with purchaseQty 500 became $22,500. Refuse instead of guessing.
+    if(!unitsComparable(from,to)) return {ok:false, why:"can't convert "+(from||"?")+" → "+(to||"?")};
+    const perUse = toUnit(price, to, from);        // $/row.unit → $/useUnit  (rate: invert direction)
+    if(!(perUse>0)) return {ok:false, why:"unit mismatch"};
+    const next=+(perUse*qty).toFixed(4), old=Number(g.purchasePrice)||0;
+    if(next===old) return {ok:false, why:"same price"};
+    g.purchasePrice=next;
+    g.costHistory=(g.costHistory||[]).concat([{date:today(), price:next, note:"AI Invoice (manual link) "+(entry.supplier||"")+(entry.invoiceNo?" "+entry.invoiceNo:"")}]);
+    if(row.orderCode){ g.suppliers=g.suppliers||[]; if(!g.suppliers.some(sp=>sp.orderCode===row.orderCode)) g.suppliers.push({name:entry.supplier||"", orderCode:row.orderCode}); }
+    return {ok:true, old, next, unit:g.useUnit, qty};
+  }
   function relink(v){
     const id = (v&&v.ingredientId)||v;
     if(!id||typeof id!=="string") return;
     if(id.indexOf("rec:")===0){ alert("Pick an ingredient, not a sub-recipe — invoice prices apply to ingredients only."); return; }
     const tgt=ings.find(g=>g.id===id); if(!tgt) return;
+    // Was this line already applied to a DIFFERENT ingredient by the AI? Offer to undo that.
+    const wrong = (ing && ing.id!==id && row.old!=null) ? ing : null;
+    const undo = wrong ? confirm("Also undo the price on the wrongly matched \""+wrong.name+"\"?\n\nIt will go back to "+money(row.old)+"/"+(row.unit||wrong.useUnit||"")+".\n\nOK = undo it   ·   Cancel = leave it as is") : false;
+    let res=null, undone=false;
     update(s=>{
       s.invoiceAliases=s.invoiceAliases||{};
       s.invoiceAliases[aliasKey]=id;
       s.invoiceUnmatched=(s.invoiceUnmatched||[]).filter(x=>((x.supplier||"?")+"|"+(x.orderCode||x.rawName||""))!==aliasKey);
+      res=applyPriceTo(s, id);                                  // new invoice price wins on the correct ingredient
+      if(undo){                                                 // restore the previous price on the wrong one
+        const w=(s.ingredients||[]).find(x=>x.id===wrong.id);
+        if(w){ const q=Math.abs(Number(w.purchaseQty))||1;
+          const wf=row.unit||w.useUnit||"", wt=w.useUnit||row.unit||"";
+          const back=unitsComparable(wf,wt)? toUnit(Number(row.old), wt, wf) : 0;   // same gate as applyPriceTo
+          if(back>0){ w.purchasePrice=+(back*q).toFixed(4);
+            w.costHistory=(w.costHistory||[]).concat([{date:today(), price:w.purchasePrice, note:"Reverted — invoice line re-linked to "+tgt.name}]);
+            undone=true; } }
+      }
+      // audit trail in the same log the tab renders
+      s.invoiceLog=s.invoiceLog||[];
+      s.invoiceLog.unshift({ ts:Date.now(), date:today(), supplier:entry.supplier||"", invoiceNo:entry.invoiceNo||"",
+        analysis:"Manual link by staff — this supplier line now maps to \""+tgt.name+"\" and future runs use it automatically.",
+        updated: res&&res.ok? [{id:tgt.id, name:tgt.name, old:res.old, new:res.next, unit:res.unit, orderCode:row.orderCode||""}] : [],
+        added: [], flagged: (res&&!res.ok? ["Price not applied ("+res.why+") — set it manually on "+tgt.name+"."]:[])
+          .concat(undone? ["Reverted the earlier price on "+wrong.name+"."]:[]) });
     });
-    alert("Linked to \""+tgt.name+"\".\nFuture invoice runs will apply this supplier line to that ingredient automatically.");
+    alert("Linked to \""+tgt.name+"\"."
+      + (res&&res.ok? "\nPrice updated: "+money(res.old)+" → "+money(res.next)+" per "+res.qty+" "+res.unit : "\nPrice NOT applied ("+((res&&res.why)||"?")+") — set it manually.")
+      + (undone? "\nReverted "+wrong.name+" to its previous price." : "")
+      + "\n\nFuture invoice runs will use this mapping automatically.");
     onClose();
   }
   return <Modal title={"Invoice item — "+(row.name||row.rawName||"?")} onClose={onClose}>

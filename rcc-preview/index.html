@@ -12,8 +12,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<!-- Staff Postcards widget — single canonical source, hosted with the Ordering app. Loads first so the older inline copy below self-disables via its __HIDEOUT_POSTCARDS__ guard. -->
-<script src="https://order.hideoutdb.com/postcards.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={theme:{extend:{colors:{stone:{50:"#fbf8f3",100:"#f4eee5",200:"#e9e0d2",300:"#d7c9b5",400:"#a49685",500:"#857867",600:"#5f5546",700:"#463e33",800:"#28221c",900:"#1a1510"}}}}};</script>
 <style>
@@ -2891,6 +2889,9 @@ __ds_ns.StoreCard = __ds_scope.StoreCard;
   html,body{ max-width:100%; overflow-x:hidden; } /* prevent page-level horizontal shift */
   #root{ position:relative; z-index:1; }
   h1,h2,h3{ font-family:var(--font-display); }
+  body *{ font-family:var(--font-text)!important; }
+  [style*="border-radius: 999"]:not(img),[style*="border-radius:999"]:not(img),[style*="border-radius: 9999"]:not(img),[style*="border-radius:9999"]:not(img){ border-radius:0!important; }
+  [class*="rounded"]:not(img){ border-radius:0!important; }
   a{ color:var(--color-primary); text-decoration:none; }
   a:hover{ text-decoration:underline; }
   .card{ background:var(--surface); border:1px solid var(--color-hairline-alpha); border-radius:18px; }
@@ -4395,6 +4396,7 @@ function downloadSheet(rows, sheetName, filename){
 }
 
 /* ---------------- UI atoms ---------------- */
+function Suggest({id, options}){ return <datalist id={id}>{[...new Set((options||[]).filter(Boolean))].slice(0,500).map(o=><option key={o} value={o} />)}</datalist>; }
 function Stat({label, value, sub, tone}){ const vc=tone==="warn"?"text-amber-600":tone==="bad"?"text-red-600":"text-stone-800"; return <div className="card p-4"><div className="text-xs text-stone-500">{label}</div><div className={"text-2xl font-semibold mt-1 "+vc}>{value}</div>{sub&&<div className="text-xs text-stone-400 mt-1">{sub}</div>}</div>; }
 function Btn({children, onClick, tone="primary", size="md", disabled}){
   const map={primary:"primary", ghost:"pearl", ok:"dark-utility", danger:"pearl", amber:"pearl"};
@@ -4844,12 +4846,24 @@ function App(){
   useEffect(()=>{ if(curBranch!==branch) setBranch(curBranch); }, [curBranch]);
   const branchName = (branches.find(b=>b.id===curBranch)||{}).name||"";
   const dot = cloud.status==="on"?"bg-emerald-500":cloud.status==="error"?"bg-red-500":cloud.status==="signedout"?"bg-amber-400":"bg-stone-400";
+  // DEV BYPASS: skip the Google gate when running embedded in the design-editor preview (iframe). Top-level (deployed/local) use keeps the normal login.
+  const DEV_BYPASS=(()=>{ try{ return window.self!==window.top; }catch(e){ return true; } })();
+  // In preview-bypass mode, hydrate real data from the Firestore REST endpoint (public read, same doc the cloud sync uses).
+  useEffect(()=>{ if(!DEV_BYPASS) return; (async()=>{ try{
+    const cfg=loadCfg(); const url="https://firestore.googleapis.com/v1/projects/"+cfg.projectId+"/databases/(default)/documents/"+CLOUD_DOC().col+"/"+CLOUD_DOC().doc+"?key="+cfg.apiKey;
+    const r=await fetch(url,{cache:"no-store"}); if(!r.ok) return; const j=await r.json();
+    const dec=v=>{ if(v==null) return null; if("stringValue" in v) return v.stringValue; if("integerValue" in v) return Number(v.integerValue); if("doubleValue" in v) return v.doubleValue; if("booleanValue" in v) return v.booleanValue; if("nullValue" in v) return null; if("timestampValue" in v) return v.timestampValue; if("mapValue" in v){ const o={},f=(v.mapValue.fields)||{}; Object.keys(f).forEach(k=>{o[k]=dec(f[k]);}); return o; } if("arrayValue" in v) return ((v.arrayValue.values)||[]).map(dec); return null; };
+    let st=(j.fields&&j.fields.state)?dec(j.fields.state):null; if(typeof st==="string"){ try{ st=JSON.parse(st); }catch(e){} }
+    if(st&&(st.ingredients||st.recipes)){ window.__rccHydrated={ing:(st.ingredients||[]).length,rec:(st.recipes||[]).length}; setState(migrate(st)); } else { window.__rccHydrated="no-state"; }
+  }catch(e){ window.__rccHydrated="err:"+e.message; } })(); },[]);
+  if(!DEV_BYPASS){
   if(typeof firebase==="undefined") return <GoogleLoginScreen err="Couldn't load sign-in. Please refresh." onSignIn={()=>location.reload()} />;
   if(!cloud.user) return <GoogleLoginScreen busy={signingIn} err={authErr} onSignIn={async()=>{ setAuthErr(""); const fb=fbRef.current; if(!fb){ setAuthErr("Still loading — please try again shortly."); return; } setSigningIn(true); const pr=new firebase.auth.GoogleAuthProvider(); try{ await fb.auth.signInWithPopup(pr); }catch(e){ const code=(e&&(e.code||e.message))||""; if(/popup|blocked|cancel/i.test(code)){ try{ await fb.auth.signInWithRedirect(pr); return; }catch(e2){ setSigningIn(false); setAuthErr("Sign-in error: "+e2.message); } } else { setSigningIn(false); setAuthErr("Sign-in error: "+e.message); } } }} />;
   if(me==="denied") return <DeniedScreen email={(cloud.user&&cloud.user.email)||""} onSignOut={async()=>{ try{ await fbRef.current.auth.signOut(); }catch(e){} setMe(null); }} />;
   if(me==="error") return <GateCard pill="The Hideout" title="Connection problem"><p>Couldn't verify access due to a connection problem.<br/>Check your internet and try again.</p><button className="rcc-gate-btn" onClick={()=>location.reload()}>Retry</button></GateCard>;
   if(!me || typeof me!=="object") return <GateCard pill="The Hideout" title="Recipe Cost Calculator"><p>Checking your access…</p></GateCard>;
-  const role=(me&&me.role)||"staff"; const isMgr=role==="manager";
+  }
+  const role=DEV_BYPASS?"manager":((me&&me.role)||"staff"); const isMgr=role==="manager";
   return <div className="min-h-screen" data-density={t.density}>
     <div ref={hdrRef} className="sticky top-0 z-40" style={{background:"var(--color-surface-black)"}}>
       <div className="flex flex-wrap xl:flex-nowrap xl:relative items-center gap-x-3 gap-y-1.5 px-4 md:px-9 py-2 md:py-0" style={{minHeight:52}}>
@@ -4910,6 +4924,24 @@ function detectAllergens(name){
 }
 const PIECE_WEIGHTS=[["garlic clove",5],["clove",5],["spring onion",15],["shallot",40],["mushroom",20],["egg",50],["lime",70],["carrot",80],["lemon",100],["bagel",100],["banana",120],["tomato",120],["onion",150],["capsicum",160],["potato",170],["apple",180],["orange",180],["avocado",200],["croissant",60],["bun",70],["tortilla",50],["slice",30]];
 function commonPieceWeight(name){ const n=(name||"").toLowerCase(); for(const [k,w] of PIECE_WEIGHTS){ if(n.includes(k)) return w; } return 0; }
+function collapsePrepSubs(n){
+  const recs=(n.recipes||[]).filter(r=>!r.archived);
+  const subs=recs.filter(r=>!(r.sellPrice>0)&&(r.items||[]).length>=3&&(r.items||[]).every(it=>it.ingredientId));
+  let changed=0;
+  recs.forEach(r=>{
+    if(!(r.sellPrice>0)) return;
+    if((r.items||[]).some(it=>it.subRecipeId)) return; // already collapsed
+    const ids=new Set((r.items||[]).filter(it=>it.ingredientId).map(it=>it.ingredientId));
+    const cands=subs.filter(x=>x.id!==r.id&&x.items.every(it=>ids.has(it.ingredientId))).sort((a,b)=>b.items.length-a.items.length);
+    if(!cands.length) return;
+    const covered=new Set(); const picked=[];
+    cands.forEach(x=>{ if(x.items.some(it=>!covered.has(it.ingredientId))){ picked.push(x); x.items.forEach(it=>covered.add(it.ingredientId)); } });
+    if(!picked.length) return;
+    r.items=(r.items||[]).filter(it=>!(it.ingredientId&&covered.has(it.ingredientId))).concat(picked.map(x=>({subRecipeId:x.id, ingredientId:"", qty:0, rawName:x.name, rawUnit:""})));
+    changed++;
+  });
+  return changed;
+}
 function runAutoFix(n){
   let alg=0, wt=0, link=0;
   (n.recipes||[]).forEach(r=>(r.items||[]).forEach(it=>{ if((it.ingredientId||it.subRecipeId)||!it.rawName) return; const m=matchIngredient(it.rawName, n.ingredients); if(m){ it.ingredientId=m.ing.id; link++; return; } const mr=matchRecipe(it.rawName, n.recipes, r.id); if(mr){ it.subRecipeId=mr.id; link++; } }));
@@ -4923,11 +4955,12 @@ function runAutoFix(n){
   return {alg, wt, link};
 }
 function auditData(state, ingMap){
-  const issues=[]; const add=(type,item,detail,sev,go)=>issues.push({type,item,detail,sev:sev||"warn",go:go||null});
+  const issues=[]; let _ref=null; const add=(type,item,detail,sev,go)=>issues.push({type,item,detail,sev:sev||"warn",go:go||null,ref:_ref});
   const recs=(state.recipes||[]).filter(r=>!r.archived);
   const ings=(state.ingredients||[]).filter(i=>!i.archived);
   const used=new Set(); recs.forEach(r=>(r.items||[]).forEach(it=>{ if(it.ingredientId) used.add(it.ingredientId); if(it.subRecipeId) used.add(it.subRecipeId); }));
   recs.forEach(r=>{
+    _ref={kind:"rec", id:r.id};
     (r.items||[]).forEach(it=>{
       if(!it.ingredientId && !it.subRecipeId){ add("Unlinked ingredient", r.name, it.rawName||"?", "error", "rec"); return; }
       if(it.ingredientId && !ingMap[it.ingredientId]){ add("Broken link — cost understated", r.name, `${it.rawName||"an ingredient"} was deleted/re-imported; this line is silently skipped in the cost. Re-link it.`, "error", "rec"); return; }
@@ -4947,13 +4980,14 @@ function auditData(state, ingMap){
     if(r.showInDish && !isMenu) add("On menu but no sell price", r.name, "Set a sell price to track margin", "warn", "rec");
   });
   ings.forEach(i=>{
+    _ref={kind:"ing", id:i.id};
     const guess=detectAllergens(i.name); const missing=guess.filter(a=>!(i.allergens||[]).includes(a));
     if(missing.length) add("Possible missing allergen", i.name, "likely: "+missing.join(", "), "warn", "ing");
     if(!(i.purchasePrice>0)||!(i.purchaseQty>0)) add("Missing price / purchase qty", i.name, "", "error", "ing");
     if(!used.has(i.id)) add("Ingredient not used anywhere", i.name, "Not in any recipe — archive if discontinued", "tip", "ing");
   });
   const byName={}; ings.forEach(i=>{ const k=(i.name||"").trim().toLowerCase(); if(k)(byName[k]=byName[k]||[]).push(i); });
-  Object.keys(byName).forEach(k=>{ if(byName[k].length>1) add("Duplicate ingredient name", byName[k][0].name, byName[k].length+" entries share this name — merge them", "warn", "ing"); });
+  Object.keys(byName).forEach(k=>{ if(byName[k].length>1){ _ref={kind:"ing", id:byName[k][0].id}; add("Duplicate ingredient name", byName[k][0].name, byName[k].length+" entries share this name — merge them", "warn", "ing"); } });
   const groups={}; issues.forEach(x=>{ (groups[x.type]=groups[x.type]||[]).push(x); });
   return groups;
 }
@@ -4967,6 +5001,16 @@ function Audit({state, ingMap, setTab, update}){
   const rank={error:0,warn:1,tip:2};
   const sortedKeys=keys.slice().sort((a,b)=> (rank[groups[a][0].sev]-rank[groups[b][0].sev]) || (groups[b].length-groups[a].length));
   const [msg,setMsg]=useState("");
+  const [fixRec,setFixRec]=useState(null);
+  const [fixIng,setFixIng]=useState(null);
+  const openRef=(ref)=>{
+    if(!ref) return;
+    if(ref.kind==="rec"){ const r=(state.recipes||[]).find(x=>x.id===ref.id); if(r) setFixRec(JSON.parse(JSON.stringify(r))); }
+    else { const g=(state.ingredients||[]).find(x=>x.id===ref.id); if(g) setFixIng(JSON.parse(JSON.stringify(g))); }
+  };
+  const commitRec=(rec)=>{ update(s=>{ const idx=s.recipes.findIndex(r=>r.id===rec.id); if(idx>=0) s.recipes[idx]=rec; }); setFixRec(null); };
+  const commitIng=(ing)=>{ update(s=>{ const idx=s.ingredients.findIndex(i=>i.id===ing.id); if(idx>=0) s.ingredients[idx]=ing; }); setFixIng(null); };
+  const createIng=(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; };
   const doAutoFix=()=>{ let res={alg:0,wt:0,link:0}; update(n=>{ res=runAutoFix(n); }); setMsg(`AI auto-fix — allergens added: ${res.alg}, grams-per-each set: ${res.wt}, ingredients linked: ${res.link}. Anything still listed needs info AI can't guess.`); };
   const Metric=({n,sev})=>{ const s=AUDIT_SEV[sev]; return <div className="rounded-[14px] p-3.5" style={{background:s.bg, border:"1px solid var(--color-hairline-alpha)"}}><div className="text-2xl font-semibold" style={{color:s.c, fontFamily:"var(--font-display)", lineHeight:1}}>{n}</div><div className="text-xs mt-1" style={{color:"var(--color-ink-muted-80)"}}>{sev==="error"?"Errors — blocking":sev==="warn"?"To fix soon":"Suggestions"}</div></div>; };
   return <div>
@@ -4994,12 +5038,14 @@ function Audit({state, ingMap, setTab, update}){
               {goInfo && <button onClick={()=>setTab(goInfo[0])} className="text-xs font-semibold shrink-0" style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>Fix in {goInfo[1]} ›</button>}
             </div>
             <div className="space-y-0.5">
-              {groups[k].slice(0,150).map((x,i)=>(<div key={i} className="text-sm flex justify-between gap-3 py-1.5 border-b border-stone-100 last:border-0"><span className="text-stone-700 truncate shrink-0 max-w-[45%]">{x.item}</span><span className="text-xs text-stone-400 text-right">{x.detail}</span></div>))}
+              {groups[k].slice(0,150).map((x,i)=>(<div key={i} onClick={x.ref?()=>openRef(x.ref):undefined} className="text-sm flex items-center justify-between gap-3 py-1.5 border-b border-stone-100 last:border-0" style={x.ref?{cursor:"pointer"}:undefined} title={x.ref?"Click to open & fix":undefined}><span className="text-stone-700 truncate shrink-0 max-w-[45%]">{x.item}</span><span className="text-xs text-stone-400 text-right flex-1 min-w-0 truncate">{x.detail}</span>{x.ref&&<span className="text-xs font-semibold shrink-0" style={{color:"var(--color-primary)"}}>Fix ›</span>}</div>))}
               {groups[k].length>150 && <div className="text-xs text-stone-400 pt-1">… +{groups[k].length-150} more</div>}
             </div>
           </div>
         </div>
       </div>; })}
+    {fixRec && <RecipeEditor rec={fixRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={createIng} onClose={()=>setFixRec(null)} onSave={commitRec} onDelete={id=>{update(s=>{s.recipes=s.recipes.filter(r=>r.id!==id);}); setFixRec(null);}} />}
+    {fixIng && <IngredientEditor ing={fixIng} onClose={()=>setFixIng(null)} onSave={commitIng} onDelete={id=>{update(s=>{s.ingredients=s.ingredients.filter(i=>i.id!==id);}); setFixIng(null);}} />}
   </div>;
 }
 /* ---------------- Dashboard ---------------- */
@@ -5263,7 +5309,7 @@ function PrepBoard({state, ingMap, update, branch}){
     <div className="sticky z-30 -mx-5 md:-mx-9 px-5 md:px-9 py-3 mb-4" style={{top:"var(--hdrH,52px)", background:"rgba(245,239,230,.85)", backdropFilter:"saturate(180%) blur(20px)", WebkitBackdropFilter:"saturate(180%) blur(20px)"}}>
       <div className="mb-2.5"><DeptToggle dept={dept} setDept={setDept} depts={deptList} /></div>
       <div className="flex items-center gap-3 flex-wrap">
-        <VSearchInput placeholder="Search prep tasks…" value={q} onChange={e=>setQ(e.target.value)} style={{height:44, minWidth:0, flex:"1 1 180px", maxWidth:300}} />
+        <VSearchInput placeholder="Search prep tasks…" value={q} onChange={e=>setQ(e.target.value)} list="sug-prep" style={{height:44, minWidth:0, flex:"1 1 180px", maxWidth:300}} /><Suggest id="sug-prep" options={(state.recipes||[]).filter(r=>!r.archived).map(r=>r.name)} />
         <div className="flex items-center gap-2">
           <div className="text-sm text-stone-500 whitespace-nowrap">{doneN}/{filtered.length} done</div>
           <div className="rounded-full overflow-hidden" style={{width:90, height:6, background:"var(--color-hairline)"}}><div style={{width:(filtered.length?Math.round(doneN/filtered.length*100):0)+"%", height:"100%", background:"var(--color-primary)", transition:"width .4s cubic-bezier(.2,.7,.2,1)"}}></div></div>
@@ -5304,7 +5350,7 @@ function PrepBoard({state, ingMap, update, branch}){
     {board.length===0 && <div className="card p-10 text-center text-sm text-stone-400 mt-4">No prep tasks yet. Click <b>+ Add task</b> to pick recipes for today’s prep.</div>}
     {view && <DishDetail rec={view} ingMap={ingMap} onClose={()=>setView(null)} />}
     {showAdd && <Modal title="Add prep tasks" onClose={()=>setShowAdd(false)}>
-      <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} />
+      <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} list="sug-prep-add" /><Suggest id="sug-prep-add" options={off.map(r=>r.name)} />
       <div className="max-h-[50vh] overflow-auto divide-y divide-stone-100">
         {off.slice(0,80).map(r=><button key={r.id} onClick={()=>addTask(r.id)} className="w-full text-left flex items-center justify-between py-2.5 px-1 hover:bg-stone-50 text-sm" style={{background:"none", border:"none", cursor:"pointer"}}><span className="truncate text-stone-800">{r.name}<span className="text-stone-400 text-xs"> · {dishCategory(r)}</span></span><span className="text-xs font-semibold shrink-0" style={{color:"var(--color-primary)"}}>+ Add</span></button>)}
         {off.length===0 && <div className="py-6 text-center text-sm text-stone-400">Everything is already on the board.</div>}
@@ -5361,7 +5407,7 @@ function Ingredients({state, update, setState}){
   return <div>
     <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <VSearchInput placeholder="Search ingredients…" value={q} onChange={e=>setQ(e.target.value)} style={{height:44, minWidth:0, flex:"1 1 200px", maxWidth:300}} />
+        <VSearchInput placeholder="Search ingredients…" value={q} onChange={e=>setQ(e.target.value)} list="sug-ings" style={{height:44, minWidth:0, flex:"1 1 200px", maxWidth:300}} /><Suggest id="sug-ings" options={(state.ingredients||[]).filter(i=>!i.archived).map(i=>i.name)} />
         <div className="text-sm text-stone-500 whitespace-nowrap">{list.length} / {activeAll.length}</div>
       </div>
       <div className="flex gap-2"><ImportExport onImport={importXlsx} onExport={exportXlsx} /><Btn onClick={()=>setEdit({...blank})}>+ Add Ingredient</Btn></div>
@@ -5428,10 +5474,23 @@ function IngredientEditor({ing, onClose, onSave, onDelete}){
 /* ---------------- Recipes ---------------- */
 function Recipes({state, update, setState, ingMap}){
   const [edit,setEdit]=useState(null); const [view,setView]=useState(null); const [showRcc,setShowRcc]=useState(false); const [q,setQ]=useState(""); const [tf,setTf]=useState("All");
+  const [sel,setSel]=useState({}); const [catFilter,setCatFilter]=useState([]); const [showFilter,setShowFilter]=useState(false); const [bulk,setBulk]=useState(null); const [finFilter,setFinFilter]=useState("all");
+  const lpTimer=useRef(null), lpFired=useRef(false);
+  const selIds=Object.keys(sel).filter(k=>sel[k]); const selMode=selIds.length>0;
+  const toggleSel=id=>setSel(m=>({...m,[id]:!m[id]}));
+  const [prepUnit,setPrepUnit]=useState("g");
+  const U2G={g:1,kg:1000,ml:1,l:1000};
+  // Prep yield = sum of ingredient weights (B). Falls back to the stored yield when no quantities are entered yet.
+  function calcYieldG(r){ let t=0,any=false; (r.items||[]).forEach(it=>{ if(!(it.qty>0)) return; let u=""; if(it.ingredientId){ const ing=ingMap[it.ingredientId]; u=String((it.rawUnit||(ing?ing.useUnit:""))||"").trim().toLowerCase(); } else if(it.subRecipeId){ const sub=recMapGet()[it.subRecipeId]; u=String((it.rawUnit||(sub?sub.yieldUnit:""))||"").trim().toLowerCase(); } const f=U2G[u]; if(f){ t+=it.qty*f; any=true; } }); if(any) return t; const base=U2G[String(r.yieldUnit||"").trim().toLowerCase()]; return base&&r.yield>0? r.yield*base : 0; }
+  function prepPer(r){ const bc=recipeCost(r,ingMap); const g=calcYieldG(r); if(!(g>0)||!(bc>0)) return null; return (bc/g)*(prepUnit==="kg"?1000:1); }
+  function fmtPer(v){ return "$"+(v>=1? v.toFixed(2) : v>=0.1? v.toFixed(3) : v.toFixed(4)); }
   const blank={id:"", name:"", category:"", yield:1, yieldUnit:"cup", sellPrice:0, targetMargin:70, items:[], importedCost:0, ingredientListText:"", allergens:[], image:"", procedure:"", showInDish:true, archived:false};
   const activeAll = state.recipes.filter(r=>!r.archived);
   const isMenu = r => r.sellPrice>0 || r.showInDish;
-  const list = activeAll.filter(r=>!q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.category||"").toLowerCase().includes(q.toLowerCase())).filter(r=> tf==="All" ? true : (tf==="Menu" ? isMenu(r) : !isMenu(r)));
+  const list = activeAll.filter(r=>!q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.category||"").toLowerCase().includes(q.toLowerCase())).filter(r=> tf==="All" ? true : (tf==="Menu" ? isMenu(r) : !isMenu(r))).filter(r=> !catFilter.length || catFilter.includes((r.category||"").trim()||"(none)")).filter(r=> finFilter==="all" ? true : (finFilter==="fin" ? !!r.finalised : !r.finalised));
+  const allCats=[...new Set(activeAll.map(r=>(r.category||"").trim()||"(none)"))].sort((a,b)=>a.localeCompare(b));
+  function bulkDelete(){ const refd=state.recipes.filter(r=>!sel[r.id]&&!r.archived&&(r.items||[]).some(it=>it.subRecipeId&&sel[it.subRecipeId])).map(r=>r.name); if(refd.length&&!confirm("Warning: "+refd.length+" other recipe(s) use a selected recipe as a prep/sub-recipe (\u25b8): "+refd.slice(0,8).join(", ")+(refd.length>8?"\u2026":"")+"\n\nDeleting will break those links. Continue?")) return; if(!confirm("Delete "+selIds.length+" recipe(s) permanently?\n\nOK = delete \u00b7 Cancel = keep")) return; update(s=>{ s.recipes=s.recipes.filter(r=>!sel[r.id]); }); setSel({}); }
+  function applyBulk(){ update(s=>{ s.recipes.forEach(r=>{ if(!sel[r.id]) return; if(bulk.category.trim()) r.category=bulk.category.trim(); if(bulk.targetMargin!=="") r.targetMargin=Number(bulk.targetMargin)||r.targetMargin; if(bulk.showInDish!=="") r.showInDish=bulk.showInDish==="on"; if(bulk.showInPrep!=="") r.showInPrep=bulk.showInPrep==="on"; if(bulk.finalised) r.finalised=bulk.finalised==="on"; }); }); setBulk(null); setSel({}); }
   function commit(rec){ update(s=>{ if(rec.id){ const idx=s.recipes.findIndex(r=>r.id===rec.id); s.recipes[idx]=rec; } else { rec.id=rid("rec"); s.recipes.push(rec); } }); setEdit(null); }
   function createIngredient(d){ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; }
   function importXlsx(file){
@@ -5470,8 +5529,15 @@ function Recipes({state, update, setState, ingMap}){
   }
   return <div>
     <div className="flex justify-between items-center mb-3 gap-3 flex-wrap">
-      <div className="flex items-center gap-3"><VSearchInput placeholder="Search recipes…" value={q} onChange={e=>setQ(e.target.value)} style={{height:44, minWidth:0, flex:"1 1 200px", maxWidth:300}} /><div className="flex items-center gap-1.5">{["All","Menu","Prep"].map(k=><button key={k} onClick={()=>setTf(k)} className="vbtn-card text-sm rounded-full px-3.5" style={{height:34, border:"1px solid "+(tf===k?"var(--color-primary)":"var(--color-hairline-alpha)"), background:tf===k?"var(--color-primary)":"var(--color-canvas)", color:tf===k?"#fff":"var(--color-ink)", cursor:"pointer", fontWeight:tf===k?600:400}}>{k}</button>)}</div><div className="text-sm text-stone-500">{list.length} / {activeAll.length}</div></div>
-      <div className="flex gap-2"><Btn tone="ghost" size="sm" onClick={()=>setShowRcc(true)}>RCC API</Btn><label className="px-2.5 py-1 text-xs rounded-lg border border-[color:var(--line)] text-stone-600 hover:bg-stone-100 cursor-pointer flex items-center">Trello JSON<input type="file" accept=".json,application/json" className="hidden" onChange={e=>{ if(e.target.files[0]){ importTrello(e.target.files[0]); e.target.value=""; } }} /></label><ImportExport onImport={importXlsx} onExport={exportXlsx} /><Btn onClick={()=>setEdit({...blank, items:[]})}>+ Add Recipe</Btn></div>
+      <div className="flex items-center gap-3"><VSearchInput placeholder="Search recipes…" value={q} onChange={e=>setQ(e.target.value)} list="sug-recs" style={{height:44, minWidth:0, flex:"1 1 200px", maxWidth:300}} /><Suggest id="sug-recs" options={activeAll.map(r=>r.name).concat(allCats)} /><div className="flex items-center gap-1.5">{["All","Menu","Prep"].map(k=><button key={k} onClick={()=>setTf(k)} className="vbtn-card text-sm rounded-full px-3.5" style={{height:34, border:"1px solid "+(tf===k?"var(--color-primary)":"var(--color-hairline-alpha)"), background:tf===k?"var(--color-primary)":"var(--color-canvas)", color:tf===k?"#fff":"var(--color-ink)", cursor:"pointer", fontWeight:tf===k?600:400}}>{k}</button>)}</div><div className="relative"><button onClick={()=>setShowFilter(v=>!v)} className="vbtn-card text-sm rounded-full px-3.5" style={{height:34, border: "1px solid "+((catFilter.length||finFilter!=="all")?"var(--color-primary)":"var(--color-hairline-alpha)"), background:"var(--color-canvas)", color:(catFilter.length||finFilter!=="all")?"var(--color-primary)":"var(--color-ink)", cursor:"pointer", fontWeight:(catFilter.length||finFilter!=="all")?600:400}}>Filter{(catFilter.length||finFilter!=="all")?" ("+(catFilter.length+(finFilter!=="all"?1:0))+")":""}</button>
+      {showFilter&&<div className="absolute z-30 mt-1 p-3 rounded-[12px] w-60 max-h-72 overflow-auto" style={{background:"#fff", border:"1px solid var(--color-hairline-alpha)"}}>
+        <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Status</div>
+        {[["all","All"],["fin","Finalised ✓"],["unfin","Not finalised"]].map(([v,l])=><label key={v} className="flex items-center gap-2 text-sm py-1 cursor-pointer"><input type="radio" name="finfilter" checked={finFilter===v} onChange={()=>setFinFilter(v)} />{l}</label>)}
+        <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1 mt-2">Category</div>
+        {allCats.map(c=><label key={c} className="flex items-center gap-2 text-sm py-1 cursor-pointer"><input type="checkbox" checked={catFilter.includes(c)} onChange={()=>setCatFilter(f=>f.includes(c)?f.filter(x=>x!==c):[...f,c])} />{c}</label>)}
+        <div className="flex justify-between mt-2"><button className="text-xs text-stone-500 underline" onClick={()=>setCatFilter([])}>Clear</button><button className="text-xs text-stone-500 underline" onClick={()=>setShowFilter(false)}>Close</button></div>
+      </div>}</div><div className="flex items-center gap-1"><span className="text-[11px] text-stone-400">Prep $/</span>{["g","kg","ml"].map(u=><button key={u} onClick={()=>setPrepUnit(u)} className="vbtn-card text-xs rounded-full px-2.5" style={{height:28, border:"1px solid "+(prepUnit===u?"var(--color-primary)":"var(--color-hairline-alpha)"), background:prepUnit===u?"var(--color-primary)":"var(--color-canvas)", color:prepUnit===u?"#fff":"var(--color-ink)", cursor:"pointer"}}>{u}</button>)}</div><div className="text-sm text-stone-500">{list.length} / {activeAll.length}</div></div>
+      <div className="flex gap-2"><Btn tone="ghost" size="sm" onClick={()=>{ if(!confirm("Collapse flattened prep-recipe ingredients into sub-recipe lines across all menu recipes?")) return; let c=0; setState(s=>{ const n=JSON.parse(JSON.stringify(s)); c=collapsePrepSubs(n); return n; }); setTimeout(()=>alert(c+" recipe(s) collapsed."),50); }}>Collapse preps</Btn><Btn tone="ghost" size="sm" onClick={()=>setShowRcc(true)}>RCC API</Btn><label className="px-2.5 py-1 text-xs rounded-lg border border-[color:var(--line)] text-stone-600 hover:bg-stone-100 cursor-pointer flex items-center">Trello JSON<input type="file" accept=".json,application/json" className="hidden" onChange={e=>{ if(e.target.files[0]){ importTrello(e.target.files[0]); e.target.value=""; } }} /></label><ImportExport onImport={importXlsx} onExport={exportXlsx} /><Btn onClick={()=>setEdit({...blank, items:[]})}>+ Add Recipe</Btn></div>
     </div>
     {(()=>{ const menuR=activeAll.filter(r=>r.sellPrice>0); const prepR=activeAll.filter(r=>!(r.sellPrice>0)); const belowR=menuR.filter(r=>marginOf(r,ingMap).margin<(r.targetMargin/100)); const ms=menuR.map(r=>marginOf(r,ingMap).margin); const avg=ms.length?ms.reduce((a,b)=>a+b,0)/ms.length:0;
       return <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 stagger">
@@ -5480,12 +5546,23 @@ function Recipes({state, update, setState, ingMap}){
         <Stat label="Below target" value={belowR.length} sub={belowR.length?"needs a look":"all healthy"} tone={belowR.length>0?"bad":undefined} />
         <Stat label="Avg margin" value={menuR.length?pct(avg):"–"} sub="across menu" />
       </div>; })()}
+    {selMode&&<div className="flex items-center gap-2 mb-3 p-3 rounded-[12px] flex-wrap" style={{background:"var(--color-canvas-parchment)", border:"1px solid var(--color-hairline-alpha)"}}>
+      <span className="text-sm font-semibold" style={{fontFamily:"var(--font-display)"}}>{selIds.length} selected</span>
+      <Btn size="sm" onClick={()=>setBulk({category:"",targetMargin:"",showInDish:"",showInPrep:""})}>Edit</Btn>
+      <Btn tone="danger" size="sm" onClick={bulkDelete}>Delete</Btn>
+      <Btn tone="ghost" size="sm" onClick={()=>{const m={};list.forEach(r=>m[r.id]=true);setSel(m);}}>Select all shown</Btn>
+      <Btn tone="ghost" size="sm" onClick={()=>setSel({})}>Clear</Btn>
+    </div>}
     <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 stagger">
       {list.slice(0,200).map(r=>{
         const {unitCost:uc,margin}=marginOf(r,ingMap); const isM=r.sellPrice>0; const below=isM && margin<(r.targetMargin/100);
-        const fc=isM? uc/r.sellPrice*100 : null;
+        const fc=isM? uc/r.sellPrice*100 : null; const isSel=!!sel[r.id];
         const accent = below? "var(--color-primary)" : (isM? "#3f9e63" : "var(--color-ink-muted-48)");
-        return <div key={r.id} onClick={()=>setView(r)} className="card cursor-pointer vbtn-card tilt overflow-hidden group relative" style={{padding:0}}>
+        return <div key={r.id} onClick={()=>{ if(lpFired.current){ lpFired.current=false; return; } if(selMode) toggleSel(r.id); else setView(r); }}
+          onPointerDown={()=>{ lpFired.current=false; clearTimeout(lpTimer.current); lpTimer.current=setTimeout(()=>{ lpFired.current=true; toggleSel(r.id); },500); }}
+          onPointerUp={()=>clearTimeout(lpTimer.current)} onPointerLeave={()=>clearTimeout(lpTimer.current)}
+          className="card cursor-pointer vbtn-card tilt overflow-hidden group relative" style={{padding:0, outline:isSel?"2px solid var(--color-primary-focus)":"none", outlineOffset:-2}}>
+          {(selMode)&&<label className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,.85)", border:"1px solid var(--color-hairline-alpha)"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={isSel} onChange={()=>toggleSel(r.id)} style={{width:16, height:16, accentColor:"var(--color-primary)"}} /></label>}
           <div className="flex" style={{minHeight:98}}>
             <div style={{width:6, background:accent, flexShrink:0}}></div>
             <div className="shrink-0 my-3 ml-3 rounded-xl overflow-hidden" style={{width:64, height:64, background:"var(--color-canvas-parchment)"}}>{r.image? <img src={r.image} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center" style={{color:"#cbbfa8", fontFamily:"var(--font-display)", fontSize:26, fontWeight:600}}>{(r.name||"?").trim().slice(0,1).toUpperCase()}</div>}</div>
@@ -5493,16 +5570,19 @@ function Recipes({state, update, setState, ingMap}){
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-semibold text-stone-800 truncate" style={{fontFamily:"var(--font-display)"}}>{r.name}</div>
-                  <div className="text-[11px] text-stone-400 mt-0.5 truncate">{r.category||(isM?"Uncategorized":"Prep / sub-recipe")} · {r.yield} {r.yieldUnit}</div>
+                  <div className="text-[11px] text-stone-400 mt-0.5 truncate">{isM? ((r.category||"Uncategorized")+" · "+r.yield+" "+r.yieldUnit) : ((r.category||"Prep / sub-recipe")+" · "+(calcYieldG(r)>0? (Math.round(calcYieldG(r))+" g") : (r.yield+" "+r.yieldUnit)))}</div>
                 </div>
-                <span className="text-[10px] rounded-full px-2 py-0.5 shrink-0" style={{background: isM?"rgba(200,26,34,.09)":"var(--color-canvas-parchment)", color: isM?"var(--color-primary)":"var(--color-ink-muted-48)", fontWeight:700, letterSpacing:"0.04em"}}>{isM?"MENU":"PREP"}</span>
+                <span className="text-[10px] rounded-full px-2 py-0.5 shrink-0" style={{background: isM?"rgba(200,26,34,.09)":"var(--color-canvas-parchment)", color: isM?"var(--color-primary)":"var(--color-ink-muted-48)", fontWeight:700, letterSpacing:"0.04em"}}>{isM?"MENU":"PREP"}</span>{r.finalised&&<span className="text-[10px] rounded-full px-2 py-0.5 shrink-0" style={{background:"rgba(63,158,99,.12)", color:"#3f9e63", fontWeight:700, letterSpacing:"0.04em"}}>✓ FINAL</span>}
               </div>
               {isM ? <div className="mt-2.5">
                 <div className="flex items-baseline gap-2"><span className="text-2xl font-semibold" style={{color:accent, fontFamily:"var(--font-display)", lineHeight:1}}>{pct(margin)}</span><span className="text-[11px] text-stone-400">margin · target {r.targetMargin}%</span></div>
                 <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{background:"var(--color-canvas-parchment)"}}><div style={{height:"100%", width:Math.max(0,Math.min(100,margin*100))+"%", background:accent, transition:"width .5s cubic-bezier(.2,.7,.2,1)"}}></div></div>
                 <div className="flex items-center gap-2 mt-2 text-[11px] text-stone-500"><span>Cost {money(uc)}</span><span className="text-stone-300">·</span><span>Sell {money(r.sellPrice)}</span><span className="text-stone-300">·</span><span>FC {fc!=null?fc.toFixed(0)+"%":"-"}</span></div>
               </div> : <div className="mt-2.5">
-                <div className="flex items-baseline gap-2"><span className="text-2xl font-semibold text-stone-800" style={{fontFamily:"var(--font-display)", lineHeight:1}}>{money(recipeCost(r,ingMap))}</span><span className="text-[11px] text-stone-400">batch cost{usesImported(r,ingMap)?" · imported":""}</span></div>
+                {(()=>{ const per=prepPer(r); const bc=recipeCost(r,ingMap);
+                  return per!=null
+                    ? <div className="flex items-baseline gap-2"><span className="text-2xl font-semibold text-stone-800" style={{fontFamily:"var(--font-display)", lineHeight:1}}>{fmtPer(per)}</span><span className="text-[11px] text-stone-400">per {prepUnit} · batch {money(bc)}{usesImported(r,ingMap)?" · imported":""}</span></div>
+                    : <div className="flex items-baseline gap-2"><span className="text-2xl font-semibold text-stone-800" style={{fontFamily:"var(--font-display)", lineHeight:1}}>{money(bc)}</span><span className="text-[11px] text-stone-400">batch cost{usesImported(r,ingMap)?" · imported":""}</span></div>; })()}
                 <div className="text-[11px] text-stone-500 mt-2">{(r.items&&r.items.length)||0} ingredients{r.showInDish?" · on a menu":""}</div>
               </div>}
             </div>
@@ -5518,6 +5598,17 @@ function Recipes({state, update, setState, ingMap}){
     {edit && <RecipeEditor rec={edit} state={state} ingMap={ingMap} update={update} onCreateIngredient={createIngredient} onClose={()=>setEdit(null)} onSave={commit} onDelete={id=>{update(s=>{s.recipes=s.recipes.filter(r=>r.id!==id);}); setEdit(null);}} />}
     {view && <RecipeSummary rec={view} ingMap={ingMap} onClose={()=>setView(null)} onEdit={()=>{ setEdit(JSON.parse(JSON.stringify(view))); setView(null); }} />}
     {showRcc && <RccImportModal state={state} setState={setState} onClose={()=>setShowRcc(false)} />}
+    {bulk && <Modal title={"Bulk edit \u00b7 "+selIds.length+" recipes"} onClose={()=>setBulk(null)}>
+      <p className="text-xs text-stone-500 mb-3">Only the fields you fill in are applied to all selected recipes; empty fields keep each recipe's current value.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Category"><input className="inp" list="bulk-cats" value={bulk.category} onChange={e=>setBulk(b=>({...b,category:e.target.value}))} placeholder="keep current" /><datalist id="bulk-cats">{allCats.filter(c=>c!=="(none)").map(c=><option key={c} value={c} />)}</datalist></Field>
+        <Field label="Target margin %"><input className="inp" type="number" value={bulk.targetMargin} onChange={e=>setBulk(b=>({...b,targetMargin:e.target.value}))} placeholder="keep current" /></Field>
+        <Field label="Show in Dishes"><select className="inp" value={bulk.showInDish} onChange={e=>setBulk(b=>({...b,showInDish:e.target.value}))}><option value="">keep current</option><option value="on">on</option><option value="off">off</option></select></Field>
+        <Field label="Show in Prep board"><select className="inp" value={bulk.showInPrep} onChange={e=>setBulk(b=>({...b,showInPrep:e.target.value}))}><option value="">keep current</option><option value="on">on</option><option value="off">off</option></select></Field>
+        <Field label="Finalised"><select className="inp" value={bulk.finalised||""} onChange={e=>setBulk(b=>({...b,finalised:e.target.value}))}><option value="">keep current</option><option value="on">finalised</option><option value="off">not finalised</option></select></Field>
+      </div>
+      <div className="flex justify-end gap-2 mt-5"><Btn tone="ghost" onClick={()=>setBulk(null)}>Cancel</Btn><Btn onClick={applyBulk}>Apply to {selIds.length}</Btn></div>
+    </Modal>}
   </div>;
 }
 function RccImportModal({state, setState, onClose}){
@@ -5878,7 +5969,7 @@ function Dishes({state, ingMap, update, branch}){
         <Btn tone="ghost" size="sm" onClick={()=>setShowLib(true)}>Photos</Btn>
       </div>
       <div className="flex items-center gap-2">
-        <VSearchInput placeholder="Search dish or ingredient…" value={q} onChange={e=>setQ(e.target.value)} style={{height:40, minWidth:0, flex:"1 1 150px", maxWidth:320}} />
+        <VSearchInput placeholder="Search dish or ingredient…" value={q} onChange={e=>setQ(e.target.value)} list="sug-dishes" style={{height:40, minWidth:0, flex:"1 1 150px", maxWidth:320}} /><Suggest id="sug-dishes" options={(state.recipes||[]).filter(r=>!r.archived).map(r=>r.name).concat((state.ingredients||[]).filter(i=>!i.archived).map(i=>i.name))} />
         <div className="flex items-center gap-2 overflow-x-auto" style={{scrollbarWidth:"none", flex:"2 1 0%"}}>
           {pill("All", catFilter==="All", ()=>setCatFilter("All"))}
           {cats.map(c=>pill(c+" "+filtered.filter(r=>catOf(r)===c).length, catFilter===c, ()=>setCatFilter(catFilter===c?"All":c)))}
@@ -5926,7 +6017,7 @@ function Dishes({state, ingMap, update, branch}){
     {view && <DishDetail rec={view} ingMap={ingMap} cats={catList} onClose={()=>setView(null)} onMove={cat=>{ moveTo(view.id, cat); setView(v=>({...v, category:cat})); }} />}
     {showCats && <CatManager state={state} update={update} dept={dept} onClose={()=>setShowCats(false)} />}
     {showAdd && <Modal title={"Add dishes · "+(dept==="bakery"?"Bakery":dept==="catering"?"Catering":dept==="barista"?"Barista":"Kitchen")} onClose={()=>setShowAdd(false)}>
-      <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} />
+      <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} list="sug-dish-add" /><Suggest id="sug-dish-add" options={offDishes.map(r=>r.name)} />
       <div className="max-h-[50vh] overflow-auto divide-y divide-stone-100">
         {offDishes.slice(0,80).map(r=><button key={r.id} onClick={()=>addDish(r.id)} className="w-full text-left flex items-center justify-between py-2.5 px-1 hover:bg-stone-50 text-sm" style={{background:"none", border:"none", cursor:"pointer"}}><span className="truncate text-stone-800">{r.name}<span className="text-stone-400 text-xs"> · {dishCategory(r)}</span></span><span className="text-xs font-semibold shrink-0" style={{color:"var(--color-primary)"}}>+ Add</span></button>)}
         {offDishes.length===0 && <div className="py-6 text-center text-sm text-stone-400">Every recipe is already on this branch’s menu.</div>}
@@ -5938,6 +6029,7 @@ function Dishes({state, ingMap, update, branch}){
   </div>;
 }
 function DishDetail({rec, ingMap, onClose, onMove, cats}){
+  const [openSub,setOpenSub]=useState(null);
   const rows=(rec.items&&rec.items.length)?rec.items:[];
   const total=recipeCost(rec,ingMap);
   const steps=((rec.procedure||"").trim()||bakedProc(rec.name)).split(/\n+/).map(x=>x.replace(/^\s*\d+[\.)]\s*/,"").trim()).filter(Boolean);
@@ -5950,14 +6042,17 @@ function DishDetail({rec, ingMap, onClose, onMove, cats}){
       <div className="p-5 md:p-7">
         <div className="flex items-baseline justify-between gap-3"><h2 className="text-[26px] font-semibold tracking-tight leading-tight">{rec.name}</h2>{rec.sellPrice>0 && <div className="text-lg font-semibold whitespace-nowrap">{money(rec.sellPrice)}</div>}</div>
         <div className="text-sm mt-1" style={{color:"var(--color-body-muted)"}}><span style={{textTransform:"uppercase", letterSpacing:"0.04em"}}>{(rec.category||"").trim()||dishCategory(rec)}</span> · {rec.yield} {rec.yieldUnit}</div>
-        {onMove && cats && <div className="flex flex-wrap gap-1.5 mt-3">{cats.map(c=>{ const active=((rec.category||"").trim()||dishCategory(rec))===c;
-          return <button key={c} onClick={()=>onMove(c)} className="vbtn-card text-xs rounded-full px-3 py-1.5" style={{border:"1px solid "+(active?"var(--color-primary-focus)":"rgba(255,255,255,.25)"), background:active?"var(--color-primary)":"transparent", color:"#fff", cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.03em"}}>{c}</button>; })}</div>}
         {(rec.allergens&&rec.allergens.length>0)&&<div className="flex flex-wrap gap-1.5 mt-3">{rec.allergens.map((a,i)=><span key={i} className="text-[11px] rounded-full px-2.5 py-1" style={{background:"rgba(255,255,255,.1)", color:"#ffb38a", border:"1px solid rgba(255,179,138,.35)"}}>{a}</span>)}</div>}
         <div className="mt-6"><div className="text-sm font-semibold mb-2" style={{color:"#fff"}}>Ingredients</div>
           <div className="divide-y border-y" style={{borderColor:"rgba(255,255,255,.12)"}}>
             {rows.length===0 && <div className="py-2 text-sm" style={{color:"var(--color-body-muted)"}}>No ingredients listed</div>}
-            {rows.map((it,i)=>{ const ing=ingMap[it.ingredientId]; const nm=ing?ing.name:(it.rawName||"(unlinked)"); const lc=ing?unitCost(ing)*it.qty:0;
-              return <div key={i} className="flex items-center justify-between py-2 text-sm gap-3" style={{borderColor:"rgba(255,255,255,.12)"}}><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.92)"}}>{nm}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{it.qty>0?(it.qty+(ing?" "+ing.useUnit:"")):"—"}</span></div>; })}
+            {rows.map((it,i)=>{ const ing=ingMap[it.ingredientId]; const sub=it.subRecipeId?recMapGet()[it.subRecipeId]:null; const nm=ing?ing.name:(sub?sub.name:(it.rawName||"(unlinked)")); const open=sub&&openSub===it.subRecipeId;
+              return <div key={i}>
+                <div className="flex items-center justify-between py-2 text-sm gap-3" onClick={sub?()=>setOpenSub(open?null:it.subRecipeId):undefined} style={{borderColor:"rgba(255,255,255,.12)", cursor:sub?"pointer":"default"}}><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.92)"}}>{sub?(open?"▾ ":"▸ "):""}{nm}{sub&&<span style={{color:"var(--color-body-muted)", fontSize:11}}> · prep</span>}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{it.qty>0?(it.qty+" "+(ing?ing.useUnit:(sub?(sub.yieldUnit||""):(it.rawUnit||"")))):"—"}</span></div>
+                {open&&<div className="pb-2 pl-5">{(sub.items||[]).map((si,j)=>{ const sIng=ingMap[si.ingredientId]; const sSub=si.subRecipeId?recMapGet()[si.subRecipeId]:null; const sNm=sIng?sIng.name:(sSub?("▸ "+sSub.name):(si.rawName||"(unlinked)"));
+                  return <div key={j} className="flex items-center justify-between py-1 text-[13px] gap-3"><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.65)"}}>{sNm}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{si.qty>0?(si.qty+" "+(sIng?sIng.useUnit:(sSub?(sSub.yieldUnit||""):(si.rawUnit||"")))):"—"}</span></div>; })}
+                {(sub.items||[]).length===0&&<div className="py-1 text-[13px]" style={{color:"var(--color-body-muted)"}}>No ingredients listed</div>}</div>}
+              </div>; })}
           </div>
         </div>
         <div className="mt-6"><div className="text-sm font-semibold mb-3" style={{color:"#fff"}}>Cooking procedure</div>
@@ -5968,6 +6063,7 @@ function DishDetail({rec, ingMap, onClose, onMove, cats}){
   </div>, document.body);
 }
 function RecipeSummary({rec, ingMap, onClose, onEdit}){
+  const [openSub,setOpenSub]=useState(null);
   const {unitCost:uc, margin}=marginOf(rec, ingMap);
   const below = rec.sellPrice>0 && margin<(rec.targetMargin/100);
   const imported = usesImported(rec, ingMap);
@@ -5990,12 +6086,17 @@ function RecipeSummary({rec, ingMap, onClose, onEdit}){
     <div className="flex items-center justify-between mb-2"><div className="text-xs font-medium text-stone-500">Ingredients ({rows.length})</div><div className="text-xs text-stone-400">{linked}/{rows.length} linked</div></div>
     <div className="card divide-y divide-stone-100">
       {rows.length===0 && <div className="p-3 text-sm text-stone-400">No ingredients</div>}
-      {rows.map((it,i)=>{ const ing=ingMap[it.ingredientId]; const sub=it.subRecipeId?recMapGet()[it.subRecipeId]:null; const subPer=sub?recipeCost(sub,ingMap)/(sub.yield||1):0; const linkedItem=ing||sub; const nm=ing?ing.name:(sub?("▸ "+sub.name):(it.rawName||"(unlinked)")); const lc=ing?unitCost(ing)*itemQtyInUse(it,ing):(sub?subPer*(it.qty||0):0);
-        return <div key={i} className="flex items-center justify-between p-3 text-sm gap-3">
+      {rows.map((it,i)=>{ const ing=ingMap[it.ingredientId]; const sub=it.subRecipeId?recMapGet()[it.subRecipeId]:null; const subPer=sub?recipeCost(sub,ingMap)/(sub.yield||1):0; const linkedItem=ing||sub; const open=sub&&openSub===it.subRecipeId; const nm=ing?ing.name:(sub?((open?"▾ ":"▸ ")+sub.name):(it.rawName||"(unlinked)")); const lc=ing?unitCost(ing)*itemQtyInUse(it,ing):(sub?subPer*(it.qty||0):0);
+        return <div key={i}>
+        <div className="flex items-center justify-between p-3 text-sm gap-3" onClick={sub?()=>setOpenSub(open?null:it.subRecipeId):undefined} style={sub?{cursor:"pointer"}:undefined}>
           <div className="text-stone-700 flex-1 min-w-0 truncate">{nm}{sub&&<span className="text-stone-400 text-xs"> · sub-recipe</span>}{!linkedItem&&<span className="text-amber-500 text-xs"> · not linked</span>}</div>
           <span className="w-24 text-right text-stone-600">{it.qty>0? (it.qty+" "+(it.rawUnit||(ing?ing.useUnit:(sub?sub.yieldUnit:"")))) : <span className="text-amber-500">no qty</span>}</span>
           <span className="hidden sm:block w-24 text-right text-xs text-stone-400">{ing?("@ "+money(unitCost(ing))+"/"+ing.useUnit):(sub?("@ "+money(subPer)+"/"+(sub.yieldUnit||"unit")):"")}</span>
           <span className="w-20 text-right text-stone-700">{money(lc)}</span>
+        </div>
+        {open&&<div className="pb-2 pl-8 pr-3">{(sub.items||[]).map((si,j)=>{ const sIng=ingMap[si.ingredientId]; const sSub=si.subRecipeId?recMapGet()[si.subRecipeId]:null; const sNm=sIng?sIng.name:(sSub?("▸ "+sSub.name):(si.rawName||"(unlinked)"));
+          return <div key={j} className="flex items-center justify-between py-1 text-[13px] gap-3 text-stone-500"><span className="min-w-0 truncate">{sNm}</span><span className="whitespace-nowrap">{si.qty>0?(si.qty+" "+(sIng?sIng.useUnit:(sSub?(sSub.yieldUnit||""):(si.rawUnit||"")))):"—"}</span></div>; })}
+        {(sub.items||[]).length===0&&<div className="py-1 text-[13px] text-stone-400">No ingredients listed</div>}</div>}
         </div>; })}
     </div>
     {(rec.allergens&&rec.allergens.length>0) && <div className="mt-4 text-xs text-stone-500"><b>Allergens:</b> {rec.allergens.join(", ")}</div>}
@@ -6077,7 +6178,7 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
         <div className="text-[11px] text-stone-400 mt-1">Upload goes to your Cloudinary library (free, no card). Or paste any hosted image URL.</div>
         {showPick && <PhotoLibrary photos={state.photos} update={update} mode="pick" onPick={(url)=>{ set("image",url); setShowPick(false); }} onClose={()=>setShowPick(false)} />}
       </Field>
-      <div className="flex flex-wrap gap-x-6 gap-y-2"><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInDish} onChange={e=>set("showInDish",e.target.checked)} />Show this recipe in the Dishes menu</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInPrep} onChange={e=>set("showInPrep",e.target.checked)} />Show on the Prep board</label></div>
+      <div className="flex flex-wrap gap-x-6 gap-y-2"><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInDish} onChange={e=>set("showInDish",e.target.checked)} />Show this recipe in the Dishes menu</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInPrep} onChange={e=>set("showInPrep",e.target.checked)} />Show on the Prep board</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.finalised} onChange={e=>set("finalised",e.target.checked)} /><span style={{fontWeight:600, color:f.finalised?"#3f9e63":"inherit"}}>Finalised ✓</span></label></div>
       <Field label="Cooking procedure (one step per line)"><textarea className="inp" style={{minHeight:"96px"}} value={f.procedure||""} onChange={e=>set("procedure",e.target.value)} placeholder={"Toast the bagel\nFry the egg\nAssemble & serve"} /></Field>
     </div>
     {fromImport && <div className="mt-3 text-xs bg-amber-50 text-amber-700 rounded-lg p-3">Imported recipe · {linked}/{f.items.length} ingredients auto-linked from the invoice/recipe list. Just enter quantities below and the cost switches to auto-calculated. {usesImported(f,ingMap) && <span>(Imported cost {money(f.importedCost)})</span>}</div>}
@@ -6091,7 +6192,9 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
             {unmatched && <div className="text-[11px] text-amber-500 mt-0.5">from import: {it.rawName} — no auto-match, search or create below</div>}
           </div>
           <input type="number" className="inp w-24" placeholder="qty" value={it.qty} onChange={e=>{const items=[...f.items]; items[i]={...it,qty:Number(e.target.value)}; set("items",items);}} />
-          <span className="text-xs text-stone-400 w-8">{it.rawUnit||(ing?ing.useUnit:(sub?sub.yieldUnit:""))}</span>
+          <select className="inp w-16 px-1 text-xs" value={it.rawUnit||(ing?ing.useUnit:(sub?sub.yieldUnit:"g"))} onChange={e=>{const items=[...f.items]; items[i]={...it,rawUnit:e.target.value}; set("items",items);}}>
+            {[...new Set(["g","kg","ml","L","each",(it.rawUnit||""),(ing?ing.useUnit:""),(sub?sub.yieldUnit:"")])].filter(Boolean).map(u=><option key={u} value={u}>{u}</option>)}
+          </select>
           <span className="hidden md:block text-xs text-stone-400 w-32 text-right" title="unit price">{ing?"@ "+money(unitCost(ing))+"/"+ing.useUnit:(sub?"@ "+money(subPer)+"/"+(sub.yieldUnit||"unit"):"")}</span>
           <span className="text-sm text-stone-700 w-20 text-right" title="line cost = unit price x qty">{money(lc)}</span>
           <button onClick={()=>set("items",f.items.filter((_,j)=>j!==i))} className="text-red-400 text-xs">remove</button></div>;
@@ -6425,278 +6528,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
     var el = e.target && e.target.closest ? e.target.closest(".tilt") : null;
     if(el && !(e.relatedTarget && el.contains(e.relatedTarget))){ reset(el); if(cur === el) cur = null; }
   }, {passive:true});
-})();
-</script>
-<!-- ================= Hideout Postcards — staff messaging widget (2026-07-23, shared with Ordering app) ================= -->
-<script>
-/* Self-contained vanilla widget, identical to the Ordering app copy. Shares the SAME postcards feed
-   (RCC Firebase project). RCC already loads the Firebase compat SDK. Does NOT touch the React tree. */
-(function(){
-  "use strict";
-  if(window.__HIDEOUT_POSTCARDS__) return; window.__HIDEOUT_POSTCARDS__=true;
-
-  var FB={apiKey:"AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s",authDomain:"hideout-recipe-cost.firebaseapp.com",projectId:"hideout-recipe-cost",storageBucket:"hideout-recipe-cost.firebasestorage.app",messagingSenderId:"717961739938",appId:"1:717961739938:web:752af54de485d7f7c921fb"};
-  var APP="postcards";
-  var BACKEND="https://script.google.com/macros/s/AKfycbyT4pJ5QuF1HwLCBzbSS2eXcQoAwCNjeE2WqNucJcG20JQ5hlG3BBuBLWDA50llNZCh/exec";
-  var TOKEN="hideout-9f2a7c-orders";
-  var THEMES=[
-    {id:"cream",name:"Cream",bg:"#fbf5ec",ink:"#2a2118",accent:"#c81a22"},
-    {id:"sage",name:"Sage",bg:"#e8ede4",ink:"#26301f",accent:"#5a7150"},
-    {id:"sky",name:"Sky",bg:"#e6eef4",ink:"#1d2b38",accent:"#3f6f9c"},
-    {id:"blush",name:"Blush",bg:"#f6e9e6",ink:"#3a2320",accent:"#b45a52"}
-  ];
-  var app,auth,db,storage,me=null,staff=[],feedUnsub=null,booting=false;
-
-  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function theme(id){ for(var i=0;i<THEMES.length;i++){ if(THEMES[i].id===id) return THEMES[i]; } return THEMES[0]; }
-  function fmtTime(ts){ try{ var d=ts&&ts.toDate?ts.toDate():(ts?new Date(ts):new Date()); return d.toLocaleString("en-AU",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
-
-  function initFb(){
-    if(!window.firebase||!firebase.initializeApp){ return false; }
-    try{
-      var existing=(firebase.apps||[]).filter(function(a){return a.name===APP;})[0];
-      app=existing||firebase.initializeApp(FB,APP);
-    }catch(e){ try{ app=firebase.app(APP); }catch(e2){ return false; } }
-    try{ auth=app.auth(); db=app.firestore(); storage=app.storage(); }catch(e){ return false; }
-    try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
-    auth.onAuthStateChanged(function(u){ onAuth(u); });
-    return true;
-  }
-
-  function onAuth(u){
-    if(!u){ me=null; render(); return; }
-    db.collection("allowlist").doc((u.email||"").toLowerCase()).get().then(function(snap){
-      var d=snap&&snap.exists?snap.data():{};
-      me={email:(u.email||"").toLowerCase(),name:(d&&d.name)||u.displayName||(u.email||"").split("@")[0],role:(d&&d.role)||"staff",branch:(d&&d.branch)||""};
-      loadStaff(); subscribeFeed(); render();
-    }).catch(function(){
-      me={email:(u.email||"").toLowerCase(),name:u.displayName||(u.email||"").split("@")[0],role:"staff",branch:""};
-      loadStaff(); subscribeFeed(); render();
-    });
-  }
-
-  function loadStaff(){
-    db.collection("allowlist").get().then(function(qs){
-      var list=[]; qs.forEach(function(doc){ var d=doc.data()||{}; list.push({email:doc.id,name:d.name||doc.id,role:d.role||"staff"}); });
-      list.sort(function(a,b){ return (a.name||"").localeCompare(b.name||""); });
-      staff=list; render();
-    }).catch(function(){ staff=[]; });
-  }
-
-  function signIn(){
-    if(!auth){ toast("Not ready — reload the page."); return; }
-    var pr=new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(pr).catch(function(e){
-      toast("Sign-in failed: "+(e&&e.message?e.message:e)+" (open the app from its web address, not a file).");
-    });
-  }
-  function signOut(){ if(auth) auth.signOut(); }
-
-  function moderate(text){
-    var url=BACKEND+"?action=moderatePostcard&token="+encodeURIComponent(TOKEN)+"&text="+encodeURIComponent(text||"");
-    return fetch(url,{cache:"no-store"}).then(function(r){ return r.json(); }).then(function(j){
-      if(j&&typeof j.allow==="boolean") return j;
-      return {allow:false,reason:"Could not check the message right now. Try again in a moment.",_soft:true};
-    }).catch(function(){
-      return {allow:false,reason:"Could not reach the safety check. Try again in a moment.",_soft:true};
-    });
-  }
-
-  function uploadPhoto(file){
-    if(!file) return Promise.resolve("");
-    var id=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-    var ext=(file.name&&file.name.indexOf(".")>-1)?file.name.slice(file.name.lastIndexOf(".")):".jpg";
-    var ref=storage.ref("postcards/"+id+ext);
-    return ref.put(file).then(function(){ return ref.getDownloadURL(); });
-  }
-
-  function send(opts, done){
-    var msg=(opts.message||"").trim();
-    if(!msg){ done({error:"Write a message first."}); return; }
-    moderate(msg).then(function(mod){
-      if(!mod.allow){ done({blocked:true, reason:mod.reason||"That message can't be posted.", soft:!!mod._soft}); return; }
-      uploadPhoto(opts.file).then(function(photoUrl){
-        var rec={
-          fromEmail:me.email, fromName:me.name,
-          toName:opts.toName||"Everyone", toEmail:opts.toEmail||"",
-          message:msg, photoUrl:photoUrl||"", theme:opts.themeId||"cream",
-          status:"approved",
-          createdAt:firebase.firestore.FieldValue.serverTimestamp()
-        };
-        return db.collection("postcards").add(rec);
-      }).then(function(){ done({ok:true}); })
-        .catch(function(e){ done({error:(e&&e.message)||"Could not send. Try again."}); });
-    });
-  }
-
-  var feedItems=[];
-  function subscribeFeed(){
-    if(feedUnsub){ try{ feedUnsub(); }catch(e){} feedUnsub=null; }
-    feedUnsub=db.collection("postcards").orderBy("createdAt","desc").limit(60).onSnapshot(function(qs){
-      var arr=[]; qs.forEach(function(doc){ var d=doc.data()||{}; d._id=doc.id; arr.push(d); });
-      feedItems=arr; renderFeed();
-    }, function(){ });
-  }
-
-  function injectCSS(){
-    if(document.getElementById("pc-css")) return;
-    var st=document.createElement("style"); st.id="pc-css";
-    st.textContent=[
-"#pc-fab{position:fixed;left:20px;bottom:20px;z-index:99998;width:58px;height:58px;border:none;border-radius:999px;cursor:pointer;background:#c81a22;color:#fff;box-shadow:0 10px 30px rgba(120,10,14,.34),0 2px 6px rgba(20,12,4,.2);display:flex;align-items:center;justify-content:center;font-size:26px;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s}",
-"#pc-fab:hover{transform:translateY(-2px)}#pc-fab:active{transform:scale(.95)}",
-"#pc-try{position:fixed;left:20px;bottom:88px;z-index:99998;border:none;border-radius:999px;cursor:pointer;background:#241d16;color:#fbf5ec;font-family:'SF Pro Text','Inter',system-ui,sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.02em;padding:10px 15px;box-shadow:0 8px 22px rgba(20,12,4,.28);display:flex;align-items:center;gap:6px;transition:transform .16s cubic-bezier(.2,.7,.2,1)}",
-"#pc-try:hover{transform:translateY(-2px)}#pc-try:active{transform:scale(.96)}",
-"#pc-overlay{position:fixed;inset:0;z-index:99999;background:rgba(20,12,4,.44);display:none;align-items:center;justify-content:center;padding:16px;font-family:'SF Pro Text','Inter',system-ui,sans-serif}",
-"#pc-modal{background:#fbf5ec;width:min(640px,100%);max-height:88vh;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 70px rgba(20,12,4,.4)}",
-".pc-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(0,0,0,.08)}",
-".pc-head h3{margin:0;font-size:18px;font-weight:700;color:#2a2118;font-family:'SF Pro Display','Inter',system-ui}",
-".pc-x{border:none;background:transparent;font-size:22px;cursor:pointer;color:#6a5f52;line-height:1}",
-".pc-body{padding:16px 18px;overflow:auto}",
-".pc-signin{text-align:center;padding:26px 10px}",
-".pc-btn{border:none;border-radius:12px;background:#c81a22;color:#fff;font-weight:700;font-size:16px;padding:13px 18px;cursor:pointer;font-family:inherit}",
-".pc-btn.ghost{background:transparent;color:#6a5f52;font-weight:600}",
-".pc-lbl{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6a5f52;margin:12px 0 5px;font-weight:600}",
-".pc-inp,.pc-sel,.pc-ta{width:100%;box-sizing:border-box;border:1px solid rgba(0,0,0,.14);border-radius:10px;padding:12px 12px;font-size:16px;font-family:inherit;background:#fff;color:#2a2118}",
-".pc-ta{min-height:80px;resize:vertical}",
-".pc-inp:focus,.pc-sel:focus,.pc-ta:focus{outline:none;box-shadow:0 0 0 3px rgba(200,26,34,.45);border-color:#c81a22}",
-".pc-themes{display:flex;gap:8px;margin-top:6px}",
-".pc-sw{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent}",
-".pc-sw.sel{border-color:#2a2118}",
-".pc-err{color:#c1583f;font-size:13px;margin-top:10px;min-height:16px}",
-".pc-note{font-size:11.5px;color:#8a7d6d;margin-top:8px;line-height:1.5}",
-".pc-tabs{display:flex;gap:6px;margin-bottom:8px}",
-".pc-tab{flex:1;text-align:center;padding:9px;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px;color:#6a5f52;background:transparent;border:none;font-family:inherit}",
-".pc-tab.on{background:#241d16;color:#fbf5ec}",
-".pc-card{border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 4px 14px rgba(20,12,4,.12);position:relative}",
-".pc-card .pc-route{font-size:12px;letter-spacing:.04em;opacity:.85;margin-bottom:6px;font-weight:600}",
-".pc-card .pc-msg{font-size:15.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}",
-".pc-card img{width:100%;border-radius:10px;margin-top:10px;display:block}",
-".pc-card .pc-when{font-size:11px;opacity:.6;margin-top:8px}",
-".pc-pinbtn{position:absolute;top:6px;right:8px;border:none;background:transparent;cursor:pointer;font-size:17px;opacity:.26;filter:grayscale(1);transition:opacity .15s,filter .15s,transform .15s;line-height:1;padding:2px}",
-".pc-pinbtn:hover{opacity:.65}",
-".pc-pinbtn.on{opacity:1;filter:none;transform:rotate(8deg)}",
-".pc-card.pinned{transform:rotate(-1deg);box-shadow:0 8px 22px rgba(20,12,4,.22)}",
-".pc-pinlbl{font-size:12px;font-weight:700;color:#8a7d6d;text-transform:uppercase;letter-spacing:.08em;margin:2px 0 8px}",
-".pc-pinwrap{margin-bottom:16px;padding-bottom:8px;border-bottom:1px dashed rgba(0,0,0,.16)}",
-"@keyframes pc-stick{0%{transform:scale(.82) rotate(-7deg);opacity:0}60%{transform:scale(1.03) rotate(-1deg);opacity:1}100%{transform:rotate(-1deg)}}",
-".pc-pinwrap .pc-card{animation:pc-stick .42s cubic-bezier(.2,.8,.3,1.2)}",
-"@keyframes pc-fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}",
-"#pc-feed>.pc-card{animation:pc-fadein .24s ease}",
-".pc-preview{max-width:100%;border-radius:10px;margin-top:8px;display:none}",
-"@media (prefers-reduced-motion:reduce){.pc-pinwrap .pc-card,#pc-feed>.pc-card{animation:none}.pc-pinbtn{transition:none}}",
-".pc-empty{text-align:center;color:#8a7d6d;padding:30px 10px;font-size:14px}",
-"@media (max-width:640px){#pc-modal{max-height:94vh}}"
-    ].join("\n");
-    document.head.appendChild(st);
-  }
-
-  var state={tab:"feed", themeId:"cream", file:null};
-
-  function toast(m){
-    var t=document.createElement("div");
-    t.textContent=m; t.style.cssText="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#241d16;color:#fbf5ec;padding:11px 16px;border-radius:12px;z-index:100000;font-family:'SF Pro Text','Inter',system-ui;font-size:14px;max-width:88vw;box-shadow:0 10px 30px rgba(0,0,0,.3)";
-    document.body.appendChild(t); setTimeout(function(){ t.remove(); },3600);
-  }
-
-  function open(){ var o=document.getElementById("pc-overlay"); if(o){ o.style.display="flex"; render(); } }
-  function openCompose(){ state.tab="write"; open(); }
-  function close(){ var o=document.getElementById("pc-overlay"); if(o) o.style.display="none"; }
-
-  function render(){
-    var body=document.getElementById("pc-bodyc"); if(!body) return;
-    if(!me){
-      body.innerHTML='<div class="pc-signin"><p style="color:#6a5f52;font-size:14px;margin-bottom:16px">Sign in with your Hideout Google account to send and read postcards.</p><button class="pc-btn" id="pc-signin-b">Sign in with Google</button></div>';
-      var b=document.getElementById("pc-signin-b"); if(b) b.onclick=signIn;
-      return;
-    }
-    body.innerHTML=
-      '<div class="pc-tabs"><button class="pc-tab '+(state.tab==="feed"?"on":"")+'" data-t="feed">Postcards</button><button class="pc-tab '+(state.tab==="write"?"on":"")+'" data-t="write">Write one</button></div>'+
-      '<div id="pc-tabc"></div>';
-    Array.prototype.forEach.call(body.querySelectorAll(".pc-tab"),function(el){ el.onclick=function(){ state.tab=el.getAttribute("data-t"); render(); }; });
-    if(state.tab==="write") renderWrite(); else { renderFeedInto(); }
-  }
-
-  function renderWrite(){
-    var c=document.getElementById("pc-tabc"); if(!c) return;
-    var opts=staff.filter(function(s){ return s.email!==me.email; }).map(function(s){ return '<option value="'+esc(s.email)+'">'+esc(s.name)+'</option>'; }).join("");
-    var sw=THEMES.map(function(t){ return '<div class="pc-sw'+(t.id===state.themeId?" sel":"")+'" data-th="'+t.id+'" style="background:'+t.bg+';box-shadow:inset 0 0 0 3px '+t.accent+'"></div>'; }).join("");
-    c.innerHTML=
-      '<label class="pc-lbl">To</label><select class="pc-sel" id="pc-to"><option value="">Everyone (open)</option>'+opts+'</select>'+
-      '<label class="pc-lbl">Message</label><textarea class="pc-ta" id="pc-msg" maxlength="600" placeholder="Say something kind..."></textarea>'+
-      '<label class="pc-lbl">Photo (optional)</label><input class="pc-inp" type="file" accept="image/*" id="pc-file"><img class="pc-preview" id="pc-preview" alt="">'+
-      '<label class="pc-lbl">Postcard colour</label><div class="pc-themes">'+sw+'</div>'+
-      '<div class="pc-err" id="pc-err"></div>'+
-      '<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button class="pc-btn" id="pc-send">Send postcard</button><span id="pc-status" style="font-size:13px;color:#8a7d6d"></span></div>'+
-      '<div class="pc-note">Every postcard is checked automatically before it posts. Messages meant to insult, mock or mislead won’t go through. Signed in as '+esc(me.name)+' · <a href="#" id="pc-out" style="color:#8a7d6d">sign out</a></div>';
-    Array.prototype.forEach.call(c.querySelectorAll(".pc-sw"),function(el){ el.onclick=function(){ state.themeId=el.getAttribute("data-th"); Array.prototype.forEach.call(c.querySelectorAll(".pc-sw"),function(x){ x.className="pc-sw"+(x.getAttribute("data-th")===state.themeId?" sel":""); }); }; });
-    var fileEl=document.getElementById("pc-file"), prev=document.getElementById("pc-preview");
-    if(fileEl&&prev){ fileEl.onchange=function(){ var f=(fileEl.files||[])[0]; if(f){ try{ prev.src=URL.createObjectURL(f); prev.style.display="block"; }catch(e){} } else { prev.style.display="none"; } }; }
-    var out=document.getElementById("pc-out"); if(out) out.onclick=function(e){ e.preventDefault(); signOut(); };
-    var sb=document.getElementById("pc-send");
-    sb.onclick=function(){
-      var toSel=document.getElementById("pc-to");
-      var toEmail=toSel.value, toName=toEmail?(toSel.options[toSel.selectedIndex].text):"Everyone";
-      var msg=document.getElementById("pc-msg").value;
-      var file=(document.getElementById("pc-file").files||[])[0]||null;
-      var err=document.getElementById("pc-err"), st=document.getElementById("pc-status");
-      err.textContent=""; st.textContent="Sending…"; sb.disabled=true;
-      send({toName:toName,toEmail:toEmail,message:msg,themeId:state.themeId,file:file},function(res){
-        sb.disabled=false; st.textContent="";
-        if(res.error){ err.textContent=res.error; return; }
-        if(res.blocked){ err.textContent=(res.soft?"":"Held: ")+res.reason; return; }
-        if(res.ok){ toast("Postcard sent ❤"); state.tab="feed"; render(); }
-      });
-    };
-  }
-
-  function renderFeedInto(){
-    var c=document.getElementById("pc-tabc"); if(!c) return;
-    c.innerHTML='<div id="pc-feed"></div>'; renderFeed();
-  }
-  function togglePin(id, cur){
-    if(!db||!id) return;
-    db.collection("postcards").doc(id).update({pinned:!cur, pinnedAt:firebase.firestore.FieldValue.serverTimestamp()})
-      .catch(function(e){ toast("Couldn't pin — "+((e&&e.message)||"try again")); });
-  }
-  function cardHtml(d, pinned){
-    var th=theme(d.theme);
-    var route=esc(d.fromName||"?")+" → "+esc(d.toName||"Everyone");
-    return '<div class="pc-card'+(pinned?" pinned":"")+'" style="background:'+th.bg+';color:'+th.ink+'">'+
-      '<button class="pc-pinbtn'+(pinned?" on":"")+'" data-pin="'+esc(d._id)+'" data-cur="'+(pinned?"1":"0")+'" title="'+(pinned?"Unpin":"Pin to board")+'">📌</button>'+
-      '<div class="pc-route" style="color:'+th.accent+';padding-right:22px">'+route+'</div>'+
-      '<div class="pc-msg">'+esc(d.message||"")+'</div>'+
-      (d.photoUrl?'<img src="'+esc(d.photoUrl)+'" alt="">':"")+
-      '<div class="pc-when">'+esc(fmtTime(d.createdAt))+'</div>'+
-    '</div>';
-  }
-  function renderFeed(){
-    var f=document.getElementById("pc-feed"); if(!f) return;
-    if(!feedItems.length){ f.innerHTML='<div class="pc-empty">No postcards yet. Be the first to send one!</div>'; return; }
-    var pins=feedItems.filter(function(d){ return d.pinned; });
-    var rest=feedItems.filter(function(d){ return !d.pinned; });
-    var html="";
-    if(pins.length){ html+='<div class="pc-pinlbl">📌 Pinned</div><div class="pc-pinwrap">'+pins.map(function(d){ return cardHtml(d,true); }).join("")+'</div>'; }
-    html+=rest.map(function(d){ return cardHtml(d,false); }).join("");
-    f.innerHTML=html;
-    Array.prototype.forEach.call(f.querySelectorAll(".pc-pinbtn"),function(el){ el.onclick=function(){ togglePin(el.getAttribute("data-pin"), el.getAttribute("data-cur")==="1"); }; });
-  }
-
-  function mount(){
-    injectCSS();
-    var fab=document.createElement("button"); fab.id="pc-fab"; fab.title="Staff postcards"; fab.innerHTML="✉";
-    fab.onclick=open; document.body.appendChild(fab);
-    var tryb=document.createElement("button"); tryb.id="pc-try"; tryb.title="Write a postcard"; tryb.innerHTML="✏️ TRY";
-    tryb.onclick=openCompose; document.body.appendChild(tryb);
-    var ov=document.createElement("div"); ov.id="pc-overlay";
-    ov.innerHTML='<div id="pc-modal"><div class="pc-head"><h3>Postcards</h3><button class="pc-x" id="pc-close">×</button></div><div class="pc-body"><div id="pc-bodyc"></div></div></div>';
-    document.body.appendChild(ov);
-    ov.addEventListener("click",function(e){ if(e.target===ov) close(); });
-    document.getElementById("pc-close").onclick=close;
-    if(!initFb()){ if(!booting){ booting=true; var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } }
-  }
-
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",mount); else mount();
-  window.HideoutPostcards={open:open, compose:openCompose};
 })();
 </script>
 <!-- ================= Drag-to-pan (grab to scroll) — desktop mouse convenience, 2026-07-24 ================= -->

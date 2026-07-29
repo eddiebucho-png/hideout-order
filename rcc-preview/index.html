@@ -4166,6 +4166,8 @@ function migrate(s){
   if(!s.dailyRoutine || typeof s.dailyRoutine!=="object" || Array.isArray(s.dailyRoutine)) s.dailyRoutine={};
   ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].forEach(d=>{ if(typeof s.dailyRoutine[d]!=="string") s.dailyRoutine[d]=(typeof DAILY_ROUTINE!=="undefined"?(DAILY_ROUTINE[d]||""):""); });
   if(!Array.isArray(s.infoDocs) || !s.infoDocs.length) s.infoDocs=(typeof INFO_DOCS!=="undefined")?JSON.parse(JSON.stringify(INFO_DOCS)):[];
+  // Catering prep sheets: {id,date:"YYYY-MM-DD",branch,title,client,pax,pricePP,pickup,html,text,archived}
+  if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[];
   { const rn={"Branch 2":"340 Adelaide","Branch 3":"515 Valley","100 Edward St":"100 Edward"}; (s.branches||[]).forEach(b=>{ if(rn[b.name]) b.name=rn[b.name]; }); }
   { const pc={"340 Adelaide":"340340","100 Edward":"100100","515 Valley":"515515"}; (s.branches||[]).forEach(b=>{ if(pc[b.name] && !b.passcode) b.passcode=pc[b.name]; }); }
   s.recipes.forEach(r=>{ const bp=bakedProc(r.name); if(bp && !(r.procedure||"").trim()){ r.procedure=bp; r.showInDish=true; } });
@@ -5151,6 +5153,23 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
   const [events,setEvents]=useState(null);
   const [status,setStatus]=useState("");
   const [showCfg,setShowCfg]=useState(false); const [doc,setDoc]=useState(""); const [showRoutine,setShowRoutine]=useState(false);
+  const [sheet,setSheet]=useState(null);
+  /* Catering sheets to surface on Today: today + tomorrow (prep usually starts the day before),
+     filtered to this venue when the entry names one.
+     NOTE: do NOT call the global today() here — this component declares its own `today` (the list of
+     today's calendar events) further down, which shadows it for the whole scope (TDZ). And the global
+     helper is UTC-based, which in Brisbane (UTC+10) reads a day behind until 10am — exactly when the
+     morning prep needs the sheet. So format the local date explicitly. */
+  const ymdLocal=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  const dateTodayStr=ymdLocal(new Date());
+  const dateTomorrowStr=(()=>{ const d=new Date(); d.setDate(d.getDate()+1); return ymdLocal(d); })();
+  const cateringToday=(()=>{
+    const t=dateTodayStr, tm=dateTomorrowStr;
+    return (state.cateringSheets||[])
+      .filter(c=>c && (c.date===t||c.date===tm) && !c.archived)
+      .filter(c=>!c.branch || !branchName || String(c.branch).toLowerCase().includes(String(branchName).toLowerCase()) || String(branchName).toLowerCase().includes(String(c.branch).toLowerCase()))
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  })();
   const now=new Date();
   const dateLabel=now.toLocaleDateString("en-AU",{weekday:"long", day:"numeric", month:"long"});
   const weekday=now.toLocaleDateString("en-AU",{weekday:"long"});
@@ -5264,12 +5283,47 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
         <Stat label="Prep done" value={doneN} />
       </div>
     </div>
+    {/* Catering sheets for today (and tomorrow, so prep can start the day before).
+        The sheet itself is a full HTML document stored on the entry — opened in an iframe
+        so its own print styles survive, and printable straight from the popup. */}
+    {cateringToday.length>0 && <div className="mb-6">
+      <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Catering sheets</div>
+      <div className="space-y-2">
+        {cateringToday.map((c,i)=>(<button key={c.id||i} onClick={()=>setSheet(c)}
+          className="w-full text-left vbtn-card" style={{padding:"12px 14px", border:"1px solid var(--color-hairline-alpha)", borderLeft:"3px solid var(--color-primary)", background:"var(--color-canvas)", cursor:"pointer"}}>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <div className="font-semibold text-stone-800" style={{fontFamily:"var(--font-display)"}}>{c.title||c.client||"Catering"}</div>
+            <div className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{c.date===dateTodayStr?"Today":c.date===dateTomorrowStr?"Tomorrow":c.date}{c.branch?" · "+c.branch:""}</div>
+          </div>
+          <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>
+            {[c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, (c.pax&&c.pricePP)?("total $"+(Number(c.pax)*Number(c.pricePP)).toFixed(2)):null, c.pickup||null].filter(Boolean).join(" · ")||"Open the prep sheet"}
+            <span style={{color:"var(--color-primary)"}}> · open sheet ›</span>
+          </div>
+        </button>))}
+      </div>
+    </div>}
     <div>
       <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)"}}>Reference & checklists</div>
       <div className="flex flex-wrap gap-2">
         {(state.infoDocs||INFO_DOCS).map(d=>(<button key={d.key} onClick={()=>setDoc(d)} className="vbtn-card text-sm rounded-full" style={{padding:"9px 16px", border:"1px solid var(--color-hairline-alpha)", background:"var(--color-canvas)", color:"var(--color-ink)", cursor:"pointer", fontWeight:500}}>{d.title}</button>))}
       </div>
     </div>
+    {sheet && <Modal title={(sheet.title||sheet.client||"Catering sheet")+(sheet.date?" — "+sheet.date:"")} onClose={()=>setSheet(null)} wide>
+      {sheet.html
+        ? <div>
+            <div className="flex justify-end mb-2">
+              <Btn size="sm" onClick={()=>{ try{ const w=document.getElementById("cateringSheetFrame"); if(w&&w.contentWindow){ w.contentWindow.focus(); w.contentWindow.print(); } }catch(e){ alert("Couldn't open the print dialog — open the sheet in a new tab instead."); } }}>Print</Btn>
+            </div>
+            {/* sandbox without allow-scripts: the sheet is plain HTML/CSS, so blocking scripts costs
+                nothing and stops a pasted sheet from touching app data. allow-same-origin +
+                allow-modals keep contentWindow.print() working. */}
+            <iframe id="cateringSheetFrame" title="Catering sheet" srcDoc={sheet.html}
+              sandbox="allow-same-origin allow-modals"
+              style={{width:"100%", height:"70vh", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}} />
+          </div>
+        : sheet.text ? <MiniDoc text={sheet.text} />
+        : <p className="text-sm text-stone-500">No sheet content saved yet. Add the HTML in Settings → Catering sheets.</p>}
+    </Modal>}
     {doc && <Modal title={doc.title} onClose={()=>setDoc("")} wide><MiniDoc text={doc.text} /></Modal>}
     {showCfg && <Modal title="Google Calendar" onClose={()=>setShowCfg(false)}>
       <p className="text-xs text-stone-500 mb-2 leading-relaxed">In Google Calendar: <b>Settings → </b> pick your calendar <b>→ Integrate calendar → “Secret address in iCal format”</b>. Copy that link (ends in <code>.ics</code>) and paste it below. It updates automatically each day.</p>
@@ -6565,6 +6619,13 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
   const setDocField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; if(s.infoDocs[i]) s.infoDocs[i][k]=v; });
   const addDoc=()=>update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; s.infoDocs.push({key:"doc"+Date.now(), title:"New document", text:""}); });
   const removeDoc=i=>{ if(!confirm("Remove this document?")) return; update(s=>{ s.infoDocs.splice(i,1); }); };
+  const sheets=state.cateringSheets||[];
+  const setSheetField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[]; if(s.cateringSheets[i]) s.cateringSheets[i][k]=v; });
+  // Local date, not today() — the global helper is UTC-based, so before 10am in Brisbane it would
+  // default a new sheet to yesterday.
+  const localYmd=()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+  const addSheet=()=>update(s=>{ if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[]; s.cateringSheets.unshift({id:rid("cs"), date:localYmd(), title:"New catering sheet", client:"", pax:"", pricePP:"", branch:"", pickup:"", html:""}); });
+  const removeSheet=i=>{ if(!confirm("Remove this catering sheet?")) return; update(s=>{ s.cateringSheets.splice(i,1); }); };
   const Section=({title,desc,children})=> <div className="card p-5 mb-4"><div className="font-semibold text-stone-800 mb-1" style={{fontFamily:"var(--font-display)"}}>{title}</div>{desc&&<p className="text-xs text-stone-500 mb-3 leading-relaxed">{desc}</p>}{children}</div>;
   const [sub,setSub]=useState("general");
   const Cat=({children})=> <div style={{fontSize:11,fontWeight:800,letterSpacing:"1.5px",textTransform:"uppercase",color:"var(--color-primary,#c81a22)",margin:"20px 2px 8px"}}>{children}</div>;
@@ -6591,6 +6652,36 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
         {docs.length===0 && <div className="text-sm text-stone-400">No documents yet.</div>}
       </div>
       <div className="mt-3"><Btn size="sm" onClick={addDoc}>+ Add document</Btn></div>
+    </Section>
+
+    <Section title="Catering sheets" desc="Prep sheets that appear on Today on their date (and the day before). Paste the finished sheet as a full HTML document — it opens in a popup and prints from there.">
+      <div className="space-y-3">
+        {sheets.map((c,i)=>(<div key={c.id||i} className="rounded-xl p-3" style={{border:"1px solid var(--color-hairline-alpha)"}}>
+          <div className="flex items-center gap-2 mb-2">
+            <input className="inp w-40" type="date" value={c.date||""} onChange={e=>setSheetField(i,"date",e.target.value)} />
+            <input className="inp flex-1" placeholder="Title (e.g. Dyno Nobel — lunch)" value={c.title||""} onChange={e=>setSheetField(i,"title",e.target.value)} />
+            <button onClick={()=>removeSheet(i)} className="text-xs" style={{background:"none",border:"none",color:"#d70015",cursor:"pointer"}}>Remove</button>
+          </div>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <input className="inp w-44" placeholder="Client" value={c.client||""} onChange={e=>setSheetField(i,"client",e.target.value)} />
+            <input className="inp w-24" type="number" min="1" placeholder="Pax" value={c.pax||""} onChange={e=>setSheetField(i,"pax",e.target.value)} />
+            <input className="inp w-24" type="number" min="0" placeholder="$pp" value={c.pricePP||""} onChange={e=>setSheetField(i,"pricePP",e.target.value)} />
+            <input className="inp w-36" placeholder="Branch (e.g. 515)" value={c.branch||""} onChange={e=>setSheetField(i,"branch",e.target.value)} />
+            <input className="inp w-40" placeholder="Pickup / delivery" value={c.pickup||""} onChange={e=>setSheetField(i,"pickup",e.target.value)} />
+          </div>
+          <textarea value={c.html||""} onChange={e=>setSheetField(i,"html",e.target.value)} placeholder="Paste the full HTML sheet here (<!DOCTYPE html> … </html>)" className="inp" style={{height:140, fontFamily:"var(--font-mono, monospace)", fontSize:12, lineHeight:1.45}} />
+        </div>))}
+        {sheets.length===0 && <div className="text-sm text-stone-400">No catering sheets yet.</div>}
+      </div>
+      <div className="mt-3 flex items-center gap-3 flex-wrap">
+        <Btn size="sm" onClick={addSheet}>+ Add catering sheet</Btn>
+        {/* The whole app state syncs into ONE Firestore document (1MB hard limit), so pasted sheets
+            are the one field that can realistically blow it up. Show the running total and warn early. */}
+        {(()=>{ const kb=Math.round(sheets.reduce((n,c)=>n+String(c.html||"").length+String(c.text||"").length,0)/1024);
+          return <span className="text-xs" style={{color: kb>300?"#d70015":"var(--color-ink-muted-48)"}}>
+            {sheets.length} sheet{sheets.length===1?"":"s"} · {kb} KB{kb>300?" — getting large, remove old sheets (state syncs as one document, 1MB max)":""}
+          </span>; })()}
+      </div>
     </Section>
     <Section title="Cooking procedures from Trello" desc="Fill each recipe's cooking procedure from the matching HSC Trello card (matched by name). Only recipes whose procedure is empty are filled unless you choose to overwrite.">
       <ProcedureImporter state={state} update={update} />

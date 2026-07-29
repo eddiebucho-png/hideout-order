@@ -4422,9 +4422,11 @@ function Btn({children, onClick, tone="primary", size="md", disabled}){
   if(tone==="amber") style.color="#8a5300";
   return <VButton variant={map[tone]||"primary"} disabled={disabled} onClick={onClick} style={style}>{children}</VButton>;
 }
-function Modal({title, children, onClose, wide}){
+function Modal({title, children, onClose, wide, sheet}){
+  // `sheet` = full-bleed size for A4 documents (catering prep sheets): 3xl is narrower than an A4
+  // page, which made the sheet render as a thin column.
   return ReactDOM.createPortal(<div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-auto z-50 modal-back">
-    <div className={`card p-4 sm:p-6 mt-6 sm:mt-14 mb-6 modal-pop ${wide?"max-w-3xl":"max-w-2xl"} w-full`} onClick={e=>e.stopPropagation()}>
+    <div className={`card p-4 sm:p-6 mt-6 sm:mt-14 mb-6 modal-pop ${sheet?"max-w-[950px]":wide?"max-w-3xl":"max-w-2xl"} w-full`} onClick={e=>e.stopPropagation()}>
       <div className="flex justify-between items-center mb-4"><div className="font-semibold text-stone-800">{title}</div><button onClick={onClose} className="text-stone-400 text-2xl leading-none" style={{background:"none",border:"none",cursor:"pointer"}}>×</button></div>
       {children}
     </div></div>, document.body);
@@ -4917,7 +4919,7 @@ function App(){
     {/* Instagram-style staff story row — same slot as IOS (below header, above content). Filled by shared postcards.js. */}
     <div id="pc-tray-host"></div>
     <main key={tab} className="max-w-5xl mx-auto px-5 md:px-9 py-8 tab-in">
-    {tab==="daily" && <DailyReminder state={state} ingMap={ingMap} setTab={setTab} branch={curBranch} branchName={branchName} />}
+    {tab==="daily" && <DailyReminder state={state} ingMap={ingMap} setTab={setTab} branch={curBranch} branchName={branchName} fbRef={fbRef} />}
     {tab==="prep" && <PrepBoard state={state} ingMap={ingMap} update={update} branch={curBranch} />}
     {tab==="ing" && <Ingredients state={state} update={update} setState={setState} />}
     {tab==="rec" && <Recipes state={state} update={update} setState={setState} ingMap={ingMap} />}
@@ -5147,30 +5149,76 @@ function parseIcs(text){
   });
   return evs;
 }
-function DailyReminder({state, ingMap, setTab, branch, branchName}){
+function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
   const [ics,setIcs]=useState(()=>loadIcs(branch));
   const [draft,setDraft]=useState("");
   const [events,setEvents]=useState(null);
   const [status,setStatus]=useState("");
   const [showCfg,setShowCfg]=useState(false); const [doc,setDoc]=useState(""); const [showRoutine,setShowRoutine]=useState(false);
   const [sheet,setSheet]=useState(null);
+  /* Sheet HTML lives in its OWN Firestore doc (hideout_app/sheet_{id}), not in the app state.
+     At ~19KB a sheet, keeping them in the shared state document would fill Firestore's 1MB limit
+     within a few months at 6–10 caterings a month. So the list carries metadata only and the HTML is
+     fetched on demand when the popup opens (also keeps app load fast). Older entries that still have
+     an inline `html` field keep working — see the fallback in the loader. */
+  const [sheetHtml,setSheetHtml]=useState({state:"idle", html:"", err:""});
+  useEffect(()=>{
+    if(!sheet){ setSheetHtml({state:"idle", html:"", err:""}); return; }
+    if(sheet.html){ setSheetHtml({state:"ready", html:sheet.html, err:""}); return; }   // legacy inline
+    if(!sheet.sheetDoc && !sheet.id){ setSheetHtml({state:"empty", html:"", err:""}); return; }
+    let alive=true;
+    setSheetHtml({state:"loading", html:"", err:""});
+    (async()=>{
+      try{
+        const fb=fbRef.current; if(!fb||!fb.db) throw new Error("not connected");
+        const docId=sheet.sheetDoc||("sheet_"+sheet.id);
+        const snap=await fb.db.collection("hideout_app").doc(docId).get();
+        const d=snap.exists?snap.data():null;
+        const html=d?(d.html||d.json||""):"";
+        if(!alive) return;
+        setSheetHtml(html? {state:"ready", html, err:""} : {state:"empty", html:"", err:""});
+      }catch(e){ if(alive) setSheetHtml({state:"error", html:"", err:String(e.message||e)}); }
+    })();
+    return ()=>{ alive=false; };
+  },[sheet]);
+  // Fit the A4 sheet (794px wide) to the popup width so it fills the screen instead of sitting in a
+  // thin column. Recomputed when the popup opens and on resize; +/- lets a chef zoom in on a table.
+  const [sheetZoom,setSheetZoom]=useState(1);
+  const sheetWrapRef=useRef(null);
+  useEffect(()=>{
+    // gate on the LOADED html, not sheet.html — with per-sheet documents sheet.html is undefined,
+    // so keying off it would silently disable auto-fit for every new sheet.
+    if(!sheet||sheetHtml.state!=="ready") return;
+    const fit=()=>{ const el=sheetWrapRef.current; if(!el) return; const w=el.clientWidth||0; if(w>0) setSheetZoom(Math.min(1.6, Math.max(0.4, +( (w-2)/794 ).toFixed(3)))); };
+    const t=setTimeout(fit,60); window.addEventListener("resize",fit);
+    return ()=>{ clearTimeout(t); window.removeEventListener("resize",fit); };
+  },[sheet, sheetHtml.state]);
   /* Catering sheets to surface on Today: today + tomorrow (prep usually starts the day before),
      filtered to this venue when the entry names one.
      NOTE: do NOT call the global today() here — this component declares its own `today` (the list of
      today's calendar events) further down, which shadows it for the whole scope (TDZ). And the global
      helper is UTC-based, which in Brisbane (UTC+10) reads a day behind until 10am — exactly when the
      morning prep needs the sheet. So format the local date explicitly. */
+  /* Day offset so the page can show yesterday / today / tomorrow. Everything derived from `now`
+     (run sheet, routine, date heading, catering sheets) follows the selected day.
+     ⚠ `now` MUST be declared before anything that reads it — `const` has no hoisting, so a
+     reference above this line throws (TDZ) and kills the whole Today tab. */
+  const [dayOffset,setDayOffset]=useState(0);
+  const now=(()=>{ const d=new Date(); d.setDate(d.getDate()+dayOffset); return d; })();
   const ymdLocal=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-  const dateTodayStr=ymdLocal(new Date());
-  const dateTomorrowStr=(()=>{ const d=new Date(); d.setDate(d.getDate()+1); return ymdLocal(d); })();
+  const dateViewStr=ymdLocal(now);             // the day being viewed (follows the day switcher)
+  const dateRealTodayStr=ymdLocal(new Date()); // the actual today — countdown labels must use this,
+  // otherwise viewing Yesterday would label a sheet dated yesterday as "Today".
+  /* Show every upcoming sheet from the day it is published — a job three days out has to be visible
+     now so the team is aware and can order/prep for it, not appear the night before. Past sheets drop
+     off by themselves (kept until the end of their own day). */
   const cateringToday=(()=>{
-    const t=dateTodayStr, tm=dateTomorrowStr;
+    const t=dateViewStr;   // from the viewed day onwards, so Yesterday view still shows that day's job
     return (state.cateringSheets||[])
-      .filter(c=>c && (c.date===t||c.date===tm) && !c.archived)
+      .filter(c=>c && c.date && String(c.date)>=t && !c.archived)
       .filter(c=>!c.branch || !branchName || String(c.branch).toLowerCase().includes(String(branchName).toLowerCase()) || String(branchName).toLowerCase().includes(String(c.branch).toLowerCase()))
       .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   })();
-  const now=new Date();
   const dateLabel=now.toLocaleDateString("en-AU",{weekday:"long", day:"numeric", month:"long"});
   const weekday=now.toLocaleDateString("en-AU",{weekday:"long"});
   const isSameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
@@ -5224,7 +5272,19 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
           <div className="mt-1.5" style={{fontFamily:"var(--font-display)", fontWeight:700, fontSize:"clamp(26px,5vw,40px)", lineHeight:0.98, letterSpacing:"-0.02em", color:"var(--color-ink)"}}>{dateLabel}</div>
           {branchName && <div className="text-[11px] mt-1.5" style={{color:"var(--color-ink-muted-48)", letterSpacing:"0.08em", textTransform:"uppercase"}}>{branchName}</div>}
         </div>
-        <Btn tone="ghost" size="sm" onClick={()=>{ setDraft(ics); setShowCfg(true); }}>Calendar settings</Btn>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Day switcher — check what's coming tomorrow, or look back at yesterday's run sheet. */}
+          <div style={{display:"flex", gap:4}}>
+            {/* minHeight 44: these get tapped with a thumb on the kitchen tablet, mid-service. */}
+            {[[-1,"Yesterday"],[0,"Today"],[1,"Tomorrow"]].map(([o,l])=>(
+              <button key={o} onClick={()=>setDayOffset(o)} style={{padding:"0 14px", minHeight:44, borderRadius:999, fontSize:13,
+                fontWeight:dayOffset===o?600:500, cursor:"pointer", fontFamily:"var(--font-text)",
+                border:"1px solid "+(dayOffset===o?"var(--color-ink)":"var(--color-hairline-alpha)"),
+                background:dayOffset===o?"var(--color-ink)":"var(--color-surface,#fff)",
+                color:dayOffset===o?"#fff":"var(--color-ink-muted-48)"}}>{l}</button>))}
+          </div>
+          <Btn tone="ghost" size="sm" onClick={()=>{ setDraft(ics); setShowCfg(true); }}>Calendar settings</Btn>
+        </div>
       </div>
     </div>
     {(()=>{ const h=alerts[0];
@@ -5287,13 +5347,18 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
         The sheet itself is a full HTML document stored on the entry — opened in an iframe
         so its own print styles survive, and printable straight from the popup. */}
     {cateringToday.length>0 && <div className="mb-6">
-      <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Catering sheets</div>
+      <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Catering sheets · {cateringToday.length} upcoming</div>
       <div className="space-y-2">
         {cateringToday.map((c,i)=>(<button key={c.id||i} onClick={()=>setSheet(c)}
           className="w-full text-left vbtn-card" style={{padding:"12px 14px", border:"1px solid var(--color-hairline-alpha)", borderLeft:"3px solid var(--color-primary)", background:"var(--color-canvas)", cursor:"pointer"}}>
           <div className="flex items-baseline justify-between gap-3 flex-wrap">
             <div className="font-semibold text-stone-800" style={{fontFamily:"var(--font-display)"}}>{c.title||c.client||"Catering"}</div>
-            <div className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{c.date===dateTodayStr?"Today":c.date===dateTomorrowStr?"Tomorrow":c.date}{c.branch?" · "+c.branch:""}</div>
+            {(()=>{ const d=Math.round((new Date(c.date+"T00:00:00")-new Date(dateRealTodayStr+"T00:00:00"))/86400000);
+              const lbl = d<0?("was "+(-d)+(d===-1?" day":" days")+" ago") : d===0?"Today" : d===1?"Tomorrow" : "in "+d+" days";
+              const urgent = d>=0 && d<=1;
+              return <div className="text-[11px]" style={{color: urgent?"var(--color-primary)":"var(--color-ink-muted-48)", fontWeight: urgent?700:400}}>
+                {lbl} · {c.date}{c.branch?" · "+c.branch:""}
+              </div>; })()}
           </div>
           <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>
             {[c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, (c.pax&&c.pricePP)?("total $"+(Number(c.pax)*Number(c.pricePP)).toFixed(2)):null, c.pickup||null].filter(Boolean).join(" · ")||"Open the prep sheet"}
@@ -5308,18 +5373,38 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
         {(state.infoDocs||INFO_DOCS).map(d=>(<button key={d.key} onClick={()=>setDoc(d)} className="vbtn-card text-sm rounded-full" style={{padding:"9px 16px", border:"1px solid var(--color-hairline-alpha)", background:"var(--color-canvas)", color:"var(--color-ink)", cursor:"pointer", fontWeight:500}}>{d.title}</button>))}
       </div>
     </div>
-    {sheet && <Modal title={(sheet.title||sheet.client||"Catering sheet")+(sheet.date?" — "+sheet.date:"")} onClose={()=>setSheet(null)} wide>
-      {sheet.html
-        ? <div>
-            <div className="flex justify-end mb-2">
+    {sheet && <Modal title={(sheet.title||sheet.client||"Catering sheet")+(sheet.date?" — "+sheet.date:"")} onClose={()=>setSheet(null)} wide sheet>
+      {/* "idle" counts as loading: the effect runs after this first paint, so treating idle as empty
+          would flash "no sheet attached" for one frame every time the popup opens. */}
+      {/* the loading/error states hold the A4 popup's height so it doesn't collapse to a thin strip
+          and then jump when the sheet lands. */}
+      {(sheetHtml.state==="loading"||sheetHtml.state==="idle") ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Loading sheet…</p></div>
+        : sheetHtml.state==="error" ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm text-center px-6" style={{color:"#d70015"}}>Couldn't load the sheet ({sheetHtml.err}).<br/>Check the connection and try again.</p></div>
+        : sheetHtml.state==="ready"
+        ? <div ref={sheetWrapRef}>
+            <div className="flex justify-end items-center gap-2 mb-2">
+              <span className="text-xs" style={{color:"var(--color-ink-muted-48)"}}>{Math.round(sheetZoom*100)}%</span>
+              <Btn size="sm" tone="ghost" onClick={()=>setSheetZoom(z=>Math.max(0.4, +(z-0.1).toFixed(2)))}>–</Btn>
+              <Btn size="sm" tone="ghost" onClick={()=>setSheetZoom(z=>Math.min(2, +(z+0.1).toFixed(2)))}>+</Btn>
               <Btn size="sm" onClick={()=>{ try{ const w=document.getElementById("cateringSheetFrame"); if(w&&w.contentWindow){ w.contentWindow.focus(); w.contentWindow.print(); } }catch(e){ alert("Couldn't open the print dialog — open the sheet in a new tab instead."); } }}>Print</Btn>
             </div>
             {/* sandbox without allow-scripts: the sheet is plain HTML/CSS, so blocking scripts costs
                 nothing and stops a pasted sheet from touching app data. allow-same-origin +
                 allow-modals keep contentWindow.print() working. */}
-            <iframe id="cateringSheetFrame" title="Catering sheet" srcDoc={sheet.html}
-              sandbox="allow-same-origin allow-modals"
-              style={{width:"100%", height:"70vh", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}} />
+            {/* The sheet is an A4 document (210mm ≈ 794px). Rendered at natural width inside a narrow
+                modal it looks like a thin column, so scale it to fill the popup: render the iframe at
+                A4 width and transform-scale it to the available width. Keeps text crisp (vector) and
+                the whole page readable at a glance instead of needing two scrollbars. */}
+            <div style={{width:"100%", maxHeight:"78vh", overflow:"auto", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}>
+              {/* scaled iframe leaves its original box behind, so the wrapper below carries the scaled
+                  height — otherwise you'd get a tall blank gap under the sheet. */}
+              <div style={{width:794*sheetZoom, height:1123*sheetZoom, position:"relative"}}>
+                <iframe id="cateringSheetFrame" title="Catering sheet" srcDoc={sheetHtml.html}
+                  sandbox="allow-same-origin allow-modals" scrolling="no"
+                  style={{width:794, height:1123, border:"none", background:"#fff", position:"absolute", top:0, left:0,
+                    transform:"scale("+sheetZoom+")", transformOrigin:"top left", display:"block"}} />
+              </div>
+            </div>
           </div>
         : sheet.text ? <MiniDoc text={sheet.text} />
         : <p className="text-sm text-stone-500">This entry has no sheet attached yet — ask Claude to publish the catering sheet for this order.</p>}
@@ -6622,7 +6707,16 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
   // Catering sheets are published by the agent (see catering-sheet-html skill) — the app only lists
   // them and lets a manager clear old ones out. No hand-editing here on purpose.
   const sheets=state.cateringSheets||[];
-  const removeSheet=i=>{ if(!confirm("Remove this catering sheet?")) return; update(s=>{ s.cateringSheets.splice(i,1); }); };
+  /* Removing an entry must also drop its HTML document, otherwise every deleted sheet leaves a ~19KB
+     orphan in hideout_app forever (nothing else ever references sheet_{id} again). The delete is
+     best-effort: if it fails the list entry still goes, so the UI never gets stuck on a cloud error. */
+  const removeSheet=i=>{
+    if(!confirm("Remove this catering sheet?")) return;
+    const s0=(state.cateringSheets||[])[i];
+    const docId=s0&&(s0.sheetDoc||(s0.id?"sheet_"+s0.id:""));
+    if(docId){ try{ const fb=fbRef&&fbRef.current; if(fb&&fb.db) fb.db.collection("hideout_app").doc(docId).delete().catch(()=>{}); }catch(e){} }
+    update(s=>{ s.cateringSheets.splice(i,1); });
+  };
   const Section=({title,desc,children})=> <div className="card p-5 mb-4"><div className="font-semibold text-stone-800 mb-1" style={{fontFamily:"var(--font-display)"}}>{title}</div>{desc&&<p className="text-xs text-stone-500 mb-3 leading-relaxed">{desc}</p>}{children}</div>;
   const [sub,setSub]=useState("daily");
   const Cat=({children})=> <div style={{fontSize:11,fontWeight:800,letterSpacing:"1.5px",textTransform:"uppercase",color:"var(--color-primary,#c81a22)",margin:"20px 2px 8px"}}>{children}</div>;
@@ -6665,7 +6759,7 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
           <div className="min-w-0">
             <div className="font-medium text-stone-800 truncate" style={{fontFamily:"var(--font-display)"}}>{c.title||c.client||"Catering sheet"}</div>
             <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>
-              {[c.date, c.branch, c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, c.html?Math.round(String(c.html).length/1024)+" KB":"no sheet content"].filter(Boolean).join(" · ")}
+              {[c.date, c.branch, c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, (c.sheetDoc||c.html)?"sheet attached":"no sheet yet"].filter(Boolean).join(" · ")}
             </div>
           </div>
           <button onClick={()=>removeSheet(i)} className="text-xs shrink-0" style={{background:"none",border:"none",color:"#d70015",cursor:"pointer"}}>Remove</button>
@@ -6673,11 +6767,11 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
         {sheets.length===0 && <div className="text-sm text-stone-400">Nothing published yet. Ask Claude to build a catering sheet and it will appear here.</div>}
       </div>
       {sheets.length>0 && <div className="mt-3">
-        {/* The whole app state syncs into ONE Firestore document (1MB hard limit), and the HTML sheets
-            are the one field big enough to threaten it. Show the running total and warn early. */}
-        {(()=>{ const kb=Math.round(sheets.reduce((n,c)=>n+String(c.html||"").length+String(c.text||"").length,0)/1024);
+        {/* Each sheet's HTML lives in its own Firestore doc, so this list stays tiny no matter how many
+            caterings pile up. Only legacy entries (HTML still inline) count against the state document. */}
+        {(()=>{ const legacy=sheets.filter(c=>c.html), kb=Math.round(legacy.reduce((n,c)=>n+String(c.html||"").length,0)/1024);
           return <span className="text-xs" style={{color: kb>300?"#d70015":"var(--color-ink-muted-48)"}}>
-            {sheets.length} sheet{sheets.length===1?"":"s"} · {kb} KB{kb>300?" — getting large, remove old sheets (state syncs as one document, 1MB max)":""}
+            {sheets.length} sheet{sheets.length===1?"":"s"} · stored separately{legacy.length?` · ${legacy.length} older sheet${legacy.length===1?"":"s"} still inline (${kb} KB)`:""}
           </span>; })()}
       </div>}
     </Section>

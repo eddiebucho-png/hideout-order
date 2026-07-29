@@ -5322,7 +5322,7 @@ function DailyReminder({state, ingMap, setTab, branch, branchName}){
               style={{width:"100%", height:"70vh", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}} />
           </div>
         : sheet.text ? <MiniDoc text={sheet.text} />
-        : <p className="text-sm text-stone-500">No sheet content saved yet. Add the HTML in Settings → Catering sheets.</p>}
+        : <p className="text-sm text-stone-500">This entry has no sheet attached yet — ask Claude to publish the catering sheet for this order.</p>}
     </Modal>}
     {doc && <Modal title={doc.title} onClose={()=>setDoc("")} wide><MiniDoc text={doc.text} /></Modal>}
     {showCfg && <Modal title="Google Calendar" onClose={()=>setShowCfg(false)}>
@@ -6619,22 +6619,24 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
   const setDocField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; if(s.infoDocs[i]) s.infoDocs[i][k]=v; });
   const addDoc=()=>update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; s.infoDocs.push({key:"doc"+Date.now(), title:"New document", text:""}); });
   const removeDoc=i=>{ if(!confirm("Remove this document?")) return; update(s=>{ s.infoDocs.splice(i,1); }); };
+  // Catering sheets are published by the agent (see catering-sheet-html skill) — the app only lists
+  // them and lets a manager clear old ones out. No hand-editing here on purpose.
   const sheets=state.cateringSheets||[];
-  const setSheetField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[]; if(s.cateringSheets[i]) s.cateringSheets[i][k]=v; });
-  // Local date, not today() — the global helper is UTC-based, so before 10am in Brisbane it would
-  // default a new sheet to yesterday.
-  const localYmd=()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
-  const addSheet=()=>update(s=>{ if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[]; s.cateringSheets.unshift({id:rid("cs"), date:localYmd(), title:"New catering sheet", client:"", pax:"", pricePP:"", branch:"", pickup:"", html:""}); });
   const removeSheet=i=>{ if(!confirm("Remove this catering sheet?")) return; update(s=>{ s.cateringSheets.splice(i,1); }); };
   const Section=({title,desc,children})=> <div className="card p-5 mb-4"><div className="font-semibold text-stone-800 mb-1" style={{fontFamily:"var(--font-display)"}}>{title}</div>{desc&&<p className="text-xs text-stone-500 mb-3 leading-relaxed">{desc}</p>}{children}</div>;
-  const [sub,setSub]=useState("general");
+  const [sub,setSub]=useState("daily");
   const Cat=({children})=> <div style={{fontSize:11,fontWeight:800,letterSpacing:"1.5px",textTransform:"uppercase",color:"var(--color-primary,#c81a22)",margin:"20px 2px 8px"}}>{children}</div>;
   return <div>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>{[["general","Settings"],["audit","Audit"],["archive","Archive"]].map(([k,l])=>(<button key={k} onClick={()=>setSub(k)} style={{padding:"7px 16px",borderRadius:999,fontSize:13.5,fontWeight:sub===k?600:400,cursor:"pointer",fontFamily:"var(--font-text)",border:"1px solid var(--color-hairline-alpha)",background:sub===k?"#292524":"#fff",color:sub===k?"#fff":"#44403c"}}>{l}</button>))}</div>
+    {/* sticky so the current sub-tab stays visible while scrolling a long panel (Daily content has 4
+        sections and the old <Cat> anchors are gone). */}
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16,position:"sticky",top:56,zIndex:20,background:"var(--color-canvas)",paddingTop:8,paddingBottom:8}}>{[["daily","Daily content"],["menu","Menu & stores"],["team","Team & access"],["integrations","Integrations"],["audit","Audit"],["archive","Archive"],["data","Danger zone"]].map(([k,l])=>(<button key={k} onClick={()=>setSub(k)} style={{padding:"7px 16px",borderRadius:999,fontSize:13.5,fontWeight:sub===k?600:400,cursor:"pointer",fontFamily:"var(--font-text)",border:"1px solid var(--color-hairline-alpha)",background:sub===k?"#292524":"#fff",color:sub===k?"#fff":"#44403c"}}>{l}</button>))}</div>
     {sub==="audit" ? <Audit state={state} ingMap={ingMap} setTab={setTab} update={update} /> : sub==="archive" ? <Archive state={state} update={update} ingMap={ingMap} /> : <div>
-    <Cat>Team &amp; access</Cat>
-    {isMgr && <Section title="Team Access" desc="Approve Google emails and set each person's role and branch. Manager = full app · Staff = Today, Prep & Dishes. Set a branch to auto-connect them to that store on login. (Managers only)"><TeamAccess fbRef={fbRef} branches={state.branches||[]} meEmail={meEmail} /></Section>}
-    <Cat>Daily content</Cat>
+    {sub==="team" && <>
+    {isMgr
+      ? <Section title="Team Access" desc="Approve Google emails and set each person's role and branch. Manager = full app · Staff = Today, Prep & Dishes. Set a branch to auto-connect them to that store on login."><TeamAccess fbRef={fbRef} branches={state.branches||[]} meEmail={meEmail} /></Section>
+      : <Section title="Team Access" desc="Managers only."><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Ask a manager to change who has access.</p></Section>}
+    </>}
+    {sub==="daily" && <>
     <Section title="Weekday routines" desc="Edit the routine shown on the Today page for each day. Uses simple markdown — # heading, - bullet, ☐ checkbox item, **bold**, and ``` for a fixed block.">
       <div className="space-y-2">
         {DAYS.map(d=>(<div key={d} className="rounded-xl overflow-hidden" style={{border:"1px solid var(--color-hairline-alpha)"}}>
@@ -6654,56 +6656,57 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
       <div className="mt-3"><Btn size="sm" onClick={addDoc}>+ Add document</Btn></div>
     </Section>
 
-    <Section title="Catering sheets" desc="Prep sheets that appear on Today on their date (and the day before). Paste the finished sheet as a full HTML document — it opens in a popup and prints from there.">
-      <div className="space-y-3">
-        {sheets.map((c,i)=>(<div key={c.id||i} className="rounded-xl p-3" style={{border:"1px solid var(--color-hairline-alpha)"}}>
-          <div className="flex items-center gap-2 mb-2">
-            <input className="inp w-40" type="date" value={c.date||""} onChange={e=>setSheetField(i,"date",e.target.value)} />
-            <input className="inp flex-1" placeholder="Title (e.g. Dyno Nobel — lunch)" value={c.title||""} onChange={e=>setSheetField(i,"title",e.target.value)} />
-            <button onClick={()=>removeSheet(i)} className="text-xs" style={{background:"none",border:"none",color:"#d70015",cursor:"pointer"}}>Remove</button>
+    {/* Published by the catering-sheet agent (same pattern as AI Invoice): the agent writes the sheet
+        into state.cateringSheets, the app only shows what was published. Nothing is typed in by hand
+        here — this list is for checking and clearing out, not authoring. */}
+    <Section title="Catering sheets" desc="Published automatically by the catering sheet agent. Each one appears on Today on its date (and the day before) — tap it there to open and print. Ask Claude for a sheet; it posts it here.">
+      <div className="space-y-2">
+        {sheets.map((c,i)=>(<div key={c.id||i} className="rounded-xl p-3 flex items-start justify-between gap-3" style={{border:"1px solid var(--color-hairline-alpha)"}}>
+          <div className="min-w-0">
+            <div className="font-medium text-stone-800 truncate" style={{fontFamily:"var(--font-display)"}}>{c.title||c.client||"Catering sheet"}</div>
+            <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>
+              {[c.date, c.branch, c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, c.html?Math.round(String(c.html).length/1024)+" KB":"no sheet content"].filter(Boolean).join(" · ")}
+            </div>
           </div>
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <input className="inp w-44" placeholder="Client" value={c.client||""} onChange={e=>setSheetField(i,"client",e.target.value)} />
-            <input className="inp w-24" type="number" min="1" placeholder="Pax" value={c.pax||""} onChange={e=>setSheetField(i,"pax",e.target.value)} />
-            <input className="inp w-24" type="number" min="0" placeholder="$pp" value={c.pricePP||""} onChange={e=>setSheetField(i,"pricePP",e.target.value)} />
-            <input className="inp w-36" placeholder="Branch (e.g. 515)" value={c.branch||""} onChange={e=>setSheetField(i,"branch",e.target.value)} />
-            <input className="inp w-40" placeholder="Pickup / delivery" value={c.pickup||""} onChange={e=>setSheetField(i,"pickup",e.target.value)} />
-          </div>
-          <textarea value={c.html||""} onChange={e=>setSheetField(i,"html",e.target.value)} placeholder="Paste the full HTML sheet here (<!DOCTYPE html> … </html>)" className="inp" style={{height:140, fontFamily:"var(--font-mono, monospace)", fontSize:12, lineHeight:1.45}} />
+          <button onClick={()=>removeSheet(i)} className="text-xs shrink-0" style={{background:"none",border:"none",color:"#d70015",cursor:"pointer"}}>Remove</button>
         </div>))}
-        {sheets.length===0 && <div className="text-sm text-stone-400">No catering sheets yet.</div>}
+        {sheets.length===0 && <div className="text-sm text-stone-400">Nothing published yet. Ask Claude to build a catering sheet and it will appear here.</div>}
       </div>
-      <div className="mt-3 flex items-center gap-3 flex-wrap">
-        <Btn size="sm" onClick={addSheet}>+ Add catering sheet</Btn>
-        {/* The whole app state syncs into ONE Firestore document (1MB hard limit), so pasted sheets
-            are the one field that can realistically blow it up. Show the running total and warn early. */}
+      {sheets.length>0 && <div className="mt-3">
+        {/* The whole app state syncs into ONE Firestore document (1MB hard limit), and the HTML sheets
+            are the one field big enough to threaten it. Show the running total and warn early. */}
         {(()=>{ const kb=Math.round(sheets.reduce((n,c)=>n+String(c.html||"").length+String(c.text||"").length,0)/1024);
           return <span className="text-xs" style={{color: kb>300?"#d70015":"var(--color-ink-muted-48)"}}>
             {sheets.length} sheet{sheets.length===1?"":"s"} · {kb} KB{kb>300?" — getting large, remove old sheets (state syncs as one document, 1MB max)":""}
           </span>; })()}
-      </div>
+      </div>}
     </Section>
     <Section title="Cooking procedures from Trello" desc="Fill each recipe's cooking procedure from the matching HSC Trello card (matched by name). Only recipes whose procedure is empty are filled unless you choose to overwrite.">
       <ProcedureImporter state={state} update={update} />
     </Section>
-    <Cat>Menu &amp; stores</Cat>
+    </>}
+    {sub==="menu" && <>
     <Section title="Menu categories" desc="Columns and filters on the Dishes menu — separate sets per department.">
       <div className="flex flex-wrap gap-2"><Btn tone="ghost" size="sm" onClick={()=>setCatDept("kitchen")}>Kitchen categories</Btn><Btn tone="ghost" size="sm" onClick={()=>setCatDept("bakery")}>Bakery categories</Btn><Btn tone="ghost" size="sm" onClick={()=>setCatDept("barista")}>Barista categories</Btn><Btn tone="ghost" size="sm" onClick={()=>setCatDept("catering")}>Catering categories</Btn></div>
     </Section>
     <Section title="Branches & passcodes" desc="Add, rename or remove branches and set each branch's numeric passcode. Today, Dishes and Prep are tracked separately per branch.">
       <Btn size="sm" onClick={openBranches}>Manage branches</Btn>
     </Section>
-    <Cat>Cloud &amp; integrations</Cat>
+    </>}
+    {sub==="integrations" && <>
     <Section title="Cloud sync" desc="Connect Firebase so every device shares the same live data.">
       <Btn tone="ghost" size="sm" onClick={openSync}>Cloud sync settings</Btn>
     </Section>
     <Section title="Google Calendar" desc="Today's bookings come from a per-branch Google Calendar link — connect it from the Today page.">
       <Btn tone="ghost" size="sm" onClick={()=>setTab("daily")}>Go to Today</Btn>
     </Section>
-    <Cat>Danger zone</Cat>
+    </>}
+    {sub==="data" && <>
     <Section title="Reset data" desc="Replace all local data with sample data. This cannot be undone — make sure your data is synced to the cloud first.">
       <Btn tone="danger" size="sm" onClick={onReset}>Reset to sample data</Btn>
     </Section>
+    </>}
+
     </div>}
     {catDept && <CatManager state={state} update={update} dept={catDept} onClose={()=>setCatDept(null)} />}
   </div>;

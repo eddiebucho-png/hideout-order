@@ -2927,6 +2927,16 @@ __ds_ns.StoreCard = __ds_scope.StoreCard;
   .prep-grid{ display:grid; gap:16px; grid-template-columns:repeat(var(--pc,3), minmax(0,1fr)); align-items:start; }
   .prep-col-list{ max-height:calc(100vh - 236px); overflow-y:auto; overflow-x:hidden; padding-right:2px; scrollbar-width:none; }
   .prep-col-list::-webkit-scrollbar{ width:0; }
+  /* 2026-07-31 prep card readability — size card internals by the CARD's own width
+     (container query), not the viewport, so a narrow column can no longer squeeze the
+     title column to ~0 and stack the name one letter per line. */
+  .prep-card{ container-type:inline-size; }
+  .prep-textcol{ min-width:64px; }
+  .prep-title{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .prep-sub{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @container (max-width:250px){ .prep-thumb{ display:none !important; } }
+  @container (max-width:190px){ .prep-hide-sm{ display:none !important; } }
+  @container (max-width:160px){ .prep-card-pad{ padding:6px !important; gap:6px !important; } .prep-textcol{ min-width:52px; } }
   @media (max-width:640px){
     .dish-media{ aspect-ratio:1/1 !important; border-radius:4px; }
     .dish-grid{ grid-template-columns:repeat(3, minmax(0,1fr)) !important; gap:4px !important; }
@@ -5486,13 +5496,13 @@ function PrepBoard({state, ingMap, update, branch}){
           <div className="flex items-center gap-2 mb-3 px-1 pt-1"><span className="inline-block w-2.5 h-2.5 rounded-full" style={{background:colDot[key]}}></span><span className="text-[15px] font-semibold" style={{color:"#fff", fontFamily:"var(--font-display)"}}>{label}</span><span className="text-sm" style={{color:"var(--color-body-muted)"}}>· {items.length}</span></div>
           <div className="space-y-2.5 stagger prep-col-list">
             {items.map(r=>{ const done=key==="done";
-              return <div key={r.id} onPointerDown={e=>startDrag(e,r)} onClick={()=>{ if(suppressClick.current) return; setView(r); }} className="relative rounded-xl overflow-hidden vbtn-card tilt cursor-grab group" style={{background:"var(--color-surface-tile-2)", opacity: dragId===r.id ? .4 : (done ? .72 : 1), touchAction:"pan-y"}}>
+              return <div key={r.id} onPointerDown={e=>startDrag(e,r)} onClick={()=>{ if(suppressClick.current) return; setView(r); }} className="relative rounded-xl overflow-hidden vbtn-card tilt cursor-grab group prep-card" style={{background:"var(--color-surface-tile-2)", opacity: dragId===r.id ? .4 : (done ? .72 : 1), touchAction:"pan-y"}}>
                 {key==="urgent" && <div className="absolute left-0 top-0 bottom-0" style={{width:3, background:"var(--color-primary)"}}></div>}
                 <div className="flex items-center gap-3 p-2.5 pl-3.5 prep-card-pad">
                   <div className="rounded-lg overflow-hidden shrink-0 prep-thumb" style={{width:52, height:52, background:"var(--color-surface-tile-3)", filter: done?"grayscale(1)":"none"}}>{r.image? <img src={r.image} alt="" draggable={false} className="w-full h-full object-cover" /> : <DishPlaceholder name={r.name} />}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold" style={{fontSize:((r.name||"").length<=8?16:(r.name||"").length<=14?14:(r.name||"").length<=22?12:(r.name||"").length<=34?10.5:9.5)+"px", color: done?"var(--color-body-muted)":"#fff", fontFamily:"var(--font-display)", textDecoration: done?"line-through":"none", lineHeight:1.16, wordBreak:"normal", overflowWrap:"break-word", letterSpacing:"-0.2px"}}>{r.name}</div>
-                    <div className="text-[11px] mt-0.5" style={{color:"var(--color-body-muted)"}}>{dishCategory(r)}</div>
+                  <div className="flex-1 prep-textcol">
+                    <div className="font-semibold prep-title" style={{fontSize:((r.name||"").length<=8?16:(r.name||"").length<=14?14.5:(r.name||"").length<=22?13:(r.name||"").length<=34?12:11)+"px", color: done?"var(--color-body-muted)":"#fff", fontFamily:"var(--font-display)", textDecoration: done?"line-through":"none", lineHeight:1.16, wordBreak:"normal", overflowWrap:"break-word", letterSpacing:"-0.2px"}}>{r.name}</div>
+                    <div className="text-[11px] mt-0.5 prep-sub" style={{color:"var(--color-body-muted)"}}>{dishCategory(r)}</div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {!done && key!=="urgent" && <button onClick={e=>{e.stopPropagation(); setStatus(r.id,"urgent");}} title="Fire first" className="vbtn-card w-8 h-8 rounded-full text-xs prep-hide-sm" style={{border:"1.5px solid rgba(255,255,255,.3)", background:"transparent", color:"#fff", cursor:"pointer"}}>!</button>}

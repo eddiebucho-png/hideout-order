@@ -2931,6 +2931,7 @@ __ds_ns.StoreCard = __ds_scope.StoreCard;
      (container query), not the viewport, so a narrow column can no longer squeeze the
      title column to ~0 and stack the name one letter per line. */
   .prep-card{ container-type:inline-size; }
+  .proc-ta{ max-height:60vh; font-size:15px; padding:12px 14px; }
   .prep-textcol{ min-width:64px; }
   .prep-title{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .prep-sub{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -6348,7 +6349,7 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
         {showPick && <PhotoLibrary photos={state.photos} update={update} mode="pick" onPick={(url)=>{ set("image",url); setShowPick(false); }} onClose={()=>setShowPick(false)} />}
       </Field>
       <div className="flex flex-wrap gap-x-6 gap-y-2"><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInDish} onChange={e=>set("showInDish",e.target.checked)} />Show this recipe in the Dishes menu</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInPrep} onChange={e=>set("showInPrep",e.target.checked)} />Show on the Prep board</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.finalised} onChange={e=>set("finalised",e.target.checked)} /><span style={{fontWeight:600, color:f.finalised?"#3f9e63":"inherit"}}>Finalised ✓</span></label></div>
-      <Field label="Cooking procedure (one step per line)"><textarea className="inp" style={{minHeight:"96px"}} value={f.procedure||""} onChange={e=>set("procedure",e.target.value)} placeholder={"Toast the bagel\nFry the egg\nAssemble & serve"} /></Field>
+      <Field label="Cooking procedure (one step per line)"><textarea className="inp proc-ta" style={{minHeight:"260px", resize:"vertical", lineHeight:1.6}} value={f.procedure||""} onChange={e=>set("procedure",e.target.value)} onInput={e=>{ const t=e.target; t.style.height="auto"; t.style.height=Math.min(t.scrollHeight+2, Math.round(window.innerHeight*0.6))+"px"; }} placeholder={"Toast the bagel\nFry the egg\nAssemble & serve"} /></Field>
     </div>
     {fromImport && <div className="mt-3 text-xs bg-amber-50 text-amber-700 rounded-lg p-3">Imported recipe · {linked}/{f.items.length} ingredients auto-linked from the invoice/recipe list. Just enter quantities below and the cost switches to auto-calculated. {usesImported(f,ingMap) && <span>(Imported cost {money(f.importedCost)})</span>}</div>}
     <div className="mt-4"><div className="text-xs font-medium text-stone-500 mb-2">Ingredients</div>

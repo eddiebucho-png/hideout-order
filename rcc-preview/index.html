@@ -4247,8 +4247,9 @@ function toUnit(qty, from, to){ const f=normU(from), t=normU(to); if(!f||!t||f==
    dangerous for prices — callers that write money must gate on this first. */
 function unitsComparable(from, to){ const f=normU(from), t=normU(to); if(!f||!t) return false; if(f===t) return true; return [U_MASS,U_VOL].some(tbl=>tbl[f]!=null && tbl[t]!=null); }
 const EACH_U=new Set(["each","ea","pc","pcs","piece","pieces","unit","units","ct","count"]);
-function convItemQty(qty, from, ing){ const f=normU(from), to=normU(ing.useUnit); if(!f||!to||f===to) return qty; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return qty*tbl[f]/tbl[to]; } if(ing.gramsPerEach>0){ if(U_MASS[f]!=null && EACH_U.has(to)) return (qty*U_MASS[f])/ing.gramsPerEach; if(EACH_U.has(f) && U_MASS[to]!=null) return (qty*ing.gramsPerEach)/U_MASS[to]; } return qty; }
-function unitResolvable(it, ing){ if(!it||!it.rawUnit||!ing) return true; const f=normU(it.rawUnit), to=normU(ing.useUnit); if(!f||!to||f===to) return true; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return true; } const cross=(U_MASS[f]!=null&&EACH_U.has(to))||(EACH_U.has(f)&&U_MASS[to]!=null); if(cross) return ing.gramsPerEach>0; return false; }
+function sameUnit(a,b){ a=normU(a); b=normU(b); return a===b || (EACH_U.has(a)&&EACH_U.has(b)); }
+function convItemQty(qty, from, ing){ const f=normU(from), to=normU(ing.useUnit); if(!f||!to||sameUnit(f,to)) return qty; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return qty*tbl[f]/tbl[to]; } if(ing.gramsPerEach>0){ if(U_MASS[f]!=null && EACH_U.has(to)) return (qty*U_MASS[f])/ing.gramsPerEach; if(EACH_U.has(f) && U_MASS[to]!=null) return (qty*ing.gramsPerEach)/U_MASS[to]; } return qty; }
+function unitResolvable(it, ing){ if(!it||!it.rawUnit||!ing) return true; const f=normU(it.rawUnit), to=normU(ing.useUnit); if(!f||!to||sameUnit(f,to)) return true; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return true; } const cross=(U_MASS[f]!=null&&EACH_U.has(to))||(EACH_U.has(f)&&U_MASS[to]!=null); if(cross) return ing.gramsPerEach>0; return false; }
 function itemQtyInUse(it, ing){ if(!(it&&it.rawUnit&&ing)) return it?it.qty:0; if(!unitResolvable(it,ing)) return 0; return convItemQty(it.qty, it.rawUnit, ing); }
 /* BUGFIX 2026-07-28 (unit scale): a sub-recipe line was costed as (cost per yield unit) x raw qty
    with NO unit conversion, so 400 ml of a brine that yields in L came out 1000x too expensive
@@ -4742,6 +4743,16 @@ function DeniedScreen({email,onSignOut}){
     <button className="rcc-gate-btn" onClick={onSignOut}><GateGoogleIcon />Sign in with a different account</button>
   </GateCard>;
 }
+/* MULTI-BRANCH ACCESS 2026-08-06 — one Google account can be assigned to several locations.
+   allowlist doc: { role, branches:[branchId,...], branch:<first, legacy mirror>, name }
+   Empty/absent list = not restricted (sees every branch). */
+function myBranchIds(me){
+  if(!me || typeof me!=="object") return [];
+  var a = Array.isArray(me.branches) ? me.branches.filter(function(x){ return !!x; }) : [];
+  if(!a.length && me.branch) a=[me.branch];
+  var out=[]; a.forEach(function(x){ if(out.indexOf(x)<0) out.push(x); });
+  return out;
+}
 function App(){
   const [state, setState] = useState(load);
   const [tab, setTab] = useState("daily"); const [tabMenu,setTabMenu]=useState(false);
@@ -4757,7 +4768,7 @@ function App(){
   const applyingRemote=useRef(false); const pushTimer=useRef(null); const fbRef=useRef(null); const hydrated=useRef(false); const hdrRef=useRef(null);
   useEffect(()=>{ const el=hdrRef.current; if(!el||typeof ResizeObserver==="undefined") return; const set=()=>document.documentElement.style.setProperty("--hdrH", el.offsetHeight+"px"); set(); const ro=new ResizeObserver(set); ro.observe(el); window.addEventListener("resize",set); return ()=>{ ro.disconnect(); window.removeEventListener("resize",set); }; }, []);
   useEffect(()=>{ save(state); }, [state]);
-  useEffect(()=>{ if(me&&typeof me==="object"&&me.branch&&me.branch!==branch) setBranch(me.branch); }, [me]);
+  useEffect(()=>{ const al=myBranchIds(me); if(al.length && al.indexOf(branch)<0) setBranch(al[0]); }, [me]);
   const ingMap = useMemo(()=>Object.fromEntries(state.ingredients.map(i=>[i.id,i])), [state.ingredients]);
   _RECIPES = state.recipes;
   const update = fn => setState(s=>{ const n=JSON.parse(JSON.stringify(s)); fn(n); return n; });
@@ -4769,7 +4780,7 @@ function App(){
       createIngredient:(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; },
       addRecipe:(rec)=>{ const id=rid("rec"); update(s=>{ s.recipes.push({ id, name:(rec.name||"New recipe").trim(), category:rec.category||"", yield:Number(rec.yield)||1, yieldUnit:rec.yieldUnit||"serve", sellPrice:Number(rec.sellPrice)||0, targetMargin:70, items:(rec.items||[]).map(it=>({ ingredientId:it.ingredientId||"", qty:Number(it.qty)||0, rawName:it.rawName, rawUnit:it.rawUnit||"" })), importedCost:0, ingredientListText:"", allergens:rec.allergens||[], image:"", procedure:rec.procedure||"", showInDish:(Number(rec.sellPrice)||0)>0, archived:false }); }); return id; },
       costMap:()=>{ const s=stateRef.current; const im=Object.fromEntries((s.ingredients||[]).map(i=>[i.id,i])); const m={}; (s.recipes||[]).forEach(r=>{ if(r.archived) return; try{ const x=marginOf(r,im); m[r.id]={cost:x.unitCost||0, margin:(x.margin||0)*100}; }catch(e){} }); return m; },
-      remember:(text)=>{ const t=(typeof text==="string"?text:JSON.stringify(text)).trim(); if(!t) return; update(s=>{ if(!Array.isArray(s.botMemory)) s.botMemory=[]; if(s.botMemory.some(n=>((typeof n==="string"?n:(n&&n.text)||"").toLowerCase()===t.toLowerCase()))) return; s.botMemory.push({ts:Date.now(), text:t, by:"bot"}); if(s.botMemory.length>300) s.botMemory=s.botMemory.slice(-300); }); },
+      remember:(text)=>{ const t=(typeof text==="string"?text:JSON.stringify(text)).trim().slice(0,300); if(!t) return; update(s=>{ if(!Array.isArray(s.botMemory)) s.botMemory=[]; if(s.botMemory.some(n=>((typeof n==="string"?n:(n&&n.text)||"").toLowerCase()===t.toLowerCase()))) return; s.botMemory.push({ts:Date.now(), text:t, by:"bot"}); if(s.botMemory.length>300) s.botMemory=s.botMemory.slice(-300); }); },
       logQuestion:(e)=>{ update(s=>{ if(!Array.isArray(s.botLog)) s.botLog=[]; s.botLog.push(e); if(s.botLog.length>400) s.botLog=s.botLog.slice(-400); }); }
     };
   }, []);
@@ -4788,7 +4799,14 @@ function App(){
         const meth=(((r.procedure||"").trim())||"").replace(/\s+/g," ").slice(0,220);
         return r.name+" | cat:"+(r.category||"-")+" | sell:$"+(+r.sellPrice||0)+" | unit cost:$"+per.toFixed(2)+((+r.sellPrice)>0?(" | margin:"+Math.round((1-per/r.sellPrice)*100)+"%"):"")+" | allergens:"+(((r.allergens||[]).join("/"))||"-")+" | items: "+its+(meth?(" | method: "+meth):"");
       });
-      const snapTxt=("RECIPES ("+lines.length+"):\n"+lines.join("\n")).slice(0,60000);
+      // LEARNED NOTES ride inside this snapshot: the bot is zero-upload (server aiCacheBlob only),
+      // so this is botMemory's ONLY path to the model. ⚠ The LIVE backend's readRccSnapshot strips
+      // everything BEFORE the "RECIPES (" marker (observed 2026-08-03) — so the text must START with
+      // that exact marker, notes go right after it (still near the head: the 60KB cap cuts the tail).
+      const noteTxt=(state.botMemory||[]).slice(-60).map(n=>"• "+(typeof n==="string"?n:(n&&n.text)||"")).filter(t=>t.length>2).join("\n");
+      const snapTxt=("RECIPES ("+lines.length+"):\n"
+        +(noteTxt?("LEARNED NOTES (staff taught the assistant these — treat as authoritative):\n"+noteTxt+"\n\nRECIPE LIST:\n"):"")
+        +lines.join("\n")).slice(0,60000);
       const CH=1400, n=Math.ceil(snapTxt.length/CH);
       let prevN=0; try{ prevN=Number(localStorage.getItem("rcc_snapshot_chunks"))||0; }catch(e){}
       if(n<=1){ fetch(DEF+"?action=set&token="+tk+"&key=rcc_snapshot&value="+encodeURIComponent(snapTxt)); }
@@ -4801,7 +4819,7 @@ function App(){
       try{ localStorage.setItem("rcc_snapshot_chunks", String(n)); }catch(e){}
     }catch(e){} }, 8000);
     return ()=>clearTimeout(t);
-  }, [state.recipes, state.ingredients, cloud.status]);
+  }, [state.recipes, state.ingredients, state.botMemory, cloud.status]);
   useEffect(()=>{ // Push a compact team-meeting snapshot to the IOS backend KV so the reporting agent can read it (fire-and-forget)
     if(cloud.status==="on" && !hydrated.current) return; // don't overwrite KV with pre-hydration (possibly empty) state
     const t=setTimeout(()=>{ try{
@@ -4846,7 +4864,7 @@ function App(){
           if(snap.exists){ setMe({...(snap.data()||{}), email:em}); return; }
           let openUntil=0; try{ const cfg=await db.collection("allowlist").doc("cfg-enrollment").get(); openUntil=(cfg.exists&&cfg.data().openUntil)||0; }catch(e){}
           if(openUntil && Date.now()<openUntil){
-            const entry={role:"staff", branch:"", name:(u.displayName||""), self:true, ts:Date.now()};
+            const entry={role:"staff", branch:"", branches:[], name:(u.displayName||""), self:true, ts:Date.now()};
             try{ await db.collection("allowlist").doc(em).set(entry,{merge:true}); }catch(e){}
             setMe({...entry, email:em});
           } else setMe("denied");
@@ -4871,7 +4889,11 @@ function App(){
   const auditN = useMemo(()=>{ const g=auditData(state, ingMap); return Object.keys(g).reduce((n,k)=>n+g[k].length,0); }, [state, ingMap]);
   const tabs = [["daily","Today"],["dish","Dishes"],["prep","Prep"],["rec","Recipes"],["ing","Ingredients"],["meet","Team Meeting"],["inv","AI Invoice"],["set","Settings"]];
   const TT={daily:["Today at The Hideout","Your morning check — bookings, prep priorities & alerts"],prep:["Prep board","What to fire first — drag between columns"],ing:["Ingredients","Everything your dishes are built from"],rec:["Recipes","Menu & prep recipes — cost and method"],dish:["Dishes","The menu — presentation, ingredients, method"],inv:["AI Invoice","Invoice price updates"],meet:["Kitchen Team Meeting","Run, record & review the weekly kitchen meeting"],audit:["Audit","Data issues & conflicts"],arch:["Archive","Everything archived"],set:["Settings","Routines, documents & app configuration"]};
-  const branches = (state.branches&&state.branches.length)?state.branches:[{id:"b1",name:"Main"}];
+  const allBranches = (state.branches&&state.branches.length)?state.branches:[{id:"b1",name:"Main"}];
+  // Managers see every branch. Staff see only the branches they're assigned to (none assigned = no restriction).
+  const myBrIds = ((me&&typeof me==="object"&&me.role)==="manager") ? [] : myBranchIds(me);
+  const myVisible = myBrIds.length ? allBranches.filter(b=>myBrIds.indexOf(b.id)>=0) : [];
+  const branches = myVisible.length ? myVisible : allBranches;
   const curBranch = branches.find(b=>b.id===branch) ? branch : branches[0].id;
   useEffect(()=>{ if(curBranch!==branch) setBranch(curBranch); }, [curBranch]);
   const branchName = (branches.find(b=>b.id===curBranch)||{}).name||"";
@@ -4915,10 +4937,11 @@ function App(){
         </div>}
       </div>
       <div className="order-2 xl:order-3 flex items-center gap-2.5 shrink-0 ml-auto xl:ml-0">
-        <select value={curBranch} disabled={!isMgr} onChange={e=>{ if(e.target.value==="__manage"){ setShowBranches(true); } else setBranch(e.target.value); }} title={isMgr?"Branch":"Your store (fixed)"} style={{background:"#2a2420", color:"#fff", border:"1px solid rgba(255,255,255,.22)", borderRadius:8, height:28, padding:"0 8px", fontSize:12, fontFamily:"var(--font-text)", cursor:isMgr?"pointer":"default", opacity:isMgr?1:.55, maxWidth:160}}>
+        <select value={curBranch} disabled={!isMgr && branches.length<2} onChange={e=>{ if(e.target.value==="__manage"){ setShowBranches(true); } else setBranch(e.target.value); }} title={(isMgr||branches.length>1)?"Branch":"Your store (fixed)"} style={{background:"#2a2420", color:"#fff", border:"1px solid rgba(255,255,255,.22)", borderRadius:8, height:28, padding:"0 8px", fontSize:12, fontFamily:"var(--font-text)", cursor:(isMgr||branches.length>1)?"pointer":"default", opacity:(isMgr||branches.length>1)?1:.55, maxWidth:160}}>
           {branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
-          <option value="__manage">⚙ Manage branches…</option>
+          {isMgr && <option value="__manage">⚙ Manage branches…</option>}
         </select>
+        <span title="Build" style={{fontSize:11, color:"#fff", opacity:.32, letterSpacing:".02em", whiteSpace:"nowrap"}}>b0806a</span>
         <button onClick={async()=>{ try{ await fbRef.current.auth.signOut(); }catch(e){} setMe(null); }} className="vnav-tab" style={{opacity:.7}}>Sign out</button>
       </div>
       </div>
@@ -5435,6 +5458,9 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
 const PREP_COLS=[["urgent","URGENT"],["todo","TO DO"],["done","DONE"]];
 function PrepBoard({state, ingMap, update, branch}){
   const [view,setView]=useState(null); const [q,setQ]=useState(""); const [showAdd,setShowAdd]=useState(false); const [addQ,setAddQ]=useState("");
+  const [editRec,setEditRec]=useState(null);
+  const prepCreateIng=(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; };
+  const prepCommitRec=(r)=>{ update(s=>{ const i=s.recipes.findIndex(x=>x.id===r.id); if(i>=0) s.recipes[i]=r; }); setEditRec(null); };
   const [dragId,setDragId]=useState(null); const [overCol,setOverCol]=useState(null);
   const gridRef=useRef(null); const suppressClick=useRef(false);
   const [dept,setDept]=useState("kitchen");
@@ -5446,7 +5472,7 @@ function PrepBoard({state, ingMap, update, branch}){
   const off=all.filter(r=>!pShow(r,branch,dept) && (!addQ || r.name.toLowerCase().includes(addQ.toLowerCase())));
   const setStatus=(id,st)=>update(s=>{ const t=s.recipes.find(x=>x.id===id); if(!t) return; if(dept==="bakery") setBk(t,branch,"status",st); else if(dept==="barista") setBa(t,branch,"status",st); else setBranchField(t,branch,"prepStatus",st); });
   const addTask=id=>update(s=>{ const t=s.recipes.find(x=>x.id===id); if(!t) return; if(dept==="bakery"){ setBk(t,branch,"prep",true); if((bkOf(t,branch).status||"todo")==="done") setBk(t,branch,"status","todo"); } else if(dept==="barista"){ setBa(t,branch,"prep",true); if((baOf(t,branch).status||"todo")==="done") setBa(t,branch,"status","todo"); } else { setBranchField(t,branch,"prep",true); if(bPrepStatus(t,branch)==="done") setBranchField(t,branch,"prepStatus","todo"); } });
-  const removeTask=id=>{ const t=state.recipes.find(x=>x.id===id); if(!confirm(`Remove "${t?t.name:"this task"}" from the prep board?`)) return; update(s=>{ const tt=s.recipes.find(x=>x.id===id); if(!tt) return; if(dept==="bakery") setBk(tt,branch,"prep",false); else if(dept==="barista") setBa(tt,branch,"prep",false); else setBranchField(tt,branch,"prep",false); }); };
+  const removeTask=id=>{ const t=state.recipes.find(x=>x.id===id); if(!confirm(`Remove "${t?t.name:"this task"}" from the prep board?`)) return false; update(s=>{ const tt=s.recipes.find(x=>x.id===id); if(!tt) return; if(dept==="bakery") setBk(tt,branch,"prep",false); else if(dept==="barista") setBa(tt,branch,"prep",false); else setBranchField(tt,branch,"prep",false); }); return true; };
   const doneN=filtered.filter(r=>pStatus(r,branch,dept)==="done").length;
   const cols = PREP_COLS;
   const startDrag=(e,r)=>{
@@ -5500,7 +5526,7 @@ function PrepBoard({state, ingMap, update, branch}){
               return <div key={r.id} onPointerDown={e=>startDrag(e,r)} onClick={()=>{ if(suppressClick.current) return; setView(r); }} className="relative rounded-xl overflow-hidden vbtn-card tilt cursor-grab group prep-card" style={{background:"var(--color-surface-tile-2)", opacity: dragId===r.id ? .4 : (done ? .72 : 1), touchAction:"pan-y"}}>
                 {key==="urgent" && <div className="absolute left-0 top-0 bottom-0" style={{width:3, background:"var(--color-primary)"}}></div>}
                 <div className="flex items-center gap-3 p-2.5 pl-3.5 prep-card-pad">
-                  <div className="rounded-lg overflow-hidden shrink-0 prep-thumb" style={{width:52, height:52, background:"var(--color-surface-tile-3)", filter: done?"grayscale(1)":"none"}}>{r.image? <img src={r.image} alt="" draggable={false} className="w-full h-full object-cover" /> : <DishPlaceholder name={r.name} />}</div>
+                  {r.image && <div className="rounded-lg overflow-hidden shrink-0 prep-thumb" style={{width:52, height:52, background:"var(--color-surface-tile-3)", filter: done?"grayscale(1)":"none"}}><img src={r.image} alt="" draggable={false} className="w-full h-full object-cover" /></div>}
                   <div className="flex-1 prep-textcol">
                     <div className="font-semibold prep-title" style={{fontSize:((r.name||"").length<=8?16:(r.name||"").length<=14?14.5:(r.name||"").length<=22?13:(r.name||"").length<=34?12:11)+"px", color: done?"var(--color-body-muted)":"#fff", fontFamily:"var(--font-display)", textDecoration: done?"line-through":"none", lineHeight:1.16, wordBreak:"normal", overflowWrap:"break-word", letterSpacing:"-0.2px"}}>{r.name}</div>
                     <div className="text-[11px] mt-0.5 prep-sub" style={{color:"var(--color-body-muted)"}}>{dishCategory(r)}</div>
@@ -5509,7 +5535,6 @@ function PrepBoard({state, ingMap, update, branch}){
                     {!done && key!=="urgent" && <button onClick={e=>{e.stopPropagation(); setStatus(r.id,"urgent");}} title="Fire first" className="vbtn-card w-8 h-8 rounded-full text-xs prep-hide-sm" style={{border:"1.5px solid rgba(255,255,255,.3)", background:"transparent", color:"#fff", cursor:"pointer"}}>!</button>}
                     {!done ? <button onClick={e=>{e.stopPropagation(); setStatus(r.id,"done");}} title="Mark done" className="vbtn-card w-8 h-8 rounded-full text-sm" style={{border:"1.5px solid rgba(255,255,255,.3)", background:"transparent", color:"#fff", cursor:"pointer"}}>✓</button>
                     : <button onClick={e=>{e.stopPropagation(); setStatus(r.id,"todo");}} title="Back to To do" className="vbtn-card w-8 h-8 rounded-full text-sm" style={{border:"1.5px solid rgba(255,255,255,.3)", background:"transparent", color:"#fff", cursor:"pointer"}}>↺</button>}
-                    <button onClick={e=>{e.stopPropagation(); removeTask(r.id);}} title="Remove from board" className="vbtn-card w-8 h-8 rounded-full text-sm opacity-0 group-hover:opacity-100 prep-hide-sm" style={{border:"none", background:"transparent", color:"var(--color-body-muted)", cursor:"pointer", transition:"opacity .15s"}}>×</button>
                   </div>
                 </div>
               </div>; })}
@@ -5518,7 +5543,8 @@ function PrepBoard({state, ingMap, update, branch}){
         </div>; })}
     </div>
     {board.length===0 && <div className="card p-10 text-center text-sm text-stone-400 mt-4">No prep tasks yet. Click <b>+ Add task</b> to pick recipes for today’s prep.</div>}
-    {view && <DishDetail rec={view} ingMap={ingMap} onClose={()=>setView(null)} />}
+    {view && <DishDetail rec={view} ingMap={ingMap} onClose={()=>setView(null)} onEdit={()=>{ setEditRec(view); setView(null); }} onRemove={()=>{ if(removeTask(view.id)) setView(null); }} />}
+    {editRec && <RecipeEditor rec={editRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={prepCreateIng} onClose={()=>setEditRec(null)} onSave={prepCommitRec} onDelete={id=>{ update(s=>{s.recipes=s.recipes.filter(x=>x.id!==id);}); setEditRec(null); }} />}
     {showAdd && <Modal title="Add prep tasks" onClose={()=>setShowAdd(false)}>
       <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} list="sug-prep-add" /><Suggest id="sug-prep-add" options={off.map(r=>r.name)} />
       <div className="max-h-[50vh] overflow-auto divide-y divide-stone-100">
@@ -5614,18 +5640,48 @@ function Ingredients({state, update, setState}){
   </div>;
 }
 function IngredientEditor({ing, onClose, onSave, onDelete}){
-  const [f,setF]=useState(ing); const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const PU_LIST=["kg","g","L","ml","each"];
+  const canon=(u)=>{ const t=String(u||"").trim().toLowerCase().replace(/s$/,""); if(t==="kg")return "kg"; if(t==="g"||t==="gram")return "g"; if(t==="l"||t==="lt"||t==="litre"||t==="liter")return "L"; if(t==="ml")return "ml"; if(t==="each"||t==="ea"||t==="pc"||t==="piece"||t==="unit")return "each"; return null; };
+  const parsePU=(v)=>{ const t=String(v||"").trim(); let m=t.match(/^([\d.]+)\s*([A-Za-z]+)$/); if(m){ const u=canon(m[2]); if(u) return {size:Number(m[1]), unit:u}; } const u2=canon(t); return {size:null, unit:u2}; };
+  const conv=(n,from,to)=>{ const a=canon(from), b=canon(to); if(!a||!b) return null; if(a===b) return n; for(const tbl of [U_MASS,U_VOL]){ const x=tbl[a.toLowerCase()], y=tbl[b.toLowerCase()]; if(x!=null&&y!=null) return n*x/y; } return null; };
+  // A2: keep a legacy/non-metric unit as-is instead of silently coercing it to "g"
+  const keepU=(u,fb)=>{ const c=canon(u); if(c) return c; const t=String(u||"").trim(); return t||fb; };
+  const seed=(()=>{ const uu=keepU(ing.useUnit,"g"); const pp=parsePU(ing.purchaseUnit); const pu=pp.unit||keepU(ing.purchaseUnit,uu);
+    const q=Number(ing.purchaseQty)||0; let size=pp.size;
+    if(size==null){ const back=q>0?conv(q, uu, pu):null; size = (back!=null&&back>0)?back:(q>0?q:""); }
+    const qty=(Number(size)>0)?conv(size, pu, uu):null;
+    // A1/A3: never invent a pack size, never overwrite a stored qty we can't convert
+    return {packSize:(Number(size)>0?+Number(size).toFixed(6):""), purchaseUnit:pu, useUnit:uu,
+            purchaseQty:(qty!=null&&qty>0)?+Number(qty).toFixed(6):q}; })();
+  const [f,setF]=useState({...ing, ...seed}); const set=(k,v)=>{ setTouched(true); setF(p=>({...p,[k]:v})); };
+  const [touched,setTouched]=useState(false);
+  const unitOpts=[...new Set([...PU_LIST, canon(ing.useUnit)?null:String(ing.useUnit||"").trim(), canon(ing.purchaseUnit)?null:String(ing.purchaseUnit||"").trim()].filter(Boolean))];
+  const packToUse=(n,P,U,gpe)=>{ if(!(n>0)) return null; const c=conv(n,P,U); if(c!=null&&c>0) return c;
+    const a=canon(P), b=canon(U), g=Number(gpe)||0;
+    if(g>0){ if(U_MASS[String(a).toLowerCase()]!=null && b==="each") return conv(n,P,"g")/g; if(a==="each" && U_MASS[String(b).toLowerCase()]!=null) return conv(n*g,"g",U); }
+    return null; };
+  const setPack=(size,pu,uu)=>{ setTouched(true); const n=Number(size); const P=unitOpts.includes(pu)?pu:"kg", U=unitOpts.includes(uu)?uu:"g";
+    setF(p=>{ const c=packToUse(n,P,U,p.gramsPerEach);
+      return {...p, packSize:(size===""?"":n), purchaseUnit:P, useUnit:U, purchaseQty:(c!=null&&c>0)?+Number(c).toFixed(6):(Number(p.purchaseQty)>0?p.purchaseQty:0)}; }); };
+  // A4: if the user never touched the pack/unit fields, don't rewrite the stored unit model on Save
+  const commitOut=()=>{ if(touched) return f; const {packSize,...rest}=f; return {...rest, purchaseUnit:ing.purchaseUnit, useUnit:ing.useUnit, purchaseQty:ing.purchaseQty}; };
   return <Modal onClose={onClose} title={f.id?"Edit Ingredient":"Add Ingredient"}>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <Field label="Name"><input className="inp" value={f.name} onChange={e=>set("name",e.target.value)} /></Field>
       <Field label="Category"><input className="inp" value={f.category} onChange={e=>set("category",e.target.value)} /></Field>
-      <Field label="Purchase unit (e.g. kg, L, box)"><input className="inp" value={f.purchaseUnit} onChange={e=>set("purchaseUnit",e.target.value)} /></Field>
-      <Field label="Use unit (e.g. g, ml, each)"><input className="inp" value={f.useUnit} onChange={e=>set("useUnit",e.target.value)} /></Field>
-      <Field label="Grams per each (weight-priced pieces, e.g. 1 avocado = 200)"><input type="number" className="inp" value={f.gramsPerEach||0} onChange={e=>set("gramsPerEach",Number(e.target.value))} /></Field>
-      <Field label="Purchase qty (in use unit)"><input type="number" className="inp" value={f.purchaseQty} onChange={e=>set("purchaseQty",Number(e.target.value))} /></Field>
-      <Field label="Purchase price ($)"><input type="number" className="inp" value={f.purchasePrice} onChange={e=>set("purchasePrice",Number(e.target.value))} /></Field>
+      <Field label="Purchase pack — how it's bought">
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input type="number" inputMode="decimal" className="inp" style={{flex:"1 1 90px"}} value={f.packSize!=null?f.packSize:""} placeholder="e.g. 1" onChange={e=>setPack(e.target.value, f.purchaseUnit, f.useUnit)} />
+          <select className="inp" style={{width:96}} value={unitOpts.includes(f.purchaseUnit)?f.purchaseUnit:"kg"} onChange={e=>setPack(f.packSize, e.target.value, f.useUnit)}>{unitOpts.map(u=><option key={u} value={u}>{u}</option>)}</select>
+        </div>
+      </Field>
+      <Field label="Use unit — how recipes measure it">
+        <select className="inp" value={unitOpts.includes(f.useUnit)?f.useUnit:"g"} onChange={e=>setPack(f.packSize, f.purchaseUnit, e.target.value)}>{unitOpts.map(u=><option key={u} value={u}>{u}</option>)}</select>
+      </Field>
+      <Field label="Purchase price ($) — price for one pack above"><input type="number" inputMode="decimal" className="inp" value={f.purchasePrice} onChange={e=>set("purchasePrice",Number(e.target.value))} /></Field>
       <Field label="Allergens (comma separated)"><input className="inp" value={(f.allergens||[]).join(", ")} onChange={e=>set("allergens",splitList(e.target.value))} /></Field>
-      <Field label="Unit cost"><div className="py-2 text-stone-700 font-medium">{money(unitCost(f))} / {f.useUnit||"?"}</div></Field>
+      {(EACH_U.has(normU(f.useUnit))||EACH_U.has(normU(f.purchaseUnit))||Number(f.gramsPerEach)>0) && <Field label="Grams per each (weight-priced pieces, e.g. 1 avocado = 200)"><input type="number" className="inp" value={f.gramsPerEach||0} onChange={e=>{ const g=Number(e.target.value); setTouched(true); setF(p=>{ const c=packToUse(Number(p.packSize),p.purchaseUnit,p.useUnit,g); return {...p, gramsPerEach:g, purchaseQty:(c!=null&&c>0)?+Number(c).toFixed(6):p.purchaseQty}; }); }} /></Field>}
+      <Field label="Unit cost (calculated)"><div className="py-2 text-stone-700 font-medium">{money(unitCost(f))} / {f.useUnit||"?"}{(Number(f.packSize)>0&&Number(f.purchasePrice)>0)? <span className="text-stone-500 font-normal">{"  ·  "+money(Number(f.purchasePrice)/Number(f.packSize))+" / "+(f.purchaseUnit||"pack")}</span>:null}</div></Field>
     </div>
     <div className="mt-4"><div className="text-xs font-medium text-stone-500 mb-2">Suppliers</div>
       {(f.suppliers||[]).map((s,i)=>(<div key={i} className="flex gap-2 items-center mb-2">
@@ -5637,7 +5693,7 @@ function IngredientEditor({ing, onClose, onSave, onDelete}){
       <button onClick={()=>set("suppliers",[...(f.suppliers||[]),{name:"",orderCode:"",brand:"",qty:1,price:f.purchasePrice,leadTime:0,preferred:false}])} className="text-xs text-stone-500 underline">+ Add supplier</button>
     </div>
     <div className="flex justify-between mt-5"><div>{f.id&&<Btn tone="danger" size="sm" onClick={()=>{if(confirm("Delete permanently?"))onDelete(f.id);}}>Delete</Btn>}</div>
-      <div className="flex gap-2"><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn onClick={()=>onSave(f)}>Save</Btn></div></div>
+      <div className="flex gap-2"><Btn tone="ghost" onClick={onClose}>Cancel</Btn><Btn onClick={()=>{ const o=commitOut(); if(!(Number(o.purchaseQty)>0)){ const a=canon(o.purchaseUnit), b=canon(o.useUnit); const cross=Number(o.packSize)>0 && a&&b&&a!==b && !(U_MASS[String(a).toLowerCase()]!=null&&U_MASS[String(b).toLowerCase()]!=null) && !(U_VOL[String(a).toLowerCase()]!=null&&U_VOL[String(b).toLowerCase()]!=null); alert(cross? ("\""+o.purchaseUnit+"\" and \""+o.useUnit+"\" can\u2019t be converted automatically. Enter \"Grams per each\" below, or set the use unit to g / ml.") : "Enter the Purchase pack size (and unit) before saving \u2014 otherwise this ingredient would cost $0."); return; } onSave(o); }}>Save</Btn></div></div>
   </Modal>;
 }
 
@@ -5735,7 +5791,7 @@ function Recipes({state, update, setState, ingMap}){
           {(selMode)&&<label className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,.85)", border:"1px solid var(--color-hairline-alpha)"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={isSel} onChange={()=>toggleSel(r.id)} style={{width:16, height:16, accentColor:"var(--color-primary)"}} /></label>}
           <div className="flex" style={{minHeight:98}}>
             <div style={{width:6, background:accent, flexShrink:0}}></div>
-            <div className="shrink-0 my-3 ml-3 rounded-xl overflow-hidden" style={{width:64, height:64, background:"var(--color-canvas-parchment)"}}>{r.image? <img src={r.image} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center" style={{color:"#cbbfa8", fontFamily:"var(--font-display)", fontSize:26, fontWeight:600}}>{(r.name||"?").trim().slice(0,1).toUpperCase()}</div>}</div>
+            {r.image && <div className="shrink-0 my-3 ml-3 rounded-xl overflow-hidden" style={{width:64, height:64, background:"var(--color-canvas-parchment)"}}><img src={r.image} alt="" className="w-full h-full object-cover" /></div>}
             <div className="flex-1 min-w-0 py-3 px-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -6109,7 +6165,8 @@ function Dishes({state, ingMap, update, branch}){
   const catsRaw = [...new Set(filtered.map(catOf))];
   const cats = [...catList, ...catsRaw.filter(c=>!catList.includes(c))];
   const moveTo = (id, cat) => update(s=>{ const t=s.recipes.find(x=>x.id===id); if(t && ((t.category||"").trim()||dishCategory(t))!==cat){ t.category=cat; if(dept==="bakery") setBk(t,branch,"dish",true); else if(dept==="barista") setBa(t,branch,"dish",true); else setBranchField(t,branch,"dish",true); } });
-  const [dragId,setDragId]=useState(null); const [overCat,setOverCat]=useState(null); const [pickFor,setPickFor]=useState(null);
+  const [dragId,setDragId]=useState(null); const [overCat,setOverCat]=useState(null); const [pickFor,setPickFor]=useState(null); const [editRec,setEditRec]=useState(null);
+  const dishCreateIng=(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; };
   const DishCard = r => {
     const cat=(r.category||"").trim()||dishCategory(r);
     return (
@@ -6184,7 +6241,8 @@ function Dishes({state, ingMap, update, branch}){
       {filtered.length===0 && <div className="card p-10 text-center text-sm text-stone-400 w-full">No dishes yet. In the <b>Recipes</b> tab, open a recipe, add a photo, and tick <b>“Show this recipe in the Dishes menu”</b>.</div>}
     </div>
     )}
-    {view && <DishDetail rec={view} ingMap={ingMap} cats={catList} onClose={()=>setView(null)} onMove={cat=>{ moveTo(view.id, cat); setView(v=>({...v, category:cat})); }} />}
+    {view && <DishDetail rec={view} ingMap={ingMap} cats={catList} onClose={()=>setView(null)} onEdit={()=>{ setEditRec(view); setView(null); }} onMove={cat=>{ moveTo(view.id, cat); setView(v=>({...v, category:cat})); }} />}
+    {editRec && <RecipeEditor rec={editRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={dishCreateIng} onClose={()=>setEditRec(null)} onSave={r=>{ update(s=>{ const i=s.recipes.findIndex(x=>x.id===r.id); if(i>=0) s.recipes[i]=r; }); setEditRec(null); }} onDelete={id=>{ update(s=>{s.recipes=s.recipes.filter(x=>x.id!==id);}); setEditRec(null); }} />}
     {showCats && <CatManager state={state} update={update} dept={dept} onClose={()=>setShowCats(false)} />}
     {showAdd && <Modal title={"Add dishes · "+(dept==="bakery"?"Bakery":dept==="catering"?"Catering":dept==="barista"?"Barista":"Kitchen")} onClose={()=>setShowAdd(false)}>
       <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} list="sug-dish-add" /><Suggest id="sug-dish-add" options={offDishes.map(r=>r.name)} />
@@ -6198,19 +6256,19 @@ function Dishes({state, ingMap, update, branch}){
     {pickFor && <PhotoLibrary photos={state.photos} update={update} mode="pick" onPick={(url)=>{ let prev=""; update(s=>{ const t=s.recipes.find(x=>x.id===pickFor); if(t){ prev=t.image||""; t.image=url; } }); cloudinarySyncDishTag(state.photos, url, pickFor, prev); setPickFor(null); }} onClose={()=>setPickFor(null)} />}
   </div>;
 }
-function DishDetail({rec, ingMap, onClose, onMove, cats}){
+function DishDetail({rec, ingMap, onClose, onMove, cats, onEdit, onRemove}){
   const [openSub,setOpenSub]=useState(null);
   const rows=(rec.items&&rec.items.length)?rec.items:[];
   const total=recipeCost(rec,ingMap);
-  const steps=((rec.procedure||"").trim()||bakedProc(rec.name)).split(/\n+/).map(x=>x.replace(/^\s*\d+[\.)]\s*/,"").trim()).filter(Boolean);
+  const steps=(()=>{ const raw=((rec.procedure||"").trim()||bakedProc(rec.name)); const out=[]; raw.split("\n").forEach(ln=>{ if(/^\s/.test(ln)){ const c=ln.trim(); if(!c) return; if(out.length) out[out.length-1]+=" "+c; else out.push(c); } else { const t=ln.replace(/^\s*\d+[.)](?=\s|$)\s*/,"").trim(); if(t) out.push(t); } }); return out; })();
   return ReactDOM.createPortal(<div className="fixed inset-0 bg-black/45 flex items-start justify-center p-4 overflow-auto z-50 modal-back" onClick={onClose}>
     <div className="rounded-[18px] max-w-2xl w-full overflow-hidden mt-4 md:mt-8 modal-pop" style={{background:"var(--color-surface-tile-2)", color:"#fff"}} onClick={e=>e.stopPropagation()}>
       <div className="relative">
-        <div className="aspect-[4/3]" style={{background:"var(--color-surface-tile-3)"}}>{rec.image? <img src={rec.image} className="w-full h-full object-cover" /> : <DishPlaceholder name={rec.name} />}</div>
-        <button onClick={onClose} className="absolute top-3 right-3 w-11 h-11 rounded-full text-xl leading-none flex items-center justify-center vbtn-card" style={{background:"var(--color-chip-translucent-64)", backdropFilter:"var(--blur-frosted)", WebkitBackdropFilter:"var(--blur-frosted)", color:"var(--color-ink)", border:"none", cursor:"pointer"}}>×</button>
+        {rec.image && <div className="aspect-[4/3]" style={{background:"var(--color-surface-tile-3)"}}><img src={rec.image} className="w-full h-full object-cover" /></div>}
+        <button onClick={onClose} className="absolute top-3 right-3 w-11 h-11 rounded-full text-xl leading-none flex items-center justify-center vbtn-card" style={{zIndex:2, background:rec.image?"var(--color-chip-translucent-64)":"rgba(255,255,255,.14)", backdropFilter:"var(--blur-frosted)", WebkitBackdropFilter:"var(--blur-frosted)", color:rec.image?"var(--color-ink)":"#fff", border:"none", cursor:"pointer"}}>×</button>
       </div>
       <div className="p-5 md:p-7">
-        <div className="flex items-baseline justify-between gap-3"><h2 className="text-[26px] font-semibold tracking-tight leading-tight">{rec.name}</h2>{rec.sellPrice>0 && <div className="text-lg font-semibold whitespace-nowrap">{money(rec.sellPrice)}</div>}</div>
+        <div className="flex items-baseline justify-between gap-3 flex-wrap"><h2 className="text-[26px] font-semibold tracking-tight leading-tight" style={{minWidth:0}}>{rec.name}</h2><div className="flex items-center gap-2 shrink-0">{onEdit && <button onClick={onEdit} className="vbtn-card text-xs rounded-full px-4 py-2" style={{border:"none", background:"#ae1800", color:"#fff", cursor:"pointer", fontWeight:600, minHeight:44}}>Edit</button>}{onRemove && <button onClick={onRemove} className="vbtn-card text-xs rounded-full px-4 py-2" style={{border:"1px solid rgba(255,255,255,.45)", background:"transparent", color:"rgba(255,255,255,.92)", cursor:"pointer", fontWeight:600, minHeight:44, whiteSpace:"nowrap"}}>Remove from board</button>}{rec.sellPrice>0 && <div className="text-lg font-semibold whitespace-nowrap">{money(rec.sellPrice)}</div>}</div></div>
         <div className="text-sm mt-1" style={{color:"var(--color-body-muted)"}}><span style={{textTransform:"uppercase", letterSpacing:"0.04em"}}>{(rec.category||"").trim()||dishCategory(rec)}</span> · {rec.yield} {rec.yieldUnit}</div>
         {(rec.allergens&&rec.allergens.length>0)&&<div className="flex flex-wrap gap-1.5 mt-3">{rec.allergens.map((a,i)=><span key={i} className="text-[11px] rounded-full px-2.5 py-1" style={{background:"rgba(255,255,255,.1)", color:"#ffb38a", border:"1px solid rgba(255,179,138,.35)"}}>{a}</span>)}</div>}
         <div className="mt-6"><div className="text-sm font-semibold mb-2" style={{color:"#fff"}}>Ingredients</div>
@@ -6218,9 +6276,9 @@ function DishDetail({rec, ingMap, onClose, onMove, cats}){
             {rows.length===0 && <div className="py-2 text-sm" style={{color:"var(--color-body-muted)"}}>No ingredients listed</div>}
             {rows.map((it,i)=>{ const ing=ingMap[it.ingredientId]; const sub=it.subRecipeId?recMapGet()[it.subRecipeId]:null; const nm=ing?ing.name:(sub?sub.name:(it.rawName||"(unlinked)")); const open=sub&&openSub===it.subRecipeId;
               return <div key={i}>
-                <div className="flex items-center justify-between py-2 text-sm gap-3" onClick={sub?()=>setOpenSub(open?null:it.subRecipeId):undefined} style={{borderColor:"rgba(255,255,255,.12)", cursor:sub?"pointer":"default"}}><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.92)"}}>{sub?(open?"▾ ":"▸ "):""}{nm}{sub&&<span style={{color:"var(--color-body-muted)", fontSize:11}}> · prep</span>}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{it.qty>0?(it.qty+" "+(ing?ing.useUnit:(sub?(sub.yieldUnit||""):(it.rawUnit||"")))):"—"}</span></div>
+                <div className="flex items-center justify-between py-2 text-sm gap-3" onClick={sub?()=>setOpenSub(open?null:it.subRecipeId):undefined} style={{borderColor:"rgba(255,255,255,.12)", cursor:sub?"pointer":"default"}}><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.92)"}}>{sub?(open?"▾ ":"▸ "):""}{nm}{sub&&<span style={{color:"var(--color-body-muted)", fontSize:11}}> · prep</span>}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{it.qty>0?(it.qty+" "+((it.rawUnit||"").trim()||(ing?ing.useUnit:(sub?(sub.yieldUnit||""):"")))):"—"}</span></div>
                 {open&&<div className="pb-2 pl-5">{(sub.items||[]).map((si,j)=>{ const sIng=ingMap[si.ingredientId]; const sSub=si.subRecipeId?recMapGet()[si.subRecipeId]:null; const sNm=sIng?sIng.name:(sSub?("▸ "+sSub.name):(si.rawName||"(unlinked)"));
-                  return <div key={j} className="flex items-center justify-between py-1 text-[13px] gap-3"><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.65)"}}>{sNm}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{si.qty>0?(si.qty+" "+(sIng?sIng.useUnit:(sSub?(sSub.yieldUnit||""):(si.rawUnit||"")))):"—"}</span></div>; })}
+                  return <div key={j} className="flex items-center justify-between py-1 text-[13px] gap-3"><span className="min-w-0 truncate" style={{color:"rgba(255,255,255,.65)"}}>{sNm}</span><span className="whitespace-nowrap" style={{color:"var(--color-body-muted)"}}>{si.qty>0?(si.qty+" "+((si.rawUnit||"").trim()||(sIng?sIng.useUnit:(sSub?(sSub.yieldUnit||""):"")))):"—"}</span></div>; })}
                 {(sub.items||[]).length===0&&<div className="py-1 text-[13px]" style={{color:"var(--color-body-muted)"}}>No ingredients listed</div>}</div>}
               </div>; })}
           </div>
@@ -6265,7 +6323,7 @@ function RecipeSummary({rec, ingMap, onClose, onEdit}){
           <span className="w-20 text-right text-stone-700">{money(lc)}</span>
         </div>
         {open&&<div className="pb-2 pl-8 pr-3">{(sub.items||[]).map((si,j)=>{ const sIng=ingMap[si.ingredientId]; const sSub=si.subRecipeId?recMapGet()[si.subRecipeId]:null; const sNm=sIng?sIng.name:(sSub?("▸ "+sSub.name):(si.rawName||"(unlinked)"));
-          return <div key={j} className="flex items-center justify-between py-1 text-[13px] gap-3 text-stone-500"><span className="min-w-0 truncate">{sNm}</span><span className="whitespace-nowrap">{si.qty>0?(si.qty+" "+(sIng?sIng.useUnit:(sSub?(sSub.yieldUnit||""):(si.rawUnit||"")))):"—"}</span></div>; })}
+          return <div key={j} className="flex items-center justify-between py-1 text-[13px] gap-3 text-stone-500"><span className="min-w-0 truncate">{sNm}</span><span className="whitespace-nowrap">{si.qty>0?(si.qty+" "+((si.rawUnit||"").trim()||(sIng?sIng.useUnit:(sSub?(sSub.yieldUnit||""):"")))):"—"}</span></div>; })}
         {(sub.items||[]).length===0&&<div className="py-1 text-[13px] text-stone-400">No ingredients listed</div>}</div>}
         </div>; })}
     </div>
@@ -6273,24 +6331,44 @@ function RecipeSummary({rec, ingMap, onClose, onEdit}){
     <div className="flex justify-end gap-2 mt-5"><Btn tone="ghost" onClick={onClose}>Close</Btn><Btn onClick={onEdit}>Edit</Btn></div>
   </Modal>;
 }
-function IngredientPicker({item, activeIngs, subRecipes, onPick, onCreate}){
+// Rank active ingredients by name-token overlap with a supplier line ("Canned Chickpeas in Brine 3kg (3) Twin Pine"
+// → Chickpeas…). Used by IngredientPicker to surface likely re-link targets before the user types anything.
+function pickerSimilar(rawName, ings){
+  const STOP={in:1,of:1,the:1,a:1,and:1,with:1,per:1,kg:1,g:1,gm:1,gms:1,ml:1,l:1,lt:1,ltr:1,x:1,ea:1,each:1,ctn:1,carton:1,box:1,pk:1,pkt:1,pack:1,tin:1,can:1,cans:1,canned:1,jar:1,tub:1,bag:1,btl:1,bottle:1,frozen:1,fresh:1,twin:1,pine:1};
+  const toks=s=>String(s||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").split(/\s+/)
+    .filter(t=>t.length>=3 && !STOP[t] && !/^\d/.test(t)).map(t=>t.replace(/s$/,""));
+  const rt=toks(rawName); if(!rt.length) return [];
+  return ings.map(g=>{ const it=toks(g.name); let sc=0;
+      rt.forEach(t=>{ if(it.some(w=>w===t)) sc+=2; else if(it.some(w=>(w.length>=4&&w.indexOf(t)===0)||(t.length>=4&&t.indexOf(w)===0))) sc+=1; });
+      return {g,sc}; })
+    .filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc).slice(0,4).map(x=>x.g);
+}
+function IngredientPicker({item, activeIngs, subRecipes, onPick, onCreate, seed}){
   const [open,setOpen]=useState(false); const [q,setQ]=useState(""); const [nf,setNf]=useState(null);
   const cur = item.subRecipeId? subRecipes.find(r=>r.id===item.subRecipeId) : (item.ingredientId? activeIngs.find(g=>g.id===item.ingredientId):null);
   const unmatched = item.rawName && !item.ingredientId && !item.subRecipeId;
   const label = cur? (item.subRecipeId?("▸ "+cur.name):cur.name) : (unmatched? ("⚠ "+item.rawName) : "Select ingredient…");
   const ql=q.trim().toLowerCase();
+  const sims = useMemo(()=> (open && item.rawName)? pickerSimilar(item.rawName, activeIngs) : [], [open, item.rawName, activeIngs]);
   const fIngs=(ql? activeIngs.filter(g=>(g.name||"").toLowerCase().includes(ql)) : activeIngs).slice(0,60);
   const fSubs=(ql? subRecipes.filter(r=>(r.name||"").toLowerCase().includes(ql)) : subRecipes).slice(0,25);
   function pick(v){ onPick(v); setOpen(false); setQ(""); setNf(null); }
-  function startNew(){ setNf({name:q, category:"", useUnit:"g", purchaseUnit:"", purchaseQty:1000, purchasePrice:0}); }
+  function startNew(){ const nm=(q.trim()||item.rawName||"").trim();
+    setNf({name:nm, category:"", useUnit:(seed&&seed.useUnit)||"g", purchaseUnit:"", purchaseQty:(seed&&Number(seed.purchaseQty)>0)?Number(seed.purchaseQty):1000, purchasePrice:(seed&&Number(seed.purchasePrice)>0)?Number(seed.purchasePrice):0}); }
   function saveNew(){ if(!(nf.name||"").trim()){ alert("Enter a name"); return; } const id=onCreate(nf); pick(id); }
   const nuc=(Number(nf&&nf.purchaseQty)>0)? Number(nf.purchasePrice)/Number(nf.purchaseQty):0;
   return <div className="relative">
     <button type="button" onClick={()=>setOpen(o=>!o)} className={`inp text-left w-full ${unmatched?"border-amber-300 text-amber-700":(!cur?"text-stone-400":"")}`}>{label}<span className="float-right text-stone-300">▾</span></button>
-    {open && <div className="absolute z-50 mt-1 w-full bg-white border border-stone-200 rounded-lg p-2" style={{maxHeight:"340px",overflow:"auto"}}>
+    {open && <div className="absolute z-50 mt-1 w-full bg-white border border-stone-200 rounded-lg p-2" style={{maxHeight:"400px",overflow:"auto"}}>
       {!nf && <>
         <input autoFocus className="inp w-full mb-2" placeholder="Search ingredients…" value={q} onChange={e=>setQ(e.target.value)} />
-        <button type="button" onClick={startNew} className="w-full text-left text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md px-2 py-1.5 mb-2">+ Create new ingredient{q?(" \""+q+"\""):""}</button>
+        {!ql && sims.length>0 && <>
+          <div className="text-[10px] uppercase tracking-wide text-emerald-700 px-1 mb-1">Similar to this line ({sims.length})</div>
+          {sims.map(g=><button key={"sim-"+g.id} type="button" onClick={()=>pick(g.id)} className="block w-full text-left text-sm px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 truncate mb-0.5">{g.name}<span className="text-stone-400 text-xs"> · {money(unitCost(g))}/{g.useUnit}</span></button>)}
+        </>}
+        {!ql && item.rawName && sims.length===0 && <div className="text-xs text-amber-600 px-1 py-1 mb-1">No similar ingredient found — create it below (details pre-filled from this invoice line).</div>}
+        <button type="button" onClick={startNew} className="block w-full text-left text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md px-2 py-1.5 mb-2 truncate">+ Create new ingredient{(q||item.rawName)?(" \""+(q||item.rawName)+"\""):""}</button>
+        <div className="border-t border-stone-100 my-2"></div>
         <div className="text-[10px] uppercase tracking-wide text-stone-400 px-1 mb-1">Ingredients ({fIngs.length})</div>
         {fIngs.length===0 && <div className="text-xs text-stone-400 px-1 py-1">no match — create it above</div>}
         {fIngs.map(g=><button key={g.id} type="button" onClick={()=>pick(g.id)} className="block w-full text-left text-sm px-2 py-1 rounded hover:bg-stone-100 truncate">{g.name}<span className="text-stone-400 text-xs"> · {money(unitCost(g))}/{g.useUnit}</span></button>)}
@@ -6302,7 +6380,7 @@ function IngredientPicker({item, activeIngs, subRecipes, onPick, onCreate}){
         <div className="text-[11px] text-stone-500 mb-2 leading-snug">Enter what you <b>pay</b> and how <b>much</b> that buys, measured in the unit you cook with. The app then works out cost per g / ml / each.</div>
         <label className="block mb-2"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Ingredient name</div><input autoFocus className="inp w-full" placeholder="e.g. Chopped tomato" value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})} /></label>
         <div className="grid grid-cols-2 gap-2 mb-2">
-          <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Use unit <span className="text-stone-400">(how you measure it in recipes)</span></div><input className="inp w-full" placeholder="g / ml / each" value={nf.useUnit} onChange={e=>setNf({...nf,useUnit:e.target.value})} /></label>
+          <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Use unit <span className="text-stone-400">(how you measure it in recipes)</span></div><input className="inp w-full" placeholder="g / ml / each" value={nf.useUnit} onChange={e=>setNf({...nf,useUnit:e.target.value.replace(/^\s*[\d.]+\s*/,"")})} /></label>
           <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Category <span className="text-stone-400">(optional)</span></div><input className="inp w-full" placeholder="e.g. Produce, Dairy" value={nf.category} onChange={e=>setNf({...nf,category:e.target.value})} /></label>
           <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Amount bought <span className="text-stone-400">(in use unit)</span></div><input type="number" className="inp w-full" placeholder="e.g. 1000" value={nf.purchaseQty} onChange={e=>setNf({...nf,purchaseQty:Number(e.target.value)})} /></label>
           <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Price paid ($) <span className="text-stone-400">for that amount</span></div><input type="number" className="inp w-full" placeholder="e.g. 12.50" value={nf.purchasePrice} onChange={e=>setNf({...nf,purchasePrice:Number(e.target.value)})} /></label>
@@ -6349,7 +6427,7 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
         {showPick && <PhotoLibrary photos={state.photos} update={update} mode="pick" onPick={(url)=>{ set("image",url); setShowPick(false); }} onClose={()=>setShowPick(false)} />}
       </Field>
       <div className="flex flex-wrap gap-x-6 gap-y-2"><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInDish} onChange={e=>set("showInDish",e.target.checked)} />Show this recipe in the Dishes menu</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.showInPrep} onChange={e=>set("showInPrep",e.target.checked)} />Show on the Prep board</label><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={!!f.finalised} onChange={e=>set("finalised",e.target.checked)} /><span style={{fontWeight:600, color:f.finalised?"#3f9e63":"inherit"}}>Finalised ✓</span></label></div>
-      <Field label="Cooking procedure (one step per line)"><textarea className="inp proc-ta" rows={18} style={{minHeight:"480px", height:"480px", resize:"vertical", lineHeight:1.65}} value={f.procedure||""} onChange={e=>set("procedure",e.target.value)} onInput={e=>{ const t=e.target; t.style.height="auto"; t.style.height=Math.max(480, t.scrollHeight+4)+"px"; }} placeholder={"Toast the bagel\nFry the egg\nAssemble & serve"} /></Field>
+      <Field label="Cooking procedure — one step per line"><div style={{fontSize:12,color:"#6b5e4e",margin:"-2px 0 6px",lineHeight:1.5}}><b>Enter</b> = next numbered step · <b>Shift+Enter</b> = continue the same step on a new line (no number)</div><ProcedureEditor value={f.procedure||""} onChange={v=>set("procedure",v)} placeholder={"Toast the bagel\nFry the egg\nAssemble & serve"} /></Field>
     </div>
     {fromImport && <div className="mt-3 text-xs bg-amber-50 text-amber-700 rounded-lg p-3">Imported recipe · {linked}/{f.items.length} ingredients auto-linked from the invoice/recipe list. Just enter quantities below and the cost switches to auto-calculated. {usesImported(f,ingMap) && <span>(Imported cost {money(f.importedCost)})</span>}</div>}
     <div className="mt-4"><div className="text-xs font-medium text-stone-500 mb-2">Ingredients</div>
@@ -6464,12 +6542,16 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
     const id = (v&&v.ingredientId)||v;
     if(!id||typeof id!=="string") return;
     if(id.indexOf("rec:")===0){ alert("Pick an ingredient, not a sub-recipe — invoice prices apply to ingredients only."); return; }
-    const tgt=ings.find(g=>g.id===id); if(!tgt) return;
+    // NOTE: look the target up inside update() too — an ingredient created a moment ago via the
+    // picker ("+ Create new ingredient") is not in this render's `ings` closure yet.
+    let tgt=ings.find(g=>g.id===id);
     // Was this line already applied to a DIFFERENT ingredient by the AI? Offer to undo that.
     const wrong = (ing && ing.id!==id && row.old!=null) ? ing : null;
     const undo = wrong ? confirm("Also undo the price on the wrongly matched \""+wrong.name+"\"?\n\nIt will go back to "+money(row.old)+"/"+(row.unit||wrong.useUnit||"")+".\n\nOK = undo it   ·   Cancel = leave it as is") : false;
     let res=null, undone=false;
     update(s=>{
+      if(!tgt) tgt=(s.ingredients||[]).find(x=>x.id===id);
+      if(!tgt){ res={ok:false, why:"not found"}; return; }
       s.invoiceAliases=s.invoiceAliases||{};
       s.invoiceAliases[aliasKey]=id;
       s.invoiceUnmatched=(s.invoiceUnmatched||[]).filter(x=>((x.supplier||"?")+"|"+(x.orderCode||x.rawName||""))!==aliasKey);
@@ -6488,14 +6570,21 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
       s.invoiceLog.unshift({ ts:Date.now(), date:today(), supplier:entry.supplier||"", invoiceNo:entry.invoiceNo||"",
         analysis:"Manual link by staff — this supplier line now maps to \""+tgt.name+"\" and future runs use it automatically.",
         updated: res&&res.ok? [{id:tgt.id, name:tgt.name, old:res.old, new:res.next, unit:res.unit, orderCode:row.orderCode||""}] : [],
-        added: [], flagged: (res&&!res.ok? ["Price not applied ("+res.why+") — set it manually on "+tgt.name+"."]:[])
+        added: [], flagged: (res&&!res.ok&&res.why!=="same price"? ["Price not applied ("+res.why+") — set it manually on "+tgt.name+"."]:[])
           .concat(undone? ["Reverted the earlier price on "+wrong.name+"."]:[]) });
     });
-    alert("Linked to \""+tgt.name+"\"."
-      + (res&&res.ok? "\nPrice updated: "+money(res.old)+" → "+money(res.next)+" per "+res.qty+" "+res.unit : "\nPrice NOT applied ("+((res&&res.why)||"?")+") — set it manually.")
-      + (undone? "\nReverted "+wrong.name+" to its previous price." : "")
-      + "\n\nFuture invoice runs will use this mapping automatically.");
-    onClose();
+    // React 18 batches both update() calls from a create-then-link click; the reducers (which set
+    // tgt/res) only run when the batch flushes — so defer the user-facing outcome past the flush.
+    setTimeout(()=>{
+      if(!tgt){ alert("Could not link — ingredient not found."); return; }
+      alert("Linked to \""+tgt.name+"\"."
+        + (res&&res.ok? "\nPrice updated: "+money(res.old)+" → "+money(res.next)+" per "+res.qty+" "+res.unit
+          : (res&&res.why==="same price"? "\nPrice already matches this invoice line."
+            : "\nPrice NOT applied ("+((res&&res.why)||"?")+") — set it manually."))
+        + (undone? "\nReverted "+wrong.name+" to its previous price." : "")
+        + "\n\nFuture invoice runs will use this mapping automatically.");
+      onClose();
+    },0);
   }
   return <Modal title={"Invoice item — "+(row.name||row.rawName||"?")} onClose={onClose}>
     <div className="space-y-4 text-sm">
@@ -6521,7 +6610,13 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
       <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
         <div className="font-medium text-amber-900 mb-1">Wrong ingredient?</div>
         <p className="text-xs text-amber-800 mb-2">Pick the ingredient this supplier line really belongs to. The choice is saved as a rule — every future automatic run uses it, so it only needs fixing once.{aliased?<span> Current rule: <b>{aliased.name}</b>.</span>:null}</p>
-        <IngredientPicker item={{ingredientId:(aliasId||(ing&&ing.id)||""), rawName:row.name||row.rawName||""}} activeIngs={ings} subRecipes={[]} onPick={relink} onCreate={createFromPicker} />
+        <IngredientPicker item={{ingredientId:(aliasId||(ing&&ing.id)||""), rawName:row.name||row.rawName||""}} activeIngs={ings} subRecipes={[]} onPick={relink} onCreate={createFromPicker}
+          seed={(()=>{ const u=(row.unit||"each"), m=(u==="g"||u==="ml")?1000:1, p=Number(row.new);
+            // Only trust row.new as a PER-UNIT rate on genuinely unmatched lines (old==null, no app
+            // match). Rows reopened from the invoice log carry res.next there — the TOTAL pack price —
+            // and seeding that would inflate the new ingredient's price ~purchaseQty×. Seed 0 instead.
+            const perUnit = (!ing && row.old==null && p>0);
+            return {useUnit:u, purchaseQty:m, purchasePrice:(perUnit? +((p*m).toFixed(4)) : 0)}; })()} />
       </div>
     </div>
   </Modal>;
@@ -6657,16 +6752,32 @@ function ProcedureImporter({state, update}){
     {msg && <div className="text-xs bg-emerald-50 text-emerald-700 rounded-lg p-2.5 mt-3">{msg}</div>}
   </div>;
 }
+/* MULTI-BRANCH ACCESS 2026-08-06 — tick every location a person works at. */
+function BranchPicker({branches, value, onChange}){
+  const sel=(value||[]);
+  const toggle=id=>{ const has=sel.indexOf(id)>=0; const next=has?sel.filter(x=>x!==id):sel.concat([id]); onChange((branches||[]).filter(b=>next.indexOf(b.id)>=0).map(b=>b.id)); };
+  return <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",flex:"1 1 260px",minWidth:200}}>
+    {(branches||[]).map(b=>{ const on=sel.indexOf(b.id)>=0;
+      return <button key={b.id} type="button" onClick={()=>toggle(b.id)} title={on?("Remove "+b.name):("Add "+b.name)}
+        style={{border:"1px solid "+(on?"#3e6b4a":"var(--color-hairline-alpha)"), background:on?"rgba(63,107,74,.14)":"transparent", color:on?"#2f5238":"#8a7a63", borderRadius:999, padding:"8px 12px", minHeight:38, fontSize:12.5, fontWeight:on?700:500, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"var(--font-text)", lineHeight:1}}>
+        {(on?"✓ ":"＋ ")+b.name}</button>; })}
+    {!sel.length && <span style={{fontSize:11.5,color:"#a2917a"}}>none ticked · sees all</span>}
+  </div>;
+}
 function TeamAccess({fbRef, branches}){
   const [rows,setRows]=useState(null); const [msg,setMsg]=useState("");
-  const [email,setEmail]=useState(""); const [role,setRole]=useState("staff"); const [br,setBr]=useState((branches[0]&&branches[0].id)||""); const [openUntil,setOpenUntil]=useState(0); const [roster,setRoster]=useState([]); const [impOpen,setImpOpen]=useState(false); const [impText,setImpText]=useState("");
+  const [email,setEmail]=useState(""); const [role,setRole]=useState("staff"); const [br,setBr]=useState(()=>(branches[0]&&branches[0].id)?[branches[0].id]:[]); const [openUntil,setOpenUntil]=useState(0); const [roster,setRoster]=useState([]); const [impOpen,setImpOpen]=useState(false); const [impText,setImpText]=useState("");
   const db=()=> fbRef.current && fbRef.current.db;
   const load=async()=>{ const d=db(); if(!d){ setMsg("Cloud connection required (sign in via Sync, top-right)."); setRows([]); return; } try{ const q=await d.collection("allowlist").get(); const all=q.docs.map(x=>({email:x.id, ...(x.data()||{})})); const cfg=all.find(x=>x.email==="cfg-enrollment"); setOpenUntil((cfg&&cfg.openUntil)||0); const ros=all.find(x=>x.email==="cfg-roster"); setRoster((ros&&ros.people)||[]); setRows(all.filter(x=>x.email!=="cfg-enrollment"&&x.email!=="cfg-roster"&&x.email.includes("@")).sort((a,b)=>a.email.localeCompare(b.email))); setMsg(""); }catch(e){ setMsg("Load error: "+e.message); setRows([]); } };
   const importRoster=async()=>{ const people=impText.split(/\r?\n/).map(l=>l.split(",").map(s=>s.trim())).filter(a=>a[0]).map(a=>({name:a[0], role:(a[1]||"staff").toLowerCase()==="manager"?"manager":"staff", branch:a[2]||""})); if(!people.length){ setMsg("The pasted list is empty."); return; } try{ await db().collection("allowlist").doc("cfg-roster").set({people}); setImpText(""); setImpOpen(false); setMsg(people.length+" people saved"); load(); }catch(e){ setMsg("Roster save error: "+e.message); } };
-  const linkTo=async(em,idx)=>{ const p=roster[idx]; if(!p) return; try{ await db().collection("allowlist").doc(em).set({role:p.role||"staff", branch:p.branch||"", name:p.name||""},{merge:true}); load(); }catch(e){ setMsg("Link error: "+e.message); } };
+  // roster branch column may hold names and/or several branches separated by / , or | — resolve them to real branch ids
+  const resolveBranches=(txt)=>{ const parts=String(txt||"").split(/[\/|,;]+/).map(s=>s.trim()).filter(Boolean); const out=[]; parts.forEach(p=>{ const b=(branches||[]).find(x=>x.id===p||String(x.name||"").toLowerCase()===p.toLowerCase()); if(b&&out.indexOf(b.id)<0) out.push(b.id); }); return out; };
+  const linkTo=async(em,idx)=>{ const p=roster[idx]; if(!p) return; const bs=resolveBranches(p.branch); try{ await db().collection("allowlist").doc(em).set({role:p.role||"staff", branches:bs, branch:bs[0]||"", name:p.name||""},{merge:true}); load(); }catch(e){ setMsg("Link error: "+e.message); } };
   const setEnroll=async(ms)=>{ try{ await db().collection("allowlist").doc("cfg-enrollment").set({openUntil:ms}); load(); }catch(e){ setMsg("Save error: "+e.message); } };
   useEffect(()=>{ load(); },[]);
-  const add=async()=>{ const em=email.trim().toLowerCase(); if(!em||!em.includes("@")){ setMsg("Enter a valid email."); return; } try{ await db().collection("allowlist").doc(em).set({role, branch:br}); setEmail(""); setMsg("Added · "+em); load(); }catch(e){ setMsg("Add error: "+e.message); } };
+  const add=async()=>{ const em=email.trim().toLowerCase(); if(!em||!em.includes("@")){ setMsg("Enter a valid email."); return; } try{ await db().collection("allowlist").doc(em).set({role, branches:br, branch:br[0]||""}); setEmail(""); setMsg("Added · "+em+(br.length>1?(" · "+br.length+" locations"):"")); load(); }catch(e){ setMsg("Add error: "+e.message); } };
+  const updBranches=async(em,ids)=>{ try{ await db().collection("allowlist").doc(em).set({branches:ids, branch:ids[0]||""},{merge:true}); load(); }catch(e){ setMsg("Update error: "+e.message); } };
+  const rowBranches=r=>{ const a=Array.isArray(r.branches)?r.branches.filter(Boolean):[]; return (!a.length&&r.branch)?[r.branch]:a; };
   const upd=async(em,k,v)=>{ if(k==="role"&&v!=="manager"){ const my=(meEmail||"").toLowerCase(); const row=(rows||[]).find(r=>r.email===em); const mgrs=(rows||[]).filter(r=>(r.role||"staff")==="manager").length; if(row&&(row.role||"staff")==="manager"&&mgrs<=1){ alert("Can't demote the last manager."); load(); return; } if(em===my && !confirm("Demoting yourself to staff will remove this admin panel. Continue?")){ load(); return; } } try{ await db().collection("allowlist").doc(em).set({[k]:v},{merge:true}); load(); }catch(e){ setMsg("Update error: "+e.message); } };
   const del=async(em)=>{ const my=(meEmail||"").toLowerCase(); const row=(rows||[]).find(r=>r.email===em); const mgrs=(rows||[]).filter(r=>(r.role||"staff")==="manager").length; if(row&&(row.role||"staff")==="manager"&&mgrs<=1){ alert("Can't delete the last manager."); return; } if(em===my && !confirm("This removes your own access — you may be locked out after re-login. Continue?")) return; if(!confirm(em+" — delete access?")) return; try{ await db().collection("allowlist").doc(em).delete(); load(); }catch(e){ setMsg("Delete error: "+e.message); } };
   const bName=id=>{ const b=branches.find(x=>x.id===id); return b?b.name:""; };
@@ -6677,19 +6788,19 @@ function TeamAccess({fbRef, branches}){
         {open ? <button onClick={()=>{ if(confirm("Close enrollment now? New sign-ins will be blocked afterwards.")) setEnroll(0); }} style={{border:"1px solid rgba(215,0,21,.35)",background:"none",color:"#d70015",borderRadius:999,padding:"9px 16px",minHeight:44,fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Close now</button>
               : <button onClick={()=>setEnroll(Date.now()+14*864e5)} style={{border:"none",background:"#3e6b4a",color:"#fff",borderRadius:999,padding:"9px 16px",minHeight:44,fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Open for 2 weeks</button>}
       </div>; })()}
-    <div style={{fontSize:12.5,color:"#6b5e4e",marginBottom:12,lineHeight:1.55}}>Only added Google emails can sign in. <b>Manager</b> = full app · <b>Staff</b> = Today, Prep & Dishes. Set a branch to auto-connect on login.</div>
+    <div style={{fontSize:12.5,color:"#6b5e4e",marginBottom:12,lineHeight:1.55}}>Only added Google emails can sign in. <b>Manager</b> = full app · <b>Staff</b> = Today, Prep &amp; Dishes. Tick <b>every location</b> a person works at — with two or more ticked they can switch between those stores from the header (and only those). Tick none and they can see all stores.</div>
     <div style={{background:"var(--color-canvas-parchment)",border:"1px solid var(--color-hairline-alpha)",borderRadius:14,padding:"12px 14px",marginBottom:14}}>
     <div style={{fontSize:10.5,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:"#8a7a63",marginBottom:9}}>Add user</div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
       <input className="inp" style={{flex:"1 1 220px"}} placeholder="google@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} />
       <select className="inp" style={{width:110}} value={role} onChange={e=>setRole(e.target.value)}><option value="staff">Staff</option><option value="manager">Manager</option></select>
-      <select className="inp" style={{width:150}} value={br} onChange={e=>setBr(e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select>
+      <BranchPicker branches={branches} value={br} onChange={setBr} />
       <button onClick={add} style={{border:"none",borderRadius:999,padding:"12px 20px",minHeight:44,background:"#c81a22",color:"#fff",fontWeight:600,fontSize:14,cursor:"pointer"}}>+ Add</button>
     </div></div>
     <div style={{marginBottom:12}}>
       <button onClick={()=>setImpOpen(o=>!o)} style={{background:"none",border:"none",color:"#c81a22",cursor:"pointer",fontSize:12.5,fontWeight:600,padding:0}}>{impOpen?"− Close employee list":"＋ Import employee list (for linking)"}</button>
       {impOpen && <div style={{marginTop:8}}>
-        <div style={{fontSize:11.5,color:"#6b5e4e",marginBottom:6,lineHeight:1.5}}>One per line: <b>name,role,branch</b> (role = manager or staff). After saving, use "Link employee" next to each signed-in email to auto-fill their role and branch.</div>
+        <div style={{fontSize:11.5,color:"#6b5e4e",marginBottom:6,lineHeight:1.5}}>One per line: <b>name,role,branch</b> (role = manager or staff). For someone who works at more than one store, separate the branches with <b>/</b> — e.g. <i>Yuki Cheung,staff,340 Adelaide / 515 Valley</i>. After saving, use "Link employee" next to each signed-in email to auto-fill their role and locations.</div>
         <textarea className="inp" value={impText} onChange={e=>setImpText(e.target.value)} style={{height:120,fontFamily:"var(--font-text)",fontSize:13}} placeholder={"Eddie Cho,manager,\nYuki Cheung,staff,340 Adelaide"} />
         <div style={{marginTop:6}}><button onClick={importRoster} style={{border:"none",borderRadius:999,padding:"9px 16px",minHeight:44,background:"#3e6b4a",color:"#fff",fontWeight:600,fontSize:13,cursor:"pointer"}}>Save list{roster.length>0?" ("+roster.length+" loaded)":""}</button></div>
       </div>}
@@ -6702,9 +6813,59 @@ function TeamAccess({fbRef, branches}){
         <div style={{flex:"1 1 170px",minWidth:150}}><div style={{fontSize:13,fontWeight:600,wordBreak:"break-all"}}>{r.email}</div>{(r.name||r.self)&&<div style={{fontSize:11,color:"#8a7a63"}}>{r.name||"Name unknown"}{r.self?" · self-registered":""}</div>}</div>
         {roster.length>0 && <select className="inp" style={{width:150}} value="" onChange={e=>{ if(e.target.value!=="") linkTo(r.email, Number(e.target.value)); }}><option value="">Link employee…</option>{roster.map((p,i)=><option key={i} value={i}>{p.name}</option>)}</select>}
         <select className="inp" style={{width:110}} value={r.role||"staff"} onChange={e=>upd(r.email,"role",e.target.value)}><option value="staff">Staff</option><option value="manager">Manager</option></select>
-        <select className="inp" style={{width:150}} value={r.branch||""} onChange={e=>upd(r.email,"branch",e.target.value)}><option value="">(No branch)</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select>
+        {(r.role||"staff")==="manager"
+          ? <div style={{flex:"1 1 260px",minWidth:200,fontSize:11.5,color:"#a2917a"}}>Manager · every store</div>
+          : <BranchPicker branches={branches} value={rowBranches(r)} onChange={ids=>updBranches(r.email, ids)} />}
         <button onClick={()=>del(r.email)} style={{background:"none",border:"1px solid rgba(215,0,21,.35)",color:"#d70015",cursor:"pointer",borderRadius:8,padding:"9px 14px",minHeight:44,fontSize:13,fontWeight:600}}>Delete</button>
       </div>))}</div>}
+  </div>;
+}
+function ProcedureEditor({value, onChange, placeholder}){
+  const taRef=useRef(null);
+  const renumber=(txt)=>{ let n=0; return (txt||"").split("\n").map(ln=>{ if(/^\s+\S/.test(ln)) return ln; if(/^\s*([-*+>#]|\|)/.test(ln)) return ln; const body=ln.replace(/^\s*\d+[.)](?=\s|$)\s*/,"").trimStart(); if(body==="") return ""; n++; return n+". "+body; }).join("\n"); };
+  const apply=(nv, caret)=>{ const out=renumber(nv); onChange(out); requestAnimationFrame(()=>{ const ta=taRef.current; if(!ta) return; const pos=Math.min(caret+(out.length-nv.length), out.length); ta.selectionStart=ta.selectionEnd=Math.max(0,pos); }); };
+  const key=(e)=>{ if(e.key!=="Enter"||e.isComposing||e.keyCode===229) return; e.preventDefault(); const ta=e.target, a=ta.selectionStart, b=ta.selectionEnd, v=ta.value||""; const ins=e.shiftKey?"\n    ":"\n"; const nv=v.slice(0,a)+ins+v.slice(b); apply(nv, a+ins.length); };
+  return <textarea ref={taRef} value={value||""} onChange={e=>apply(e.target.value, e.target.selectionStart)} onKeyDown={key} placeholder={placeholder} className="inp" style={{fontFamily:"var(--font-text)", fontSize:16, lineHeight:1.65, minHeight:"clamp(220px,45vh,480px)", height:"clamp(220px,45vh,480px)", resize:"vertical", color:"#241c12", caretColor:"#241c12", background:"#fff"}} />;
+}
+function UnitNormalizer({state, update}){
+  const PU=["kg","g","L","ml","each"];
+  const canon=(u)=>{ const t=String(u||"").trim().toLowerCase().replace(/s$/,""); if(t==="kg")return"kg"; if(t==="g"||t==="gram")return"g"; if(t==="l"||t==="lt"||t==="litre"||t==="liter")return"L"; if(t==="ml")return"ml"; if(t==="each"||t==="ea"||t==="pc"||t==="piece"||t==="unit")return"each"; return null; };
+  const parsePU=(v)=>{ const t=String(v||"").trim(); const m=t.match(/^([\d.]+)\s*([A-Za-z]+)$/); if(m){ const u=canon(m[2]); if(u) return {size:Number(m[1]), unit:u}; } return {size:null, unit:canon(t)}; };
+  const conv=(n,from,to)=>{ const a=canon(from), b=canon(to); if(!a||!b||a===b) return n; for(const tbl of [U_MASS,U_VOL]){ const x=tbl[a.toLowerCase()], y=tbl[b.toLowerCase()]; if(x!=null&&y!=null) return n*x/y; } return null; };
+  const plan=useMemo(()=>{ const fix=[], skip=[];
+    (state.ingredients||[]).forEach(i=>{ if(i.archived) return;
+      const uu=canon(i.useUnit), pp=parsePU(i.purchaseUnit);
+      if(!uu||!pp.unit){ if(Number(i.purchasePrice)>0) skip.push({name:i.name, why:"unit not kg/g/L/ml/each — check manually"}); return; }
+      if(pp.size==null) return;                             // plain "kg" — nothing to parse
+      const want=conv(pp.size, pp.unit, uu); if(want==null||!(want>0)) return;
+      const now=Number(i.purchaseQty)||0; if(Math.abs(now-want)<0.000001) return;   // already correct
+      const price=Number(i.purchasePrice)||0;
+      fix.push({ id:i.id, name:i.name, unit:uu, packUnit:pp.unit, packSize:pp.size, from:now, to:+want.toFixed(6),
+        oldCost: now>0?price/now:0, newCost: price/want });
+    });
+    return {fix, skip}; }, [state.ingredients]);
+  const apply=()=>{ if(!plan.fix.length) return; if(!confirm(plan.fix.length+" ingredient(s) will be corrected. Continue?")) return;
+    update(s=>{ plan.fix.forEach(f=>{ const t=(s.ingredients||[]).find(x=>x.id===f.id); if(t){ t.purchaseQty=f.to; t.purchaseUnit=f.packUnit; t.useUnit=f.unit; } }); }); };
+  return <div>
+    {plan.fix.length===0 ? <div className="text-sm text-stone-500">All ingredient units look correct — nothing to fix.</div> : <div>
+      <div style={{fontSize:12.5,color:"#6b5e4e",marginBottom:8}}><b>{plan.fix.length}</b> ingredient(s) have a pack size baked into the unit (e.g. "1kg") but a wrong purchase qty, so their unit cost is off. Preview below, then apply.</div>
+      <div style={{maxHeight:260,overflow:"auto",border:"1px solid var(--color-hairline-alpha)",borderRadius:10}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
+          <thead><tr style={{background:"var(--color-canvas-parchment)"}}><th style={{textAlign:"left",padding:"7px 9px"}}>Ingredient</th><th style={{textAlign:"left",padding:"7px 9px"}}>Pack</th><th style={{textAlign:"right",padding:"7px 9px"}}>Now</th><th style={{textAlign:"right",padding:"7px 9px"}}>After</th></tr></thead>
+          <tbody>{plan.fix.map(f=>(<tr key={f.id} style={{borderTop:"1px solid var(--color-hairline-alpha)"}}>
+            <td style={{padding:"7px 9px",fontWeight:600}}>{f.name}</td>
+            <td style={{padding:"7px 9px",color:"#8a7a63"}}>{f.packSize+f.packUnit} → {f.to}{f.unit}</td>
+            <td style={{padding:"7px 9px",textAlign:"right",color:"#b0301f"}}>{money(f.oldCost)}/{f.unit}</td>
+            <td style={{padding:"7px 9px",textAlign:"right",color:"#3e6b4a",fontWeight:700}}>{money(f.newCost)}/{f.unit}</td>
+          </tr>))}</tbody>
+        </table>
+      </div>
+      <div style={{marginTop:10}}><Btn size="sm" onClick={apply}>Fix {plan.fix.length} ingredient(s)</Btn></div>
+    </div>}
+    {plan.skip.length>0 && <div style={{marginTop:12}}>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:"#8a7a63",marginBottom:6}}>Needs manual check ({plan.skip.length})</div>
+      <div style={{fontSize:12,color:"#6b5e4e",maxHeight:130,overflow:"auto"}}>{plan.skip.slice(0,60).map((x,i)=><div key={i}>· {x.name} — {x.why}</div>)}</div>
+    </div>}
   </div>;
 }
 function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, meEmail, ingMap, onReset}){
@@ -6730,15 +6891,16 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
   };
   const Section=({title,desc,children})=> <div className="card p-5 mb-4"><div className="font-semibold text-stone-800 mb-1" style={{fontFamily:"var(--font-display)"}}>{title}</div>{desc&&<p className="text-xs text-stone-500 mb-3 leading-relaxed">{desc}</p>}{children}</div>;
   const [sub,setSub]=useState("daily");
+  const auditCount=useMemo(()=>{ try{ const g=auditData(state, ingMap||{}); return Object.keys(g).reduce((n,k)=>n+g[k].length,0); }catch(e){ return 0; } }, [state, ingMap]);
   const Cat=({children})=> <div style={{fontSize:11,fontWeight:800,letterSpacing:"1.5px",textTransform:"uppercase",color:"var(--color-primary,#c81a22)",margin:"20px 2px 8px"}}>{children}</div>;
   return <div>
     {/* sticky so the current sub-tab stays visible while scrolling a long panel (Daily content has 4
         sections and the old <Cat> anchors are gone). */}
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16,position:"sticky",top:56,zIndex:20,background:"var(--color-canvas)",paddingTop:8,paddingBottom:8}}>{[["daily","Daily content"],["menu","Menu & stores"],["team","Team & access"],["integrations","Integrations"],["audit","Audit"],["archive","Archive"],["data","Danger zone"]].map(([k,l])=>(<button key={k} onClick={()=>setSub(k)} style={{padding:"7px 16px",borderRadius:999,fontSize:13.5,fontWeight:sub===k?600:400,cursor:"pointer",fontFamily:"var(--font-text)",border:"1px solid var(--color-hairline-alpha)",background:sub===k?"#292524":"#fff",color:sub===k?"#fff":"#44403c"}}>{l}</button>))}</div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16,position:"sticky",top:"var(--hdrH,56px)",zIndex:20,background:"var(--color-canvas)",paddingTop:8,paddingBottom:8}}>{[["daily","Daily content"],["menu","Menu & stores"],["team","Team & access"],["integrations","Integrations"],["audit","Audit"+(auditCount?" ("+auditCount+")":"")],["archive","Archive"],["data","Danger zone"]].map(([k,l])=>(<button key={k} onClick={()=>setSub(k)} style={{padding:"11px 16px",minHeight:44,borderRadius:999,fontSize:13.5,fontWeight:sub===k?600:400,cursor:"pointer",fontFamily:"var(--font-text)",border:"1px solid "+(sub===k?"#292524":"rgba(32,30,29,.45)"),background:sub===k?"#292524":"#fff",color:sub===k?"#fff":"#44403c"}}>{l}</button>))}</div>
     {sub==="audit" ? <Audit state={state} ingMap={ingMap} setTab={setTab} update={update} /> : sub==="archive" ? <Archive state={state} update={update} ingMap={ingMap} /> : <div>
     {sub==="team" && <>
     {isMgr
-      ? <Section title="Team Access" desc="Approve Google emails and set each person's role and branch. Manager = full app · Staff = Today, Prep & Dishes. Set a branch to auto-connect them to that store on login."><TeamAccess fbRef={fbRef} branches={state.branches||[]} meEmail={meEmail} /></Section>
+      ? <Section title="Team Access" desc="Approve Google emails and set each person's role and locations. Manager = full app · Staff = Today, Prep & Dishes. One account can be assigned to several stores — tick each one and they can switch between them."><TeamAccess fbRef={fbRef} branches={state.branches||[]} meEmail={meEmail} /></Section>
       : <Section title="Team Access" desc="Managers only."><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Ask a manager to change who has access.</p></Section>}
     </>}
     {sub==="daily" && <>
@@ -6791,6 +6953,9 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
     </Section>
     </>}
     {sub==="menu" && <>
+    <Section title="Fix ingredient units" desc="Finds ingredients whose pack size is written into the unit (e.g. 1kg) but whose purchase qty was never converted — those show a unit cost 1000x too high. Preview the changes, then apply.">
+      <UnitNormalizer state={state} update={update} />
+    </Section>
     <Section title="Menu categories" desc="Columns and filters on the Dishes menu — separate sets per department.">
       <div className="flex flex-wrap gap-2"><Btn tone="ghost" size="sm" onClick={()=>setCatDept("kitchen")}>Kitchen categories</Btn><Btn tone="ghost" size="sm" onClick={()=>setCatDept("bakery")}>Bakery categories</Btn><Btn tone="ghost" size="sm" onClick={()=>setCatDept("barista")}>Barista categories</Btn><Btn tone="ghost" size="sm" onClick={()=>setCatDept("catering")}>Catering categories</Btn></div>
     </Section>

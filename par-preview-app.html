@@ -1847,12 +1847,12 @@ function ParLevelsCard({ctx}){
             const c=Number(cur);
             col = (cur==null||cur==="") ? "#8a95a1"
                 : (s.n>c*1.15 ? "#c0392b" : (s.n<c*0.85 ? "#2a6fb0" : "#2e7d4f"));
-            label = "sug "+s.n+(s.src==="shared"?"*":"");
+            label = "Suggested "+s.n+(s.src==="shared"?"*":"");
           }
           return <td key={d} style={{...td,verticalAlign:"top"}}>
             <input inputMode="decimal" value={pl[d]??""} onChange={e=>setVal(it.id,d,e.target.value)} style={{...inp,width:52,textAlign:"center",padding:"7px 4px"}} />
             {label && <div title={s.src==="recipe"?"From recipes: includes this item used inside other dishes":(s.src==="shared"?"Sold on a shared till button - the split between products is an estimate":"From till sales under this name")}
-              style={{fontSize:10.5,color:col,textAlign:"center",marginTop:3,whiteSpace:"nowrap"}}>{label}</div>}
+              style={{fontSize:10,color:col,textAlign:"center",marginTop:3,whiteSpace:"nowrap",letterSpacing:"-0.1px"}}>{label}</div>}
           </td>; })}
         <td style={td}><input inputMode="decimal" value={it.minOrderQty??""} onChange={e=>setMin(it.id,e.target.value)} style={{...inp,width:52,textAlign:"center",padding:"7px 4px"}} /></td>
       </tr>; })}</tbody>

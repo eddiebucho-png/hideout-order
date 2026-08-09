@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Postcards v3 — isolated test (not live)</title>
+<style>
+  :root{--ink:#241c12}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#faf7f2}
+  header{background:#241d16;color:#fff;padding:14px 18px}
+  header b{font-size:16px;letter-spacing:.02em}
+  header span{opacity:.6;font-size:12.5px;margin-left:8px}
+  main{max-width:820px;margin:0 auto;padding:22px 18px 120px}
+  .card{background:#fff;border:1px solid #e4dccd;border-radius:14px;padding:16px 18px;margin-bottom:14px}
+  button.b{border:none;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;background:#c81a22;color:#fff}
+  button.g{background:#3e6b4a}
+  pre{background:#241d16;color:#d8ffd8;padding:12px 14px;border-radius:10px;font-size:12.5px;overflow:auto;max-height:340px;white-space:pre-wrap}
+  .warn{background:#fff6e5;border:1px solid #e8c98a;border-radius:10px;padding:11px 14px;font-size:13px;margin-bottom:14px}
+  /* 호스트 레이아웃 오염 감지용 표본 — v3 CSS 가 스코프를 벗어나면 여기가 변한다 */
+  .probe .body{font-size:14px;color:#333;padding:4px}
+  .probe .head{font-weight:700;font-size:15px}
+  .probe .msg{border:1px solid #ccc;padding:6px;border-radius:6px}
+  .probe .row{display:flex;gap:8px}
+  .probe .tool{background:#eee;padding:3px 8px;border-radius:6px}
+</style>
+</head>
+<body>
+<header><b>Postcards v3 — isolated test</b><span>라이브 아님. 이 페이지만 v3 를 불러온다.</span></header>
+<main>
+  <div class="warn">⚠ 이 페이지는 <b>시험용</b>입니다. <code>order.hideoutdb.com</code> 본앱과 RCC 는 여전히 7/24 위젯을 씁니다.
+  드래그·투표·핀은 <b>실제 Firestore 에 저장됩니다</b> — 보기만 하세요.</div>
+
+  <div class="card">
+    <div><b>1) 로그인</b> — 엽서는 스태프 게이트 뒤에서만 뜹니다.</div>
+    <p id="who" style="color:#8a7a63;font-size:13.5px">확인 중…</p>
+    <button class="b" id="signin">Google 로그인</button>
+    <button class="b g" id="load" style="display:none">2) v3 불러오기</button>
+  </div>
+
+  <div class="card probe">
+    <div class="head">호스트 오염 표본</div>
+    <div class="body">이 블록은 <code>.body .head .msg .row .tool</code> 처럼 흔한 클래스를 씁니다.
+      v3 CSS 가 <code>#pc-overlay</code> 밖으로 새면 여기 글꼴·테두리·간격이 변합니다.</div>
+    <div class="msg">msg 표본</div>
+    <div class="row"><span class="tool">tool</span><span class="tool">tool</span></div>
+  </div>
+
+  <div class="card">
+    <button class="b g" id="diag">3) 진단 실행</button>
+    <pre id="out">아직 실행 안 함</pre>
+  </div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script>
+(function(){
+  var FB={apiKey:"AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s",authDomain:"hideout-recipe-cost.firebaseapp.com",
+    projectId:"hideout-recipe-cost",storageBucket:"hideout-recipe-cost.firebasestorage.app",
+    messagingSenderId:"717961739938",appId:"1:717961739938:web:752af54de485d7f7c921fb"};
+  if(!firebase.apps.length) firebase.initializeApp(FB);
+  var who=document.getElementById("who"), load=document.getElementById("load"), out=document.getElementById("out");
+  var probe={};
+  function snapProbe(){
+    var b=document.querySelector(".probe .body"), h=document.querySelector(".probe .head"), m=document.querySelector(".probe .msg");
+    var cs=getComputedStyle;
+    return {bodyFont:cs(b).fontSize, bodyColor:cs(b).color, headWeight:cs(h).fontWeight,
+            msgBorder:cs(m).borderTopWidth, msgRadius:cs(m).borderTopLeftRadius, bodyFamily:cs(b).fontFamily.slice(0,28)};
+  }
+  probe.before=snapProbe();
+
+  firebase.auth().onAuthStateChanged(function(u){
+    if(u){ who.textContent="로그인됨: "+u.email; document.getElementById("signin").style.display="none"; load.style.display="inline-block"; }
+    else { who.textContent="로그인 안 됨"; }
+  });
+  document.getElementById("signin").onclick=function(){
+    firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(e){ who.textContent="로그인 오류: "+e.message; });
+  };
+  load.onclick=function(){
+    document.documentElement.classList.add("hideout-authed");   // 호스트 게이트가 하는 일
+    var s=document.createElement("script");
+    s.src="postcards-v3.js?cb="+Date.now();                      // 캐시 완전 우회
+    s.onerror=function(){ out.textContent="postcards-v3.js 로드 실패"; };
+    s.onload=function(){ out.textContent="v3 로드 완료. 왼쪽 아래 봉투 버튼을 눌러 판을 열고, 그 다음 '진단 실행'."; };
+    document.head.appendChild(s);
+    load.disabled=true; load.textContent="불러옴";
+  };
+  document.getElementById("diag").onclick=function(){
+    var ov=document.getElementById("pc-overlay"), fab=document.getElementById("pc-fab");
+    var cards=ov?[].slice.call(ov.querySelectorAll('.pc-card, .card, [class~="card"]')):[];
+    var rects=cards.map(function(c){var r=c.getBoundingClientRect();return{w:Math.round(r.width),h:Math.round(r.height),x:Math.round(r.left+scrollX),y:Math.round(r.top+scrollY)};});
+    var ovl=0; for(var i=0;i<rects.length;i++)for(var j=i+1;j<rects.length;j++){var a=rects[i],b=rects[j];
+      if(a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h)ovl++;}
+    probe.after=snapProbe();
+    var bleed=Object.keys(probe.before).filter(function(k){return probe.before[k]!==probe.after[k];});
+    out.textContent=JSON.stringify({
+      guard: typeof window.__HIDEOUT_POSTCARDS__,
+      overlay: !!ov, fab: !!fab, fabVisible: fab?getComputedStyle(fab).display:null,
+      overlayOpen: ov?getComputedStyle(ov).display:null,
+      cardCount: cards.length,
+      cardWidths: rects.map(function(r){return r.w;}).filter(function(v,i,a){return a.indexOf(v)===i;}).sort(function(a,b){return a-b;}),
+      overlapPairs: ovl,
+      hostCssBleed: bleed.length? bleed : "없음 (스코프 정상)",
+      probeBefore: probe.before, probeAfter: probe.after
+    },null,1);
+  };
+})();
+</script>
+</body>
+</html>

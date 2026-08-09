@@ -20,7 +20,13 @@
     var fab=document.createElement("button"); fab.id="pc-fab"; fab.type="button";
     fab.setAttribute("aria-label","Staff postcards");
     fab.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
-    fab.onclick=function(){ ov.style.display="flex"; window.dispatchEvent(new Event("resize")); };
+    fab.onclick=function(){ ov.style.display="flex";
+      /* display:none -> flex 로 바꾼 직후에는 아직 레이아웃이 안 돌아 카드 크기가 0 이다.
+         그 상태로 render() 하면 타일링이 전부 한 자리에 쌓인다(2026-08-09 실측 45쌍 겹침).
+         두 프레임 기다린 뒤 재배치를 시킨다. */
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        window.dispatchEvent(new Event("resize"));
+      }); }); };
     document.body.appendChild(fab);
     var x=ov.querySelector(".x"); if(x) x.onclick=function(){ ov.style.display="none"; };
     ov.addEventListener("click",function(e){ if(e.target===ov) ov.style.display="none"; });
@@ -235,7 +241,7 @@
           <button class="act" data-cm="${d.id}" aria-expanded="false">Comments<span class="c">${cmLabel(d)}</span></button>
           <span class="spacer"></span>
           ${d.kind==="lost"?`<button class="act claim${d.claimed?" hot":""}" data-claim="${d.id}">${d.claimed?"Claimed":"Mark claimed"}</button>`:""}
-          <button class="act">Edit</button><button class="act">Delete</button>
+          <button class="act" data-del="${d.id}">Delete</button>
         </div>
         <div class="rxw">${rxHtml(d)}</div>
         ${cmtHtml(d)}
@@ -1843,6 +1849,20 @@
     }
     
     
+    /* 삭제 — v3 는 버튼 마크업만 있고 배선이 없었다(2026-08-09). 되돌릴 수 없으므로 확인을 받는다. */
+    document.addEventListener("click",function(e){
+      var b=e.target.closest&&e.target.closest(".act[data-del]"); if(!b) return;
+      e.preventDefault(); e.stopPropagation();
+      if(needAuth()) return;
+      var d=items.find(function(x){ return String(x.id)===b.dataset.del; });
+      if(!d||!d._id||!LIVE.db) return;
+      if(!confirm("Delete this postcard by "+(d.from||d.fromEmail||"someone")+"?\nThis cannot be undone.")) return;
+      b.disabled=true;
+      LIVE.db.collection("postcards").doc(d._id).delete()
+        .catch(function(err){ b.disabled=false; console.error("delete",err);
+          alert("Couldn't delete — "+((err&&err.message)||"try again")); });
+    });
+
     document.addEventListener("click",function(e){
       var b=e.target.closest&&e.target.closest(".act.claim"); if(!b) return;
       e.preventDefault(); e.stopPropagation();
@@ -1861,11 +1881,11 @@
         LIVE.me=u||null; ME=u?(u.email||"").toLowerCase():"";
         var b=document.getElementById("v3signin");
         if(u){ if(b) b.parentNode.remove();
-          LIVE.db.collection("staff").limit(200).get().then(function(qs){
+          LIVE.db.collection("allowlist").limit(200).get().then(function(qs){
             LIVE.staff=[]; qs.forEach(function(d){ var x=d.data()||{};
               LIVE.staff.push({email:(x.email||d.id||"").toLowerCase(),name:x.name||x.displayName||""}); });
-            syncItems(); render();
-          }).catch(function(){});
+          }).catch(function(err){ console.warn("allowlist read failed",err); })
+          .then(function(){ syncItems(); render(); });
         } else if(!b){
           document.querySelector(".app").insertAdjacentHTML("afterbegin",
             '<div style="padding:14px 18px;border-bottom:2px solid var(--ink);display:flex;align-items:center;gap:12px">'+

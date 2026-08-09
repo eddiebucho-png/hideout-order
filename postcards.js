@@ -25,6 +25,7 @@
          그 상태로 render() 하면 타일링이 전부 한 자리에 쌓인다(2026-08-09 실측 45쌍 겹침).
          두 프레임 기다린 뒤 재배치를 시킨다. */
       requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        try{ if(window.__PCV3_TIDY__) window.__PCV3_TIDY__(); }catch(err){}
         window.dispatchEvent(new Event("resize"));
       }); }); };
     document.body.appendChild(fab);
@@ -653,6 +654,13 @@
       drawStampTray();
       if(view!=="feed") items.forEach(d=>{d.x=0;d.y=0;}); render();
     });
+    /* 판 정돈 — 탭을 누를 때와 똑같이 좌표를 0 으로 되돌린 뒤 다시 그린다.
+       저장된 pos 는 이미 서로 겹쳐 있어서(§7) 그대로 그리면 한 자리에 쌓인다.
+       mount() 의 FAB 은 items/render 스코프 밖이라 window 로 꺼내 준다. */
+    window.__PCV3_TIDY__=function(){
+      if(view!=="feed") items.forEach(d=>{d.x=0;d.y=0;});
+      render();
+    };
     document.getElementById("q").oninput=e=>{ query=e.target.value.trim(); render(); };
     window.addEventListener("resize",()=>{ render(); });
     

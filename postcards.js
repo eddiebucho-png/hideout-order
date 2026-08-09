@@ -25,7 +25,13 @@
          그 상태로 render() 하면 타일링이 전부 한 자리에 쌓인다(2026-08-09 실측 45쌍 겹침).
          두 프레임 기다린 뒤 재배치를 시킨다. */
       requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        try{ if(window.__PCV3_TIDY__) window.__PCV3_TIDY__(); }catch(err){}
+        /* 판 정돈 — 좌표 리셋+render() 를 흉내 내는 것으로는 안 됐다(2026-08-09 실측).
+           확실히 듣는 것은 뷰 탭 클릭 자체다. 이미 켜져 있는 탭을 다시 눌러도 배치가 잡힌다.
+           그래서 재현하지 않고 그 버튼을 그대로 누른다. */
+        try{
+          var vb=ov.querySelector('#view button.on') || ov.querySelector('#view button');
+          if(vb) vb.click(); else if(window.__PCV3_TIDY__) window.__PCV3_TIDY__();
+        }catch(err){}
         window.dispatchEvent(new Event("resize"));
       }); }); };
     document.body.appendChild(fab);

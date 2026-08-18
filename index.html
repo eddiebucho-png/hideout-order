@@ -872,8 +872,6 @@ window.OrderCore = {
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
 "#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
-/* AUTH GATE (2026-07-24): hide the chatbot launcher/panel unless the host app is authed (belt-and-suspenders; the launcher is also only mounted after login). */
-"html:not(.hideout-authed) #hb-fab,html:not(.hideout-authed) #hb-panel{display:none!important}",
 "#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
 "#hb-fab:active{transform:scale(.96)}",
 "#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
@@ -1811,17 +1809,56 @@ function ParLevelsCard({ctx}){
   const setVal=(id,day,v)=>setDraft(d=>d.map(it=>{ if(it.id!==id) return it; const pl=JSON.parse(JSON.stringify(it.parLevels||{})); pl[loc]=pl[loc]||{}; if(v==="") delete pl[loc][day]; else pl[loc][day]=Number(v); return {...it,parLevels:pl}; }));
   const setMin=(id,v)=>setDraft(d=>d.map(it=>it.id===id?{...it,minOrderQty:v===""?null:Number(v)}:it));
   const save=()=>{ ctx.saveItems(draft); toast("Par levels saved ✓"); };
+  // Suggested par, written by the sales analysis (see kv key 'parSuggest'). Advice only: it is
+  // shown under the box, never typed into it, so nobody's number changes without them doing it.
+  const sug=(ctx.parSuggest&&ctx.parSuggest.items)||null;
+  // parSuggest is written by an outside script, so treat it as untrusted: a suggestion is only
+  // real if n is a finite number. Without this a malformed value becomes NaN, and NaN survives
+  // into the draft, then JSON.stringify turns it into null on Save - silently wiping a par level
+  // somebody had typed. (Agent SOFT, 2026-08-07.)
+  const sugFor=(id,day)=>{ try{ const s=sug&&sug[id]&&sug[id][loc]&&sug[id][loc][day];
+    return (s && Number.isFinite(Number(s.n))) ? s : null; }catch(e){ return null; } };
+  const applyAll=()=>{
+    if(!sug) return;
+    if(!confirm("Copy every suggested number into this branch's par levels?\n\nOnly days that have a suggestion change. Nothing is saved until you press Save.")) return;
+    setDraft(d=>d.map(it=>{ const s=sug[it.id]&&sug[it.id][loc]; if(!s) return it;
+      const pl=JSON.parse(JSON.stringify(it.parLevels||{})); pl[loc]=pl[loc]||{};
+      Object.keys(s).forEach(day=>{ const n=s[day]&&Number(s[day].n);
+        if(Number.isFinite(n) && n>=0) pl[loc][day]=n; });   // never write NaN over a real par
+      return {...it,parLevels:pl}; }));
+  };
   return <Card>
-    <SectionLabel right={<Btn size="sm" onClick={save}>Save</Btn>}>Par levels & min order</SectionLabel>
+    <SectionLabel right={<Btn size="sm" onClick={save}>Save</Btn>}>Par levels &amp; min order</SectionLabel>
     <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,width:220,marginBottom:12}}>{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
+    {sug && <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:"#f6f8fa",border:"1px solid #e3e8ee",borderRadius:8,padding:"9px 12px",marginBottom:12,fontSize:12.5,color:"#4a5560"}}>
+      <span><b>Suggested par</b> shown under each box &mdash; one day&rsquo;s sales from the last {(ctx.parSuggest&&ctx.parSuggest.window)||"30 days"}, plus a small buffer. Updated {(ctx.parSuggest&&ctx.parSuggest.generated)||""}.</span>
+      <span style={{color:"#8a95a1"}}>Green = close to yours &middot; Red = you may run out &middot; Blue = likely over-ordering</span>
+      <Btn size="sm" tone="ghost" onClick={applyAll}>Use all suggestions</Btn>
+    </div>}
     <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:640}}>
       <thead><tr><th style={th}>Item</th>{days.map(d=><th key={d} style={{...th,textAlign:"center"}}>{C.DAY_LABELS[d]}</th>)}<th style={{...th,textAlign:"center"}}>Min</th></tr></thead>
       <tbody>{draft.map(it=>{ const pl=(it.parLevels&&it.parLevels[loc])||{}; return <tr key={it.id}>
         <td style={{...td,fontWeight:600,minWidth:130}}>{it.name}</td>
-        {days.map(d=><td key={d} style={td}><input inputMode="decimal" value={pl[d]??""} onChange={e=>setVal(it.id,d,e.target.value)} style={{...inp,width:52,textAlign:"center",padding:"7px 4px"}} /></td>)}
+        {days.map(d=>{ const s=sugFor(it.id,d); const cur=pl[d];
+          let col="#8a95a1", label=null;
+          if(s&&s.n!=null){
+            const c=Number(cur);
+            col = (cur==null||cur==="") ? "#8a95a1"
+                : (s.n>c*1.15 ? "#c0392b" : (s.n<c*0.85 ? "#2a6fb0" : "#2e7d4f"));
+            label = "Suggested "+s.n+(s.src==="shared"?"*":"");
+          }
+          return <td key={d} style={{...td,verticalAlign:"top"}}>
+            <input inputMode="decimal" value={pl[d]??""} onChange={e=>setVal(it.id,d,e.target.value)} style={{...inp,width:52,textAlign:"center",padding:"7px 4px"}} />
+            {label && <div title={s.src==="recipe"?"From recipes: includes this item used inside other dishes":(s.src==="shared"?"Sold on a shared till button - the split between products is an estimate":"From till sales under this name")}
+              style={{fontSize:10,color:col,textAlign:"center",marginTop:3,whiteSpace:"nowrap",letterSpacing:"-0.1px"}}>{label}</div>}
+          </td>; })}
         <td style={td}><input inputMode="decimal" value={it.minOrderQty??""} onChange={e=>setMin(it.id,e.target.value)} style={{...inp,width:52,textAlign:"center",padding:"7px 4px"}} /></td>
       </tr>; })}</tbody>
     </table></HScroll>
+    {sug && <div style={{fontSize:11.5,color:"#8a95a1",marginTop:10,lineHeight:1.6}}>
+      * The till rings these up on one shared button (Danish, Cookie, Brownie, Muesli pots), so the total is real but the split between products is estimated from your current par.<br/>
+      Kitchen prep in tubs, trays and bags has no suggestion yet &mdash; the pack size needs to be recorded before sales can be converted into them.
+    </div>}
   </Card>;
 }
 
@@ -2276,7 +2313,9 @@ function App(){
     C.cfg.department=dept;
     const catKey=C.deptPrefix()+"categories", itemKey=C.deptPrefix()+"items";
     try{
-      const keys=["locations","suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes",catKey];
+      // parSuggest: read-only advice written by the sales analysis (Square 30d x RCC recipes).
+      // The app never writes it - it only shows it beside the par the team types in.
+      const keys=["locations","suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes","parSuggest",catKey];
       const [vals,itemVals]=await Promise.all([C.kvGetBatch(keys), C.kvGetChunkedBatch([itemKey])]);
       const locs=vals.locations?JSON.parse(vals.locations):C.DEFAULT_LOCATIONS;
       const parse=(v,d)=>{ try{ return v?JSON.parse(v):d; }catch(e){ return d; } };
@@ -2292,6 +2331,7 @@ function App(){
         weeklyDeliveryInfo:Object.assign({mon:"",tue:"",wed:"",thu:"",fri:"",sat:"",sun:""},parse(vals.weeklyDeliveryInfo,{})),
         deliveryOverrides:parse(vals.deliveryOverrides,{}),
         qcNotes:parse(vals.qcNotes,[]),
+        parSuggest:parse(vals.parSuggest,null),
       };
       // seed defaults if empty (matches original)
       // seed defaults if empty (matches original) — [FIX 2026-07-23] only seed items when the

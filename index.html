@@ -1568,6 +1568,7 @@ function rangeFor(period){
 function datesBetween(a,b){ const out=[]; let d=new Date(a+"T00:00:00"); const end=new Date(b+"T00:00:00"); while(d<=end){ out.push(C.localISO(d)); d.setDate(d.getDate()+1); } return out; }
 function PeriodReport({ctx}){
   const [period,setPeriod]=useState("thisWeek");
+  const [loc,setLoc]=useState("all");
   const [cs,setCs]=useState(""); const [ce,setCe]=useState("");
   const [start,end]= period==="custom" ? [cs||C.localISO(new Date()), ce||C.localISO(new Date())] : rangeFor(period);
   const [res,run]=useAsync(async ()=>{
@@ -1576,31 +1577,39 @@ function PeriodReport({ctx}){
     return totals;
   }, [start,end,ctx.department,ctx.locations.length]);
   const totals=res.data||{};
-  const rows=(ctx.items||[]).filter(i=>totals[i.id]).sort((a,b)=>(totals[b.id].__t||0)-(totals[a.id].__t||0));
+  // Location filter is applied here, not in the fetch — the fetch already pulls every location,
+  // so switching locations is instant and costs no extra reads.
+  const val=(t)=> loc==="all" ? (t.__t||0) : (t[loc]||0);
+  const locName=(ctx.locations.find(l=>l.id===loc)||{}).name||"";
+  const rows=(ctx.items||[]).filter(i=>totals[i.id] && val(totals[i.id])>0).sort((a,b)=>val(totals[b.id])-val(totals[a.id]));
   const exportCsv=()=>{
-    const head=["Item","Unit",...ctx.locations.map(l=>l.name),"Total"];
+    const cols = loc==="all" ? ctx.locations : ctx.locations.filter(l=>l.id===loc);
+    const head=["Item","Unit",...cols.map(l=>l.name),"Total"];
     const lines=[head.join(",")];
-    rows.forEach(it=>{ const t=totals[it.id]; lines.push([`"${it.name}"`,it.unit,...ctx.locations.map(l=>t[l.id]||0),t.__t||0].join(",")); });
-    const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`period_${start}_${end}.csv`; a.click();
+    rows.forEach(it=>{ const t=totals[it.id]; lines.push([`"${it.name}"`,it.unit,...cols.map(l=>t[l.id]||0),val(t)].join(",")); });
+    const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`period_${start}_${end}${loc==="all"?"":"_"+loc}.csv`; a.click();
   };
   return <div>
     <Card style={{marginBottom:14}}>
       <SectionLabel right={rows.length?<Btn size="sm" tone="ghost" onClick={exportCsv}>Export CSV</Btn>:null}>Period totals</SectionLabel>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
         <Segmented value={period} onChange={setPeriod} options={[{v:"today",l:"Today"},{v:"thisWeek",l:"This week"},{v:"lastWeek",l:"Last week"},{v:"thisMonth",l:"This month"},{v:"lastMonth",l:"Last month"},{v:"custom",l:"Custom"}]} />
+        <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,width:200}}><option value="all">All locations</option>{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
         {period==="custom" && <div style={{display:"flex",gap:8,alignItems:"center"}}><input type="date" value={cs} onChange={e=>setCs(e.target.value)} style={{...inp,width:150}} /><span style={{color:"var(--color-ink-muted-48)"}}>→</span><input type="date" value={ce} onChange={e=>setCe(e.target.value)} style={{...inp,width:150}} /></div>}
       </div>
-      <div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:8}}>{start} → {end}</div>
+      <div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:8}}>{start} → {end}{loc==="all"?"":" · "+locName}</div>
     </Card>
     <Card>
-      {res.loading?<Skeleton />: rows.length===0?<Empty>No orders in this period.</Empty>: (()=>{ const max=rows[0]?(totals[rows[0].id].__t||1):1; return (
-      <div className="stagger" style={{display:"grid",gap:10}}>{rows.map(it=>{ const t=totals[it.id]; const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <div key={it.id} className="row-live" style={{padding:"4px 2px"}}>
+      {res.loading?<Skeleton />: rows.length===0?<Empty>{loc==="all"?"No orders in this period.":"No orders for "+locName+" in this period."}</Empty>: (()=>{ const max=rows[0]?(val(totals[rows[0].id])||1):1; return (
+      <div className="stagger" style={{display:"grid",gap:10}}>{rows.map(it=>{ const t=totals[it.id]; const v=val(t); const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <div key={it.id} className="row-live" style={{padding:"4px 2px"}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10,marginBottom:5}}>
           <div style={{fontSize:14,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}<span style={{fontSize:11,fontWeight:500,color:"var(--color-ink-muted-48)",marginLeft:6}}>{it.unit}</span></div>
-          <CountUp value={t.__t} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:17,color:"var(--color-ink)"}} />
+          <CountUp value={v} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:17,color:"var(--color-ink)"}} />
         </div>
-        <Bar pct={t.__t/max*100} height={9} color={catc} />
-        <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap"}}>{ctx.locations.filter(l=>t[l.id]).map(l=><span key={l.id} style={{fontSize:10.5,color:"var(--color-ink-muted-48)"}}>{l.name.replace(/\s*\(.*\)/,"")} <b style={{color:"var(--color-ink)"}}>{t[l.id]}</b></span>)}</div>
+        <Bar pct={v/max*100} height={9} color={catc} />
+        {loc==="all"
+          ? <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap"}}>{ctx.locations.filter(l=>t[l.id]).map(l=><span key={l.id} style={{fontSize:10.5,color:"var(--color-ink-muted-48)"}}>{l.name.replace(/\s*\(.*\)/,"")} <b style={{color:"var(--color-ink)"}}>{t[l.id]}</b></span>)}</div>
+          : <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap"}}><span style={{fontSize:10.5,color:"var(--color-ink-muted-48)"}}>전체 <b style={{color:"var(--color-ink)"}}>{t.__t||0}</b> 중 {locName.replace(/\s*\(.*\)/,"")} <b style={{color:"var(--color-ink)"}}>{v}</b>{t.__t?<span> · {Math.round(v/t.__t*100)}%</span>:null}</span></div>}
       </div>; })}</div>); })()}
     </Card>
   </div>;

@@ -3167,6 +3167,7 @@ body{
   function hasRcc(){ try{ var s=rccState(); return (s.recipes&&s.recipes.length)||(s.ingredients&&s.ingredients.length); }catch(e){ return false; } }
   function canSaveRecipe(){ return !!(window.HideoutRCC && window.HideoutRCC.addRecipe); }
   function canRemember(){ return !!(window.HideoutRCC && window.HideoutRCC.remember); }
+  function canPostNotice(){ return !!(window.HideoutRCC && window.HideoutRCC.addNotice); }
   function rccData(){ return hasRcc()?rccState():(RCC_CACHE||{}); }
   function rccCategories(){ var s=rccData(), set={}, out=[]; (s.recipes||[]).forEach(function(r){ if(r.category&&!r.archived) set[r.category]=1; }); var dc=s.dishCats||{}; [].concat(dc.kitchen||[],dc.bakery||[]).forEach(function(c){ if(c) set[c]=1; }); ["Drinks","Brunch","Bagel","Sandwich","Wraps & Salad","Pastry","Breakfast"].forEach(function(c){ set[c]=1; }); Object.keys(set).forEach(function(c){ out.push(c); }); return out; }
   function ingredientNames(){ try{ return (window.HideoutRCC.ingredients()||[]).map(function(i){ return i.name; }); }catch(e){ return []; } }
@@ -3188,6 +3189,7 @@ body{
     if(canSaveRecipe()) parts.push(recipeCreateHint());
     if(canRemember()) parts.push(rememberHint());
     parts.push(calendarAddHint());
+    if(canPostNotice()) parts.push(noticeHint());
     return parts.join("\n\n---\n\n");
   }
 
@@ -3230,6 +3232,40 @@ body{
     var curBr=""; try{ curBr=(window.__HIDEOUT_CAL&&window.__HIDEOUT_CAL.branch)||""; }catch(e){}
     return "\n\n--- CALENDAR EVENT CREATION ---\nWhen the user asks to ADD / book / schedule / put something ON the calendar, do BOTH:\n1) One short line confirming what you understood.\n2) A fenced code block starting with ```calendar-json containing ONLY valid JSON of this exact shape:\n```calendar-json\n{\"title\":\"Event title\",\"date\":\"YYYY-MM-DD\",\"start\":\"HH:mm\",\"end\":\"HH:mm\",\"allDay\":false,\"location\":\"\",\"notes\":\"\",\"store\":\"adelaide\"}\n```\nRules: store must be one of adelaide (340 Adelaide St), city (100 Edward St), valley (515 St Paul Tce)."+(curBr?(" The user's current branch is \""+curBr+"\" \u2014 default to it."):" Default to adelaide if the branch is not stated.")+" Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. If no end time given, leave end as start+1 hour. If no time at all, set allDay true. NEVER invent details the user did not give \u2014 ask instead. Emit the block ONLY for calendar-add requests; the app will show a confirm card before anything is created.";
   }
+  /* The notice board on Today is the one thing every staff member reads at the start of a shift, so
+     the assistant gets a way to write to it. Same contract as calendar-add: emit a fenced block, the
+     app shows a confirm card, nothing is saved until the user taps it. The live board is included so
+     the model can answer "what's up there?" and refuse to post the same thing twice. */
+  function noticeHint(){
+    var s=rccData(), d=new Date();
+    var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    var live=(s.notices||[]).filter(function(n){ return n && !n.archived && (!n.until || String(n.until)>=ds); });
+    var cur=live.length
+      ? ("\nCURRENTLY ON THE BOARD: "+live.slice(0,20).map(function(n){
+          return "\u2022 \""+String(n.title||"")+"\""+(n.until?(" (until "+n.until+")"):"")+(n.tone==="urgent"?" [urgent]":"")+(n.branch?(" ["+n.branch+"]"):"")+(String(n.body||"").trim()?(" \u2014 "+String(n.body).replace(/\s+/g," ").slice(0,120)):"");
+        }).join("\n")+"\nIf they ask what is on the board, answer from this list. Do not post a duplicate \u2014 say it is already up and offer to replace or update it instead.")
+      : "\nThe board is empty right now.";
+    var brs=(s.branches||[]).map(function(b){return b.name;}).join(", ");
+    return "\n\n--- STAFF NOTICE BOARD ---\n"
+      +"The Today page carries a notice board the whole team reads. When the user wants to TELL the staff something \u2014 a handover note, an update, a reminder, a roster or supplier change, or a checklist for the team \u2014 do BOTH:\n"
+      +"1) One short line confirming what you understood.\n"
+      +"2) A fenced code block starting with ```notice-json containing ONLY valid JSON of this exact shape:\n"
+      +"```notice-json\n{\"title\":\"Short headline\",\"body\":\"Full message\",\"from\":\""+ds+"\",\"until\":\"\",\"pin\":false,\"tone\":\"info\",\"branch\":\"\"}\n```\n"
+      +"Rules: title is the single line staff see on the board \u2014 keep it under about 60 characters and make it say the thing, not \"Update\". "
+      +"body is the full message and takes simple markdown: # heading, - bullet, **bold**, and a \u2610 at the start of a line for a tick-box \u2014 use \u2610 lines whenever they ask for a CHECKLIST. "
+      +"Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. from defaults to today. Leave until \"\" unless they said when it stops mattering; set it when the message is only for a date or a week. "
+      +"tone is \"urgent\" only if they say it is urgent. pin true only if they ask to pin it. "
+      +"branch must be exactly one of: "+(brs||"(none on file)")+" \u2014 leave \"\" when it is for all stores. "
+      +"NEVER invent content they did not give \u2014 ask instead. Emit the block ONLY when they want something put in front of the team; the app shows a confirm card before anything is posted."
+      +cur;
+  }
+  function extractNotice(text){
+    if(!text) return null;
+    var m=text.match(/```\s*notice-json\s*([\s\S]*?)```/i); if(!m) return null;
+    var n; try{ n=JSON.parse(m[1].trim()); }catch(e){ return null; }
+    if(!n || !(String(n.title||"").trim() || String(n.body||"").trim())) return null;
+    return { intro:text.slice(0,m.index).trim(), notice:n };
+  }
   function extractCalEvent(text){
     if(!text) return null;
     var m=text.match(/```\s*calendar-json\s*([\s\S]*?)```/i); if(!m) return null;
@@ -3265,8 +3301,6 @@ body{
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
 "#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
-/* AUTH GATE (2026-07-24): hide the chatbot launcher/panel unless the app is authed (belt-and-suspenders; the launcher is also only mounted after login). */
-"html:not(.hideout-authed) #hb-fab,html:not(.hideout-authed) #hb-panel{display:none!important}",
 "#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
 "#hb-fab:active{transform:scale(.96)}",
 "#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
@@ -3566,6 +3600,26 @@ body{
         }catch(e){ b.disabled=false; b.textContent="\u2713 Add event"; bubble("assistant","Could not reach the calendar backend: "+(e&&e.message||e)); }
       };
     }
+    function noticeCard(n){
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      var meta=[(n.from||"from today"), (n.until?("until "+n.until):"no end date"), (n.branch||"all stores")];
+      if(n.tone==="urgent") meta.push("URGENT"); if(n.pin) meta.push("pinned");
+      var body=esc(String(n.body||"")).replace(/\n/g,"<br/>");
+      wrap.innerHTML="<div style='padding:12px 14px;background:#241d16;color:#fff;font-weight:600;font-size:14.5px'>Post to the team notice board?</div>"
+        +"<div style='padding:12px 14px;font-size:13.5px;line-height:1.6;color:#2a2018'><b>"+esc(n.title||"Notice")+"</b>"+(body?("<br/>"+body):"")
+        +"<br/><span style='color:#a2917a;font-size:12px'>"+esc(meta.join(" \u00b7 "))+"</span></div>"
+        +"<div style='display:flex;gap:8px;padding:0 14px 14px'><button class='hb-cc on' data-ok>\u2713 Post it</button><button class='hb-cc' data-no>Cancel</button></div>";
+      msgs.appendChild(wrap); scroll();
+      wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); bubble("assistant","Cancelled \u2014 nothing was posted."); };
+      wrap.querySelector("[data-ok]").onclick=function(){
+        var b=wrap.querySelector("[data-ok]"); b.disabled=true; b.textContent="Posting\u2026";
+        try{
+          window.HideoutRCC.addNotice(n); wrap.remove();
+          bubble("assistant","\u2713 Posted: "+(n.title||"Notice")+"\nIt is on the Today page now. Edit or take it down in Settings \u2192 Daily content \u2192 Staff notices.");
+          logQA(opts.source,"[notice post]","posted: "+(n.title||""));
+        }catch(e){ b.disabled=false; b.textContent="\u2713 Post it"; bubble("assistant","Could not post it: "+(e&&e.message||e)); }
+      };
+    }
     async function ask(){
       var q=input.value.trim(); if(!q||busy) return; input.value=""; var ch=msgs.querySelector(".hb-chips"); if(ch) ch.remove();
       bubble("user",q); hist.push({role:"user",text:q}); busy=true;
@@ -3583,8 +3637,10 @@ body{
         var parsed=canSaveRecipe()?extractRecipe(r):null;
         var ingParsed=canSaveRecipe()?extractIngredient(r):null;
         var calp=extractCalEvent(r);
+        var notp=canPostNotice()?extractNotice(r):null;
         t.className="hb-b hb-a";
-        if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
+        if(notp){ t.textContent=notp.intro||"Here's the notice \u2014 confirm to put it on the board:"; noticeCard(notp.notice); logQA(opts.source, q, "[notice draft] "+(notp.notice.title||"")); }
+        else if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
         else if(ingParsed){ t.textContent=ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"; ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
         else if(parsed){ t.textContent=parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"; recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
         else if(ingIntent){ t.textContent="Let's add it \u2014 set the price and unit, then Save:"; ingredientBuilder(null); logQA(opts.source, q, "[ingredient builder opened]"); }
@@ -4165,7 +4221,7 @@ function load() {
 }
 function migrate(s){
   s.ingredients = (s.ingredients||[]).map(i=>({archived:false, ...i}));
-  s.recipes = (s.recipes||[]).map(r=>({archived:false, importedCost:0, ingredientListText:"", allergens:[], image:"", procedure:"", showInDish:false, showInPrep:false, prepStatus:"todo", ...r}));
+  s.recipes = (s.recipes||[]).map(r=>({archived:false, importedCost:0, ingredientListText:"", allergens:[], image:"", procedure:"", showInDish:false, showInPrep:false, prepStatus:"todo", posName:"", ...r}));
   s.photos = Array.isArray(s.photos)? s.photos : [];
   s.teamMeetings = (Array.isArray(s.teamMeetings)? s.teamMeetings : []).map(m=>({attendees:"",absent:"",facilitator:"",checks:{},notes:{},actions:[], ...m}));
   if(!Array.isArray(s.branches) || !s.branches.length) s.branches=[{id:"b1",name:"100 Edward",passcode:"100100"},{id:"b2",name:"340 Adelaide",passcode:"340340"},{id:"b3",name:"515 Valley",passcode:"515515"}];
@@ -4179,6 +4235,19 @@ function migrate(s){
   if(!Array.isArray(s.infoDocs) || !s.infoDocs.length) s.infoDocs=(typeof INFO_DOCS!=="undefined")?JSON.parse(JSON.stringify(INFO_DOCS)):[];
   // Catering prep sheets: {id,date:"YYYY-MM-DD",branch,title,client,pax,pricePP,pickup,html,text,archived}
   if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[];
+  // Staff notices shown on Today: {id,title,body,from,until,pin,tone:"info"|"urgent",branch,archived}
+  // Posted by hand in Settings -> Daily content. `from`/`until` are inclusive YYYY-MM-DD; blank
+  // `until` means the notice stays up until it is removed.
+  if(!Array.isArray(s.notices)) s.notices=[];
+  // ---- LOG CAPS (2026-08-03) ----------------------------------------------------------------
+  // The whole app is ONE Firestore document with a hard 1 MB ceiling. Recipes and ingredients are
+  // real data and stay; these three are append-only logs that would otherwise grow forever and
+  // eventually block every save. Caps are generous (well above normal use) and applied on load, so
+  // trimming happens gradually instead of as one destructive sweep. Anything trimmed is still in
+  // the dated rcc_backup_* documents. Raise a cap here if a report ever needs deeper history.
+  if(Array.isArray(s.botLog) && s.botLog.length>150) s.botLog=s.botLog.slice(-150);            // chatbot Q&A telemetry
+  if(Array.isArray(s.invoiceLog) && s.invoiceLog.length>120) s.invoiceLog=s.invoiceLog.slice(0,120); // newest first
+  (s.ingredients||[]).forEach(i=>{ if(Array.isArray(i.costHistory) && i.costHistory.length>24) i.costHistory=i.costHistory.slice(-24); });
   { const rn={"Branch 2":"340 Adelaide","Branch 3":"515 Valley","100 Edward St":"100 Edward"}; (s.branches||[]).forEach(b=>{ if(rn[b.name]) b.name=rn[b.name]; }); }
   { const pc={"340 Adelaide":"340340","100 Edward":"100100","515 Valley":"515515"}; (s.branches||[]).forEach(b=>{ if(pc[b.name] && !b.passcode) b.passcode=pc[b.name]; }); }
   s.recipes.forEach(r=>{ const bp=bakedProc(r.name); if(bp && !(r.procedure||"").trim()){ r.procedure=bp; r.showInDish=true; } });
@@ -4294,6 +4363,23 @@ function matchIngredient(name, ingredients){
 function splitList(v){ return v? String(v).split(",").map(s=>s.trim()).filter(Boolean):[]; }
 function fmtDate(v){ if(!v) return today(); if(v instanceof Date) return v.toISOString().slice(0,10); const d=new Date(v); return isNaN(d)? today() : d.toISOString().slice(0,10); }
 function rid(p){ return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+/* One shape for "create an ingredient from a form payload", shared by every entry point (Recipes,
+   Dishes, Prep board, the invoice fixer and the chatbot API). These used to be five copies of the
+   same object literal, which is how the picker's inline create form drifted away from the Add
+   Ingredient modal. Whatever the caller supplies wins; anything missing keeps the old default. */
+function newIngredient(d){
+  d=d||{};
+  const uu=String(d.useUnit||"each").trim()||"each";
+  const price=Number(d.purchasePrice)||0;
+  return { id:rid("ing"), name:String(d.name||"").trim(), category:d.category||"",
+    purchaseUnit:(d.purchaseUnit||uu), useUnit:uu,
+    purchaseQty:Number(d.purchaseQty)||1, purchasePrice:price,
+    gramsPerEach:Number(d.gramsPerEach)||0,
+    // an explicit allergen list from the form beats the guess made from the name
+    allergens:(Array.isArray(d.allergens)&&d.allergens.length)?d.allergens:detectAllergens(d.name),
+    archived:false, suppliers:Array.isArray(d.suppliers)?d.suppliers:[],
+    costHistory:[{date:today(), price}] };
+}
 function compressImage(file, cb, max){
   max=max||1000; const reader=new FileReader();
   reader.onload=e=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; if(w>h && w>max){ h=Math.round(h*max/w); w=max; } else if(h>max){ w=Math.round(w*max/h); h=max; } const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(img,0,0,w,h); try{ cb(c.toDataURL("image/jpeg",0.82)); }catch(err){ cb(e.target.result); } }; img.src=e.target.result; };
@@ -4777,11 +4863,30 @@ function App(){
     window.HideoutRCC={
       ingredients:()=> (stateRef.current.ingredients||[]).filter(i=>!i.archived),
       matchIngredient:(name)=> matchIngredient(name, stateRef.current.ingredients||[]),
-      createIngredient:(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; },
+      createIngredient:(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; },
       addRecipe:(rec)=>{ const id=rid("rec"); update(s=>{ s.recipes.push({ id, name:(rec.name||"New recipe").trim(), category:rec.category||"", yield:Number(rec.yield)||1, yieldUnit:rec.yieldUnit||"serve", sellPrice:Number(rec.sellPrice)||0, targetMargin:70, items:(rec.items||[]).map(it=>({ ingredientId:it.ingredientId||"", qty:Number(it.qty)||0, rawName:it.rawName, rawUnit:it.rawUnit||"" })), importedCost:0, ingredientListText:"", allergens:rec.allergens||[], image:"", procedure:rec.procedure||"", showInDish:(Number(rec.sellPrice)||0)>0, archived:false }); }); return id; },
       costMap:()=>{ const s=stateRef.current; const im=Object.fromEntries((s.ingredients||[]).map(i=>[i.id,i])); const m={}; (s.recipes||[]).forEach(r=>{ if(r.archived) return; try{ const x=marginOf(r,im); m[r.id]={cost:x.unitCost||0, margin:(x.margin||0)*100}; }catch(e){} }); return m; },
       remember:(text)=>{ const t=(typeof text==="string"?text:JSON.stringify(text)).trim().slice(0,300); if(!t) return; update(s=>{ if(!Array.isArray(s.botMemory)) s.botMemory=[]; if(s.botMemory.some(n=>((typeof n==="string"?n:(n&&n.text)||"").toLowerCase()===t.toLowerCase()))) return; s.botMemory.push({ts:Date.now(), text:t, by:"bot"}); if(s.botMemory.length>300) s.botMemory=s.botMemory.slice(-300); }); },
-      logQuestion:(e)=>{ update(s=>{ if(!Array.isArray(s.botLog)) s.botLog=[]; s.botLog.push(e); if(s.botLog.length>400) s.botLog=s.botLog.slice(-400); }); }
+      logQuestion:(e)=>{ update(s=>{ if(!Array.isArray(s.botLog)) s.botLog=[]; s.botLog.push(e); if(s.botLog.length>400) s.botLog=s.botLog.slice(-400); }); },
+      /* Post to the Today notice board from the assistant. Everything is re-validated here rather
+         than trusted from the model: a bad date would silently hide the notice for ever, and a
+         branch name that matches nothing would hide it from every store. */
+      notices:()=> (stateRef.current.notices||[]).filter(n=>n&&!n.archived),
+      addNotice:(n)=>{
+        n=n||{};
+        const ymd=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||""))?String(v):"";
+        const localYmd=()=>new Date().toLocaleDateString("en-CA");
+        const names=(stateRef.current.branches||[]).map(b=>b.name);
+        const br=names.find(x=>String(x).toLowerCase()===String(n.branch||"").toLowerCase())||"";
+        const id=rid("nt");
+        update(s=>{ if(!Array.isArray(s.notices)) s.notices=[];
+          s.notices.unshift({ id,
+            title:String(n.title||"Notice").trim().slice(0,120),
+            body:String(n.body||""),
+            from:ymd(n.from)||localYmd(), until:ymd(n.until),
+            pin:!!n.pin, tone:(n.tone==="urgent")?"urgent":"info",
+            branch:br, archived:false }); });
+        return id; }
     };
   }, []);
   const botMounted=useRef(false);
@@ -5068,7 +5173,7 @@ function Audit({state, ingMap, setTab, update}){
   };
   const commitRec=(rec)=>{ update(s=>{ const idx=s.recipes.findIndex(r=>r.id===rec.id); if(idx>=0) s.recipes[idx]=rec; }); setFixRec(null); };
   const commitIng=(ing)=>{ update(s=>{ const idx=s.ingredients.findIndex(i=>i.id===ing.id); if(idx>=0) s.ingredients[idx]=ing; }); setFixIng(null); };
-  const createIng=(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; };
+  const createIng=(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; };
   const doAutoFix=()=>{ let res={alg:0,wt:0,link:0}; update(n=>{ res=runAutoFix(n); }); setMsg(`AI auto-fix — allergens added: ${res.alg}, grams-per-each set: ${res.wt}, ingredients linked: ${res.link}. Anything still listed needs info AI can't guess.`); };
   const Metric=({n,sev})=>{ const s=AUDIT_SEV[sev]; return <div className="rounded-[14px] p-3.5" style={{background:s.bg, border:"1px solid var(--color-hairline-alpha)"}}><div className="text-2xl font-semibold" style={{color:s.c, fontFamily:"var(--font-display)", lineHeight:1}}>{n}</div><div className="text-xs mt-1" style={{color:"var(--color-ink-muted-80)"}}>{sev==="error"?"Errors — blocking":sev==="warn"?"To fix soon":"Suggestions"}</div></div>; };
   return <div>
@@ -5190,28 +5295,34 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
   const [status,setStatus]=useState("");
   const [showCfg,setShowCfg]=useState(false); const [doc,setDoc]=useState(""); const [showRoutine,setShowRoutine]=useState(false);
   const [sheet,setSheet]=useState(null);
+  const [notice,setNotice]=useState(null);      // notice opened from the board
+  const [calAnchor,setCalAnchor]=useState(null); // month shown in the grid; null = follow the viewed day
   /* Sheet HTML lives in its OWN Firestore doc (hideout_app/sheet_{id}), not in the app state.
      At ~19KB a sheet, keeping them in the shared state document would fill Firestore's 1MB limit
      within a few months at 6–10 caterings a month. So the list carries metadata only and the HTML is
      fetched on demand when the popup opens (also keeps app load fast). Older entries that still have
      an inline `html` field keep working — see the fallback in the loader. */
-  const [sheetHtml,setSheetHtml]=useState({state:"idle", html:"", err:""});
+  const [sheetHtml,setSheetHtml]=useState({state:"idle", html:"", pages:null, err:""});
   useEffect(()=>{
-    if(!sheet){ setSheetHtml({state:"idle", html:"", err:""}); return; }
-    if(sheet.html){ setSheetHtml({state:"ready", html:sheet.html, err:""}); return; }   // legacy inline
-    if(!sheet.sheetDoc && !sheet.id){ setSheetHtml({state:"empty", html:"", err:""}); return; }
+    if(!sheet){ setSheetHtml({state:"idle", html:"", pages:null, err:""}); return; }
+    /* A hand-uploaded sheet is already page image URLs on the entry, so it opens with no round trip
+       at all - nothing to fetch, nothing to decode. */
+    if(Array.isArray(sheet.pages) && sheet.pages.length){ setSheetHtml({state:"ready", html:"", pages:sheet.pages, err:""}); return; }
+    if(sheet.html){ setSheetHtml({state:"ready", html:sheet.html, pages:null, err:""}); return; }   // legacy inline
+    if(!sheet.sheetDoc && !sheet.id){ setSheetHtml({state:"empty", html:"", pages:null, err:""}); return; }
     let alive=true;
-    setSheetHtml({state:"loading", html:"", err:""});
+    setSheetHtml({state:"loading", html:"", pages:null, err:""});
     (async()=>{
       try{
         const fb=fbRef.current; if(!fb||!fb.db) throw new Error("not connected");
+        const col=fb.db.collection("hideout_app");
         const docId=sheet.sheetDoc||("sheet_"+sheet.id);
-        const snap=await fb.db.collection("hideout_app").doc(docId).get();
+        const snap=await col.doc(docId).get();
         const d=snap.exists?snap.data():null;
         const html=d?(d.html||d.json||""):"";
         if(!alive) return;
-        setSheetHtml(html? {state:"ready", html, err:""} : {state:"empty", html:"", err:""});
-      }catch(e){ if(alive) setSheetHtml({state:"error", html:"", err:String(e.message||e)}); }
+        setSheetHtml(html? {state:"ready", html, pages:null, err:""} : {state:"empty", html:"", pages:null, err:""});
+      }catch(e){ if(alive) setSheetHtml({state:"error", html:"", pages:null, err:String(e.message||e)}); }
     })();
     return ()=>{ alive=false; };
   },[sheet]);
@@ -5257,6 +5368,10 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
   const weekday=now.toLocaleDateString("en-AU",{weekday:"long"});
   const isSameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
   const BOOKING_CAL_URL="https://script.google.com/macros/s/AKfycby2Sa4HsxoBXxRMnXzL4rvdfIRpEOHRNWvPdaxWI8X1Hxlb3wiy_QzsCRfg66eB3-LaPQ/exec";
+  // 2026-08-13: booking backend has no Calendar scope (always returned events:[]), and the app is retired.
+  // Calendar now comes from the IOS backend, which reads the shared calendar's private .ics server-side.
+  const IOS_CAL_URL="https://script.google.com/macros/s/AKfycbyT4pJ5QuF1HwLCBzbSS2eXcQoAwCNjeE2WqNucJcG20JQ5hlG3BBuBLWDA50llNZCh/exec";
+  const IOS_CAL_TOKEN="hideout-9f2a7c-orders";
   async function fetchCal(url){
     setStatus("Loading calendar…");
     const pad=n=>String(n).padStart(2,"0");
@@ -5264,8 +5379,8 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
     const bn=(branchName||"").toLowerCase();
     const store=(bn.includes("valley")||bn.includes("515"))?"valley":(bn.includes("edward")||bn.includes("100"))?"city":"adelaide";
     try{
-      const r=await fetch(BOOKING_CAL_URL+"?action=calendar&store="+store+"&date="+ds,{cache:"no-store"});
-      if(r.ok){ const j=await r.json(); if(j && Array.isArray(j.events)){
+      const r=await fetch(IOS_CAL_URL+"?action=calIcs&token="+IOS_CAL_TOKEN+"&date="+ds,{cache:"no-store"});
+      if(r.ok){ const j=await r.json(); if(j && j.ok && Array.isArray(j.events)){
         const mk=h=>new Date(ds+"T"+((h&&/^\d{1,2}:\d{2}$/.test(h))?(h.length===4?"0"+h:h):"00:00")+":00");
         setEvents(j.events.map(ev=>({start:mk(ev.start), end:mk(ev.end||ev.start), summary:ev.title||"(untitled)", location:ev.location||"", allday:!!ev.allDay})));
         setStatus(""); return;
@@ -5278,7 +5393,10 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
     }
     setStatus("Could not load the calendar. The booking backend may be unavailable — try Refresh, or check the .ics link in Calendar settings."); setEvents([]);
   }
-  useEffect(()=>{ const v=loadIcs(branch); setIcs(v); setEvents(null); fetchCal(v); }, [branch]);
+  /* dayOffset is in the deps on purpose: the IOS backend is queried with ?date=<viewed day> and
+     returns that day only, so without a refetch Tomorrow always looked empty. The .ics fallback
+     returns the whole calendar, so refetching there is redundant but harmless. */
+  useEffect(()=>{ const v=loadIcs(branch); setIcs(v); setEvents(null); fetchCal(v); }, [branch, dayOffset]);
   const today=(events||[]).filter(e=>isSameDay(e.start, now)).sort((a,b)=>a.start-b.start);
   useEffect(()=>{ try{ const bn=((state.branches||[]).find(b=>b.id===branch)||{}).name||String(branch||""); window.__HIDEOUT_CAL={ts:Date.now(), branch:bn, events:(events||[]).map(e=>({date:(e.start&&e.start.getFullYear)?(e.start.getFullYear()+"-"+String(e.start.getMonth()+1).padStart(2,"0")+"-"+String(e.start.getDate()).padStart(2,"0")):"", start:(e.start&&e.start.toTimeString)?e.start.toTimeString().slice(0,5):"", summary:e.summary||"", allday:!!e.allday, location:e.location||""}))}; }catch(err){} }, [events, branch]);
   // smart alerts from data
@@ -5298,6 +5416,44 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
   const fmtTime=d=>d.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"});
   const noteAccent={urgent:"var(--color-primary)", warn:"var(--color-ink)", info:"var(--color-ink-muted-48)"};
   const rest=alerts.slice(1);
+  /* ---- Notice board -----------------------------------------------------------------------
+     Free-form messages the owner posts in Settings -> Daily content -> Staff notices. A notice is
+     up from `from` until `until` (both inclusive); a blank `until` keeps it up until removed. The
+     window is tested against the VIEWED day, so switching to Tomorrow previews what the team will
+     see tomorrow, the same way the run sheet and routine already do. */
+  const liveNotices=(state.notices||[])
+    .filter(n=>n && !n.archived && (String(n.title||"").trim()||String(n.body||"").trim()))
+    .filter(n=>!n.from  || String(n.from) <=dateViewStr)
+    .filter(n=>!n.until || String(n.until)>=dateViewStr)
+    .filter(n=>!n.branch || !branchName || String(n.branch).toLowerCase()===String(branchName).toLowerCase())
+    .sort((a,b)=> (b.pin?1:0)-(a.pin?1:0) || String(b.from||"").localeCompare(String(a.from||"")));
+  const noticeStamp=n=>{ const f=String(n.from||""); if(!f) return "";
+    const d=Math.round((new Date(dateRealTodayStr+"T00:00:00")-new Date(f+"T00:00:00"))/86400000);
+    return d===0?"Posted today":d===1?"Yesterday":d>1?(d+" days ago"):f; };
+  // strip the markdown marks so the one-line preview never shows raw # / ** / checkbox glyphs
+  const noticeBlurb=b=>{ const t=String(b||"").replace(/[#*`\u2610]/g," ").replace(/\s+/g," ").trim(); return t.length>110?t.slice(0,110)+"\u2026":t; };
+  /* ---- Calendar panel ---------------------------------------------------------------------
+     Monday-first month grid. Dots come from two sources: calendar events already fetched (the .ics
+     path carries the whole calendar, the IOS backend only the viewed day - those days simply get no
+     dot rather than a wrong one) and catering sheets, which live in app state and are always
+     complete. Tapping a day drives the same dayOffset the Yesterday/Today/Tomorrow buttons use. */
+  const shiftMonth=(d,n)=>new Date(d.getFullYear(), d.getMonth()+n, 1);
+  const calMonth=calAnchor||new Date(now.getFullYear(), now.getMonth(), 1);
+  const eventDays=new Set((events||[]).map(e=>(e.start&&e.start.getFullYear)?ymdLocal(e.start):"").filter(Boolean));
+  const cateringDays=new Set((state.cateringSheets||[]).filter(c=>c&&c.date&&!c.archived).map(c=>String(c.date)));
+  const calCells=(()=>{
+    const first=new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+    const lead=(first.getDay()+6)%7;                                              // Mon=0
+    const days=new Date(calMonth.getFullYear(), calMonth.getMonth()+1, 0).getDate();
+    const base=new Date(dateRealTodayStr+"T00:00:00");
+    const cells=[]; for(let i=0;i<lead;i++) cells.push({blank:true});
+    for(let d=1;d<=days;d++){
+      const dt=new Date(calMonth.getFullYear(), calMonth.getMonth(), d), key=ymdLocal(dt);
+      cells.push({blank:false, d, key, offset:Math.round((dt-base)/86400000),
+        isToday:key===dateRealTodayStr, isView:key===dateViewStr,
+        ev:eventDays.has(key), cat:cateringDays.has(key)});
+    }
+    return cells; })();
   return <div className="space-y-6" style={{background:"#ffffff", border:"2px solid var(--color-ink)", padding:"clamp(16px,2.6vw,30px)", boxShadow:"0 10px 34px rgba(32,30,29,.10)"}}>
     <div className="tab-in">
       <div className="flex items-end justify-between gap-3 flex-wrap pb-3" style={{borderBottom:"2px solid var(--color-ink)"}}>
@@ -5341,41 +5497,96 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
       </button>
       {showRoutine && <div className="px-4 pb-4" style={{borderTop:"1px solid var(--color-hairline-alpha)"}}><div className="pt-2"><MiniDoc text={state.dailyRoutine[weekday]} /></div></div>}
     </div>}
+    {/* Left column: the notice board the owner posts to. Right column: the calendar.
+        2026-08-23 - these two swapped places. The run sheet's timed list did not go anywhere, it
+        now sits under the month grid; the wide column went to the thing staff actually have to
+        read, and the prep alerts that used to live on the right moved to the strip below. */}
     <div className="grid md:grid-cols-5 gap-6 items-start">
       <div className="md:col-span-3">
         <div className="flex items-center justify-between mb-3 pb-2" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>
-          <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Today’s run sheet</div>
-          {(ics||(events&&events.length)) && <button onClick={()=>fetchCal(ics)} className="text-[11px]" style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer"}}>Refresh</button>}
+          <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Notices for the team</div>
+          {liveNotices.length>0 && <span className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{liveNotices.length} up</span>}
         </div>
-        {events===null && <div className="text-sm text-stone-400 py-6">{status||"Loading…"}</div>}
-        {events!==null && !ics && !(events&&events.length) && <div className="text-sm text-stone-500 py-4">Connect your Google Calendar to see today’s bookings.<div className="mt-3"><Btn size="sm" onClick={()=>{ setDraft(""); setShowCfg(true); }}>Connect calendar</Btn></div></div>}
-        {events!==null && ics && today.length===0 && <div className="text-sm text-stone-500 py-6">{status||"No bookings scheduled for today."}</div>}
-        <div className="stagger">
-          {today.map((e,i)=>(<div key={i} className="flex gap-4 py-3.5" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>
-            <div className="shrink-0" style={{minWidth:70}}><div style={{fontFamily:"var(--font-display)", fontWeight:600, fontSize:16, color:"var(--color-ink)", lineHeight:1.1}}>{e.allday?"All day":fmtTime(e.start)}</div>{!e.allday && e.end && <div className="text-[11px] mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>till {fmtTime(e.end)}</div>}</div>
-            <div className="min-w-0 flex-1"><div className="font-semibold text-stone-800" style={{fontFamily:"var(--font-display)"}}>{e.summary}</div>{e.location && <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>{e.location}</div>}</div>
-          </div>))}
-        </div>
+        {liveNotices.length===0
+          ? <div className="text-sm py-4" style={{color:"var(--color-ink-muted-48)"}}>Nothing posted for this day. Add one in Settings → Daily content → Staff notices.</div>
+          : <div className="space-y-2.5 stagger">
+            {liveNotices.map((n,i)=>{
+              // a title-only notice is a valid short announcement - it just is not clickable
+              const hasBody=!!String(n.body||"").trim();
+              const acc=n.tone==="urgent"?"var(--color-primary)":"var(--color-ink)";
+              return <button key={n.id||i} onClick={()=>hasBody&&setNotice(n)} className="w-full text-left vbtn-card"
+                style={{padding:"12px 14px", border:"1px solid var(--color-hairline-alpha)", borderLeft:"3px solid "+acc,
+                  background:n.tone==="urgent"?"rgba(200,26,34,.05)":"var(--color-canvas)", cursor:hasBody?"pointer":"default"}}>
+                <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                  <div className="font-semibold text-stone-800" style={{fontFamily:"var(--font-display)"}}>{n.pin?"★ ":""}{n.title||"Notice"}</div>
+                  <div className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{[noticeStamp(n), n.until?("until "+n.until):null].filter(Boolean).join(" · ")}</div>
+                </div>
+                {hasBody && <div className="text-xs mt-1" style={{color:"var(--color-ink-muted-48)"}}>
+                  {noticeBlurb(n.body)}<span style={{color:"var(--color-primary)"}}> · read ›</span>
+                </div>}
+              </button>;
+            })}
+          </div>}
       </div>
       <div className="md:col-span-2">
-        <div className="mb-3 pb-2 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)", borderBottom:"1px solid var(--color-hairline-alpha)"}}>Before service</div>
-        {rest.length===0 ? <div className="text-sm py-4" style={{color:"var(--color-ink-muted-48)"}}>Nothing else flagged.</div> :
-        <div className="space-y-3 stagger">
-          {rest.map((a,i)=>(<button key={i} onClick={()=>a.go&&setTab(a.go)} className="w-full text-left vbtn-card" style={{background:"none", border:"none", cursor:a.go?"pointer":"default", paddingLeft:12, borderLeft:"2px solid "+noteAccent[a.tone]}}>
-            <div className="font-semibold text-sm text-stone-800" style={{fontFamily:"var(--font-display)", lineHeight:1.2}}>{a.title}</div>
-            <div className="text-xs mt-1" style={{color:"var(--color-ink-muted-48)"}}>{a.detail}</div>
-          </button>))}
-        </div>}
+        <div className="flex items-center justify-between mb-3 pb-2" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>
+          <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Calendar</div>
+          {(ics||(events&&events.length)) && <button onClick={()=>fetchCal(ics)} className="text-[11px]" style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer"}}>Refresh</button>}
+        </div>
+        <div className="flex items-center justify-between mb-2">
+          <button onClick={()=>setCalAnchor(shiftMonth(calMonth,-1))} aria-label="Previous month" style={{minWidth:34, minHeight:34, border:"1px solid var(--color-hairline-alpha)", borderRadius:999, background:"var(--color-surface,#fff)", color:"var(--color-ink-muted-48)", cursor:"pointer", lineHeight:1}}>‹</button>
+          <div style={{fontFamily:"var(--font-display)", fontWeight:600, fontSize:14, color:"var(--color-ink)"}}>{calMonth.toLocaleDateString("en-AU",{month:"long", year:"numeric"})}</div>
+          <button onClick={()=>setCalAnchor(shiftMonth(calMonth,1))} aria-label="Next month" style={{minWidth:34, minHeight:34, border:"1px solid var(--color-hairline-alpha)", borderRadius:999, background:"var(--color-surface,#fff)", color:"var(--color-ink-muted-48)", cursor:"pointer", lineHeight:1}}>›</button>
+        </div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2}}>
+          {["M","T","W","T","F","S","S"].map((d,i)=>(<div key={"h"+i} className="text-center text-[10px]" style={{color:"var(--color-ink-muted-48)", padding:"2px 0", letterSpacing:"0.06em"}}>{d}</div>))}
+          {calCells.map((c,i)=> c.blank ? <div key={"b"+i} /> : (
+            /* minHeight 38: tapped with a thumb on the kitchen tablet, same reason as the day switcher */
+            <button key={c.key} onClick={()=>{ setDayOffset(c.offset); setCalAnchor(null); }} className="vbtn-card"
+              style={{minHeight:38, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:2, cursor:"pointer",
+                borderRadius:8, fontFamily:"var(--font-text)", fontSize:12.5,
+                fontWeight:(c.isView||c.isToday)?700:400,
+                border:"1px solid "+(c.isToday&&!c.isView?"var(--color-ink)":"transparent"),
+                background:c.isView?"var(--color-ink)":"transparent",
+                color:c.isView?"#fff":"var(--color-ink)"}}>
+              <span style={{lineHeight:1}}>{c.d}</span>
+              <span style={{display:"flex", gap:2, height:4, alignItems:"center"}}>
+                {c.ev  && <span style={{width:4, height:4, borderRadius:999, background:c.isView?"rgba(255,255,255,.85)":"var(--color-ink-muted-48)"}} />}
+                {c.cat && <span style={{width:4, height:4, borderRadius:999, background:c.isView?"#fff":"var(--color-primary)"}} />}
+              </span>
+            </button>))}
+        </div>
+        <div className="flex items-center gap-3 mt-2 text-[10px]" style={{color:"var(--color-ink-muted-48)"}}>
+          <span className="flex items-center gap-1"><span style={{width:4,height:4,borderRadius:999,background:"var(--color-ink-muted-48)",display:"inline-block"}} /> booking</span>
+          <span className="flex items-center gap-1"><span style={{width:4,height:4,borderRadius:999,background:"var(--color-primary)",display:"inline-block"}} /> catering</span>
+        </div>
+        <div className="mt-4">
+          <div className="text-[11px] font-semibold mb-1 pb-1.5" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)", borderBottom:"1px solid var(--color-hairline-alpha)"}}>
+            {dayOffset===0?"Today’s":dayOffset===1?"Tomorrow’s":dayOffset===-1?"Yesterday’s":now.toLocaleDateString("en-AU",{day:"numeric",month:"short"})+"’s"} run sheet
+          </div>
+          {events===null && <div className="text-sm text-stone-400 py-4">{status||"Loading…"}</div>}
+          {events!==null && !ics && !(events&&events.length) && <div className="text-sm text-stone-500 py-3">Connect your Google Calendar to see bookings.<div className="mt-3"><Btn size="sm" onClick={()=>{ setDraft(""); setShowCfg(true); }}>Connect calendar</Btn></div></div>}
+          {events!==null && ics && today.length===0 && <div className="text-sm text-stone-500 py-4">{status||"No bookings scheduled."}</div>}
+          <div className="stagger">
+            {today.map((e,i)=>(<div key={i} className="flex gap-3 py-3" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>
+              <div className="shrink-0" style={{minWidth:62}}><div style={{fontFamily:"var(--font-display)", fontWeight:600, fontSize:15, color:"var(--color-ink)", lineHeight:1.1}}>{e.allday?"All day":fmtTime(e.start)}</div>{!e.allday && e.end && <div className="text-[11px] mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>till {fmtTime(e.end)}</div>}</div>
+              <div className="min-w-0 flex-1"><div className="font-semibold text-sm text-stone-800" style={{fontFamily:"var(--font-display)"}}>{e.summary}</div>{e.location && <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>{e.location}</div>}</div>
+            </div>))}
+          </div>
+        </div>
       </div>
     </div>
+    {/* Before service - the prep signals that used to sit in the right-hand panel. They are real
+        service warnings, so they get their own strip rather than being dropped for the calendar. */}
     <div>
-      <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)"}}>By the numbers</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
-        <Stat label="Today’s events" value={(ics||(events&&events.length))? today.length : "—"} />
-        <Stat label="Urgent prep" value={urgent.length} tone={urgent.length>0?"bad":undefined} />
-        <Stat label="Prep to do" value={todo.length} tone={todo.length>0?"warn":undefined} />
-        <Stat label="Prep done" value={doneN} />
-      </div>
+      <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)"}}>Before service</div>
+      {rest.length===0 ? <div className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Nothing else flagged.</div> :
+      <div className="grid md:grid-cols-3 gap-4 stagger">
+        {rest.map((a,i)=>(<button key={i} onClick={()=>a.go&&setTab(a.go)} className="w-full text-left vbtn-card" style={{background:"none", border:"none", cursor:a.go?"pointer":"default", paddingLeft:12, borderLeft:"2px solid "+noteAccent[a.tone]}}>
+          <div className="font-semibold text-sm text-stone-800" style={{fontFamily:"var(--font-display)", lineHeight:1.2}}>{a.title}</div>
+          <div className="text-xs mt-1" style={{color:"var(--color-ink-muted-48)"}}>{a.detail}</div>
+        </button>))}
+      </div>}
     </div>
     {/* Catering sheets for today (and tomorrow, so prep can start the day before).
         The sheet itself is a full HTML document stored on the entry — opened in an iframe
@@ -5395,12 +5606,21 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
               </div>; })()}
           </div>
           <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>
-            {[c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, (c.pax&&c.pricePP)?("total $"+(Number(c.pax)*Number(c.pricePP)).toFixed(2)):null, c.pickup||null].filter(Boolean).join(" · ")||"Open the prep sheet"}
+            {[c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, (c.pax&&c.pricePP)?("total $"+(Number(c.pax)*Number(c.pricePP)).toFixed(2)):null, c.pickup||null].filter(Boolean).join(" · ")||((c.pages&&c.pages.length)?(c.pages.length+" page"+(c.pages.length===1?"":"s")):"Open the prep sheet")}
             <span style={{color:"var(--color-primary)"}}> · open sheet ›</span>
           </div>
         </button>))}
       </div>
     </div>}
+    <div>
+      <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)"}}>By the numbers</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
+        <Stat label="Today’s events" value={(ics||(events&&events.length))? today.length : "—"} />
+        <Stat label="Urgent prep" value={urgent.length} tone={urgent.length>0?"bad":undefined} />
+        <Stat label="Prep to do" value={todo.length} tone={todo.length>0?"warn":undefined} />
+        <Stat label="Prep done" value={doneN} />
+      </div>
+    </div>
     <div>
       <div className="mb-2.5 text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)"}}>Reference & checklists</div>
       <div className="flex flex-wrap gap-2">
@@ -5414,6 +5634,20 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
           and then jump when the sheet lands. */}
       {(sheetHtml.state==="loading"||sheetHtml.state==="idle") ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Loading sheet…</p></div>
         : sheetHtml.state==="error" ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm text-center px-6" style={{color:"#d70015"}}>Couldn't load the sheet ({sheetHtml.err}).<br/>Check the connection and try again.</p></div>
+        : (sheetHtml.state==="ready" && sheetHtml.pages)
+        ? <div>
+            {/* Page images need none of the A4 scaling below - each one already IS a page, so it
+                just fills the popup width and scrolls. */}
+            <div className="flex justify-end items-center gap-3 mb-2">
+              <span className="text-xs" style={{color:"var(--color-ink-muted-48)"}}>{sheetHtml.pages.length} page{sheetHtml.pages.length===1?"":"s"}</span>
+              <a href={sheetHtml.pages[0].url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{color:"var(--color-primary)"}}>Open in new tab</a>
+              <Btn size="sm" onClick={()=>printSheetPages(sheetHtml.pages, sheet.title||sheet.client)}>Print</Btn>
+            </div>
+            <div style={{width:"100%", maxHeight:"78vh", overflow:"auto", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}>
+              {sheetHtml.pages.map((p,i)=>(<img key={i} src={cld(p.url,900)} alt={"Page "+(i+1)} loading={i?"lazy":"eager"}
+                style={{width:"100%", display:"block", borderBottom:(i<sheetHtml.pages.length-1)?"1px solid var(--color-hairline-alpha)":"none"}} />))}
+            </div>
+          </div>
         : sheetHtml.state==="ready"
         ? <div ref={sheetWrapRef}>
             <div className="flex justify-end items-center gap-2 mb-2">
@@ -5444,6 +5678,12 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
         : <p className="text-sm text-stone-500">This entry has no sheet attached yet — ask Claude to publish the catering sheet for this order.</p>}
     </Modal>}
     {doc && <Modal title={doc.title} onClose={()=>setDoc("")} wide><MiniDoc text={doc.text} /></Modal>}
+    {notice && <Modal title={notice.title||"Notice"} onClose={()=>setNotice(null)} wide>
+      <div className="text-[11px] mb-3 pb-2" style={{color:"var(--color-ink-muted-48)", letterSpacing:"0.08em", textTransform:"uppercase", borderBottom:"1px solid var(--color-hairline-alpha)"}}>
+        {[noticeStamp(notice), notice.until?("up until "+notice.until):"no end date", notice.branch||"all stores"].filter(Boolean).join(" \u00b7 ")}
+      </div>
+      <MiniDoc text={notice.body} />
+    </Modal>}
     {showCfg && <Modal title="Google Calendar" onClose={()=>setShowCfg(false)}>
       <p className="text-xs text-stone-500 mb-2 leading-relaxed">In Google Calendar: <b>Settings → </b> pick your calendar <b>→ Integrate calendar → “Secret address in iCal format”</b>. Copy that link (ends in <code>.ics</code>) and paste it below. It updates automatically each day.</p>
       <input autoFocus className="inp mb-1" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" value={draft} onChange={e=>setDraft(e.target.value)} />
@@ -5459,7 +5699,7 @@ const PREP_COLS=[["urgent","URGENT"],["todo","TO DO"],["done","DONE"]];
 function PrepBoard({state, ingMap, update, branch}){
   const [view,setView]=useState(null); const [q,setQ]=useState(""); const [showAdd,setShowAdd]=useState(false); const [addQ,setAddQ]=useState("");
   const [editRec,setEditRec]=useState(null);
-  const prepCreateIng=(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; };
+  const prepCreateIng=(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; };
   const prepCommitRec=(r)=>{ update(s=>{ const i=s.recipes.findIndex(x=>x.id===r.id); if(i>=0) s.recipes[i]=r; }); setEditRec(null); };
   const [dragId,setDragId]=useState(null); const [overCol,setOverCol]=useState(null);
   const gridRef=useRef(null); const suppressClick=useRef(false);
@@ -5526,7 +5766,7 @@ function PrepBoard({state, ingMap, update, branch}){
               return <div key={r.id} onPointerDown={e=>startDrag(e,r)} onClick={()=>{ if(suppressClick.current) return; setView(r); }} className="relative rounded-xl overflow-hidden vbtn-card tilt cursor-grab group prep-card" style={{background:"var(--color-surface-tile-2)", opacity: dragId===r.id ? .4 : (done ? .72 : 1), touchAction:"pan-y"}}>
                 {key==="urgent" && <div className="absolute left-0 top-0 bottom-0" style={{width:3, background:"var(--color-primary)"}}></div>}
                 <div className="flex items-center gap-3 p-2.5 pl-3.5 prep-card-pad">
-                  {r.image && <div className="rounded-lg overflow-hidden shrink-0 prep-thumb" style={{width:52, height:52, background:"var(--color-surface-tile-3)", filter: done?"grayscale(1)":"none"}}><img src={r.image} alt="" draggable={false} className="w-full h-full object-cover" /></div>}
+                  {r.image && <div className="rounded-lg overflow-hidden shrink-0 prep-thumb" style={{width:52, height:52, background:"var(--color-surface-tile-3)", filter: done?"grayscale(1)":"none"}}><img src={cld(r.image,52)} alt="" draggable={false} className="w-full h-full object-cover" /></div>}
                   <div className="flex-1 prep-textcol">
                     <div className="font-semibold prep-title" style={{fontSize:((r.name||"").length<=8?16:(r.name||"").length<=14?14.5:(r.name||"").length<=22?13:(r.name||"").length<=34?12:11)+"px", color: done?"var(--color-body-muted)":"#fff", fontFamily:"var(--font-display)", textDecoration: done?"line-through":"none", lineHeight:1.16, wordBreak:"normal", overflowWrap:"break-word", letterSpacing:"-0.2px"}}>{r.name}</div>
                     <div className="text-[11px] mt-0.5 prep-sub" style={{color:"var(--color-body-muted)"}}>{dishCategory(r)}</div>
@@ -5718,7 +5958,7 @@ function Recipes({state, update, setState, ingMap}){
   function bulkDelete(){ const refd=state.recipes.filter(r=>!sel[r.id]&&!r.archived&&(r.items||[]).some(it=>it.subRecipeId&&sel[it.subRecipeId])).map(r=>r.name); if(refd.length&&!confirm("Warning: "+refd.length+" other recipe(s) use a selected recipe as a prep/sub-recipe (\u25b8): "+refd.slice(0,8).join(", ")+(refd.length>8?"\u2026":"")+"\n\nDeleting will break those links. Continue?")) return; if(!confirm("Delete "+selIds.length+" recipe(s) permanently?\n\nOK = delete \u00b7 Cancel = keep")) return; update(s=>{ s.recipes=s.recipes.filter(r=>!sel[r.id]); }); setSel({}); }
   function applyBulk(){ update(s=>{ s.recipes.forEach(r=>{ if(!sel[r.id]) return; if(bulk.category.trim()) r.category=bulk.category.trim(); if(bulk.targetMargin!=="") r.targetMargin=Number(bulk.targetMargin)||r.targetMargin; if(bulk.showInDish!=="") r.showInDish=bulk.showInDish==="on"; if(bulk.showInPrep!=="") r.showInPrep=bulk.showInPrep==="on"; if(bulk.finalised) r.finalised=bulk.finalised==="on"; }); }); setBulk(null); setSel({}); }
   function commit(rec){ update(s=>{ if(rec.id){ const idx=s.recipes.findIndex(r=>r.id===rec.id); s.recipes[idx]=rec; } else { rec.id=rid("rec"); s.recipes.push(rec); } }); setEdit(null); }
-  function createIngredient(d){ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; }
+  function createIngredient(d){ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; }
   function importXlsx(file){
     readSheet(file, rows=>{
       const mapped=rows.map(rowToRecipe).filter(r=>r.name);
@@ -5791,7 +6031,7 @@ function Recipes({state, update, setState, ingMap}){
           {(selMode)&&<label className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,.85)", border:"1px solid var(--color-hairline-alpha)"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={isSel} onChange={()=>toggleSel(r.id)} style={{width:16, height:16, accentColor:"var(--color-primary)"}} /></label>}
           <div className="flex" style={{minHeight:98}}>
             <div style={{width:6, background:accent, flexShrink:0}}></div>
-            {r.image && <div className="shrink-0 my-3 ml-3 rounded-xl overflow-hidden" style={{width:64, height:64, background:"var(--color-canvas-parchment)"}}><img src={r.image} alt="" className="w-full h-full object-cover" /></div>}
+            {r.image && <div className="shrink-0 my-3 ml-3 rounded-xl overflow-hidden" style={{width:64, height:64, background:"var(--color-canvas-parchment)"}}><img src={cld(r.image,64)} alt="" className="w-full h-full object-cover" /></div>}
             <div className="flex-1 min-w-0 py-3 px-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -5935,6 +6175,25 @@ function RccImportModal({state, setState, onClose}){
     <div className="flex justify-end mt-4"><Btn tone="ghost" onClick={onClose}>Close</Btn></div>
   </Modal>;
 }
+/* Cloudinary hands back the original file unless the URL asks for something smaller, and none of
+   ours did - a Dishes screen was pulling 2.5MB of full-size JPEGs. Slotting a transform in after
+   /upload/ makes Cloudinary resize and re-encode on its side (and cache the result forever):
+     f_auto  - WebP/AVIF when the browser takes it, JPEG when it doesn't
+     q_auto  - quality picked per image instead of a fixed number
+     c_limit - never upscales, so a small original is left at its own size
+   `w` is the CSS width the image is drawn at; the device pixel ratio is applied here so a retina
+   tablet still gets a sharp picture. Non-Cloudinary URLs (someone pasted a link) pass through
+   untouched, and a URL that already carries a transform is left alone. */
+function cld(url, w, dprOverride){
+  const u=String(url||"");
+  const i=u.indexOf("/upload/");
+  if(!u || u.indexOf("res.cloudinary.com")<0 || i<0) return u;
+  const rest=u.slice(i+8), first=rest.split("/")[0];
+  if(/,/.test(first) || /^(?:f|q|w|h|c|e|g|dpr|fl|ar)_/.test(first)) return u;   // already transformed
+  const dpr=dprOverride!=null?dprOverride:Math.min(2, (window.devicePixelRatio||1));
+  const px=Math.max(48, Math.round((Number(w)||600)*dpr));
+  return u.slice(0,i+8)+"f_auto,q_auto,c_limit,w_"+px+"/"+rest;
+}
 function loadCloud(){ const d={cloudName:"ghfmwnbn",preset:"THC IMAGE LIBRARY",tag:"dish"}; try{ return {...d, ...(JSON.parse(localStorage.getItem("hideout_cloudinary"))||{})}; }catch(e){ return d; } }
 async function cloudinaryList(){
   const c=loadCloud(); const tag=(c.tag||"dish").trim();
@@ -5947,13 +6206,16 @@ async function cloudinaryList(){
   return res.map(x=>({ id:"cl_"+x.public_id.replace(/[^a-z0-9]/gi,"_"), url:"https://res.cloudinary.com/"+c.cloudName+"/image/upload/v"+x.version+"/"+x.public_id+"."+x.format, name:x.public_id.split("/").pop(), publicId:x.public_id }));
 }
 function saveCloud(c){ try{ localStorage.setItem("hideout_cloudinary", JSON.stringify(c)); }catch(e){} }
-async function cloudinaryUpload(file){
+async function cloudinaryUpload(file, tagOverride){
   const c=loadCloud();
   if(!c.cloudName||!c.preset) throw new Error("Set Cloudinary cloud name + preset in Photo Library first.");
   const fd=new FormData(); fd.append("file",file); fd.append("upload_preset",c.preset);
   /* [2026-07-23 tag-sync] auto-tag uploads with the library tag so 'Load from Cloudinary'
-     finds them without manual tagging in the console (unsigned presets allow 'tags'). */
-  if((c.tag||"").trim()) fd.append("tags",(c.tag||"").trim());
+     finds them without manual tagging in the console (unsigned presets allow 'tags').
+     tagOverride keeps catering sheet pages out of the dish photo library, which is what
+     'Choose from library' lists. */
+  const tag=(tagOverride!=null?tagOverride:(c.tag||"")).trim();
+  if(tag) fd.append("tags",tag);
   const r=await fetch("https://api.cloudinary.com/v1_1/"+encodeURIComponent(c.cloudName)+"/image/upload",{method:"POST",body:fd});
   const j=await r.json().catch(()=>({}));
   if(!r.ok||!j.secure_url) throw new Error((j.error&&j.error.message)||("HTTP "+r.status));
@@ -6053,7 +6315,7 @@ function PhotoLibrary({photos, update, mode, onPick, onClose}){
         {list.map(ph=>(
           <div key={ph.id} className="relative group">
             <div className={`aspect-square rounded-xl overflow-hidden bg-stone-100 border border-[color:var(--line)] ${mode==="pick"?"cursor-pointer hover:ring-2 ring-stone-800":""}`} onClick={()=>{ if(mode==="pick"&&onPick) onPick(ph.url); }}>
-              <img src={ph.url} className="w-full h-full object-cover" />
+              <img src={cld(ph.url,240)} loading="lazy" className="w-full h-full object-cover" />
             </div>
             <div className="text-[11px] text-stone-400 truncate mt-1">{ph.name||""}</div>
             {mode!=="pick" && <button onClick={()=>del(ph.id)} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100">×</button>}
@@ -6166,13 +6428,13 @@ function Dishes({state, ingMap, update, branch}){
   const cats = [...catList, ...catsRaw.filter(c=>!catList.includes(c))];
   const moveTo = (id, cat) => update(s=>{ const t=s.recipes.find(x=>x.id===id); if(t && ((t.category||"").trim()||dishCategory(t))!==cat){ t.category=cat; if(dept==="bakery") setBk(t,branch,"dish",true); else if(dept==="barista") setBa(t,branch,"dish",true); else setBranchField(t,branch,"dish",true); } });
   const [dragId,setDragId]=useState(null); const [overCat,setOverCat]=useState(null); const [pickFor,setPickFor]=useState(null); const [editRec,setEditRec]=useState(null);
-  const dishCreateIng=(d)=>{ const id=rid("ing"); const uu=(d.useUnit||"each").trim()||"each"; update(s=>{ s.ingredients.push({ id, name:(d.name||"").trim(), category:d.category||"", purchaseUnit:(d.purchaseUnit||uu), useUnit:uu, purchaseQty:Number(d.purchaseQty)||1, purchasePrice:Number(d.purchasePrice)||0, gramsPerEach:0, allergens:detectAllergens(d.name), archived:false, suppliers:[], costHistory:[{date:today(), price:Number(d.purchasePrice)||0}] }); }); return id; };
+  const dishCreateIng=(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; };
   const DishCard = r => {
     const cat=(r.category||"").trim()||dishCategory(r);
     return (
     <div key={r.id} draggable onDragStart={e=>{ setDragId(r.id); e.dataTransfer.setData("text/dish", r.id); e.dataTransfer.effectAllowed="move"; }} onDragEnd={()=>{ setDragId(null); setOverCat(null); }} onClick={()=>setView(r)} className="relative overflow-hidden cursor-pointer vbtn-card tilt group rounded-xl" style={{background:"var(--color-surface-tile-3)", opacity: dragId===r.id ? .4 : 1}}>
       <div className="aspect-[4/5] dish-media overflow-hidden relative">
-        {r.image? <img src={r.image} alt={r.name} draggable={false} className="w-full h-full object-cover group-hover:scale-[1.05] transition duration-[600ms]" /> : <DishPlaceholder name={r.name} />}
+        {r.image? <img src={cld(r.image,480)} alt={r.name} draggable={false} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.05] transition duration-[600ms]" /> : <DishPlaceholder name={r.name} />}
         <div className="absolute inset-0" style={{background:"linear-gradient(to top, rgba(18,11,6,.86) 0%, rgba(18,11,6,.4) 34%, rgba(18,11,6,0) 66%)"}}></div>
         <div className="absolute left-0 right-0 bottom-0 p-4 dish-overlay">
           <div className="flex items-center gap-2 mb-2 dish-kicker"><span style={{display:"inline-block", width:18, height:1, background:"rgba(255,255,255,.55)", flexShrink:0}}></span><span className="text-[10px]" style={{color:"rgba(255,255,255,.72)", letterSpacing:"0.18em", textTransform:"uppercase", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{cat}</span></div>
@@ -6210,7 +6472,7 @@ function Dishes({state, ingMap, update, branch}){
             <div className="mb-2 px-0.5 text-[13px] font-semibold" style={{textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--color-ink)"}}>{cat} <span style={{color:"var(--color-ink-muted-48)", fontWeight:400}}>· {items.length}</span></div>
             <div className="grid grid-cols-3 gap-2">
               {items.map(r=>(<button key={r.id} onClick={()=>setView(r)} className="text-left vbtn-card" style={{background:"none", border:"none", padding:0, cursor:"pointer"}}>
-                <div className="overflow-hidden relative" style={{aspectRatio:"1/1", borderRadius:8, background:"var(--color-surface-tile-3)"}}>{r.image? <img src={r.image} alt={r.name} className="w-full h-full object-cover" /> : <DishPlaceholder name={r.name} />}</div>
+                <div className="overflow-hidden relative" style={{aspectRatio:"1/1", borderRadius:8, background:"var(--color-surface-tile-3)"}}>{r.image? <img src={cld(r.image,240)} alt={r.name} loading="lazy" className="w-full h-full object-cover" /> : <DishPlaceholder name={r.name} />}</div>
                 <div className="mt-1.5 text-[12.5px] font-medium leading-tight" style={{color:"var(--color-ink)", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden"}}>{r.name}</div>
               </button>))}
             </div>
@@ -6264,7 +6526,7 @@ function DishDetail({rec, ingMap, onClose, onMove, cats, onEdit, onRemove}){
   return ReactDOM.createPortal(<div className="fixed inset-0 bg-black/45 flex items-start justify-center p-4 overflow-auto z-50 modal-back" onClick={onClose}>
     <div className="rounded-[18px] max-w-2xl w-full overflow-hidden mt-4 md:mt-8 modal-pop" style={{background:"var(--color-surface-tile-2)", color:"#fff"}} onClick={e=>e.stopPropagation()}>
       <div className="relative">
-        {rec.image && <div className="aspect-[4/3]" style={{background:"var(--color-surface-tile-3)"}}><img src={rec.image} className="w-full h-full object-cover" /></div>}
+        {rec.image && <div className="aspect-[4/3]" style={{background:"var(--color-surface-tile-3)"}}><img src={cld(rec.image,700)} className="w-full h-full object-cover" /></div>}
         <button onClick={onClose} className="absolute top-3 right-3 w-11 h-11 rounded-full text-xl leading-none flex items-center justify-center vbtn-card" style={{zIndex:2, background:rec.image?"var(--color-chip-translucent-64)":"rgba(255,255,255,.14)", backdropFilter:"var(--blur-frosted)", WebkitBackdropFilter:"var(--blur-frosted)", color:rec.image?"var(--color-ink)":"#fff", border:"none", cursor:"pointer"}}>×</button>
       </div>
       <div className="p-5 md:p-7">
@@ -6328,6 +6590,7 @@ function RecipeSummary({rec, ingMap, onClose, onEdit}){
         </div>; })}
     </div>
     {(rec.allergens&&rec.allergens.length>0) && <div className="mt-4 text-xs text-stone-500"><b>Allergens:</b> {rec.allergens.join(", ")}</div>}
+    {rec.posName && <div className="mt-1 text-xs text-stone-500"><b>POS name (Square):</b> {rec.posName}</div>}
     <div className="flex justify-end gap-2 mt-5"><Btn tone="ghost" onClick={onClose}>Close</Btn><Btn onClick={onEdit}>Edit</Btn></div>
   </Modal>;
 }
@@ -6353,14 +6616,18 @@ function IngredientPicker({item, activeIngs, subRecipes, onPick, onCreate, seed}
   const fIngs=(ql? activeIngs.filter(g=>(g.name||"").toLowerCase().includes(ql)) : activeIngs).slice(0,60);
   const fSubs=(ql? subRecipes.filter(r=>(r.name||"").toLowerCase().includes(ql)) : subRecipes).slice(0,25);
   function pick(v){ onPick(v); setOpen(false); setQ(""); setNf(null); }
+  /* Creating an ingredient from here opens the SAME Add Ingredient modal the Ingredients tab uses -
+     see the render below. `nf` is therefore a blank ingredient record, not a cut-down form state. */
   function startNew(){ const nm=(q.trim()||item.rawName||"").trim();
-    setNf({name:nm, category:"", useUnit:(seed&&seed.useUnit)||"g", purchaseUnit:"", purchaseQty:(seed&&Number(seed.purchaseQty)>0)?Number(seed.purchaseQty):1000, purchasePrice:(seed&&Number(seed.purchasePrice)>0)?Number(seed.purchasePrice):0}); }
-  function saveNew(){ if(!(nf.name||"").trim()){ alert("Enter a name"); return; } const id=onCreate(nf); pick(id); }
-  const nuc=(Number(nf&&nf.purchaseQty)>0)? Number(nf.purchasePrice)/Number(nf.purchaseQty):0;
+    setNf({id:"", name:nm, category:"",
+      purchaseUnit:(seed&&seed.purchaseUnit)||"", useUnit:(seed&&seed.useUnit)||"g",
+      purchaseQty:(seed&&Number(seed.purchaseQty)>0)?Number(seed.purchaseQty):1,
+      purchasePrice:(seed&&Number(seed.purchasePrice)>0)?Number(seed.purchasePrice):0,
+      gramsPerEach:0, allergens:[], suppliers:[], costHistory:[], archived:false}); }
   return <div className="relative">
     <button type="button" onClick={()=>setOpen(o=>!o)} className={`inp text-left w-full ${unmatched?"border-amber-300 text-amber-700":(!cur?"text-stone-400":"")}`}>{label}<span className="float-right text-stone-300">▾</span></button>
     {open && <div className="absolute z-50 mt-1 w-full bg-white border border-stone-200 rounded-lg p-2" style={{maxHeight:"400px",overflow:"auto"}}>
-      {!nf && <>
+      <>
         <input autoFocus className="inp w-full mb-2" placeholder="Search ingredients…" value={q} onChange={e=>setQ(e.target.value)} />
         {!ql && sims.length>0 && <>
           <div className="text-[10px] uppercase tracking-wide text-emerald-700 px-1 mb-1">Similar to this line ({sims.length})</div>
@@ -6375,20 +6642,12 @@ function IngredientPicker({item, activeIngs, subRecipes, onPick, onCreate, seed}
         {fSubs.length>0 && <><div className="text-[10px] uppercase tracking-wide text-stone-400 px-1 mt-2 mb-1">Sub-recipes ({fSubs.length})</div>
         {fSubs.map(r=><button key={r.id} type="button" onClick={()=>pick("rec:"+r.id)} className="block w-full text-left text-sm px-2 py-1 rounded hover:bg-stone-100 truncate">▸ {r.name}</button>)}</>}
       </>}
-      {nf && <div className="border border-emerald-200 rounded-lg p-2 bg-emerald-50">
-        <div className="flex justify-between items-center mb-2"><div className="text-xs font-semibold text-stone-600">New ingredient</div><button type="button" onClick={()=>setNf(null)} className="text-xs text-stone-400">← back</button></div>
-        <div className="text-[11px] text-stone-500 mb-2 leading-snug">Enter what you <b>pay</b> and how <b>much</b> that buys, measured in the unit you cook with. The app then works out cost per g / ml / each.</div>
-        <label className="block mb-2"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Ingredient name</div><input autoFocus className="inp w-full" placeholder="e.g. Chopped tomato" value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})} /></label>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Use unit <span className="text-stone-400">(how you measure it in recipes)</span></div><input className="inp w-full" placeholder="g / ml / each" value={nf.useUnit} onChange={e=>setNf({...nf,useUnit:e.target.value.replace(/^\s*[\d.]+\s*/,"")})} /></label>
-          <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Category <span className="text-stone-400">(optional)</span></div><input className="inp w-full" placeholder="e.g. Produce, Dairy" value={nf.category} onChange={e=>setNf({...nf,category:e.target.value})} /></label>
-          <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Amount bought <span className="text-stone-400">(in use unit)</span></div><input type="number" className="inp w-full" placeholder="e.g. 1000" value={nf.purchaseQty} onChange={e=>setNf({...nf,purchaseQty:Number(e.target.value)})} /></label>
-          <label className="block"><div className="text-[11px] font-medium text-stone-600 mb-0.5">Price paid ($) <span className="text-stone-400">for that amount</span></div><input type="number" className="inp w-full" placeholder="e.g. 12.50" value={nf.purchasePrice} onChange={e=>setNf({...nf,purchasePrice:Number(e.target.value)})} /></label>
-        </div>
-        <div className="text-xs text-emerald-700 font-medium mb-2 mt-1">→ Unit cost ≈ {money(nuc)}/{(nf.useUnit||"?")} <span className="text-stone-400 font-normal">(e.g. $12.50 for 1000 g = $0.0125/g)</span></div>
-        <div className="flex gap-2 justify-end"><button type="button" onClick={()=>setNf(null)} className="text-xs text-stone-500 px-2 py-1">cancel</button><button type="button" onClick={saveNew} className="text-xs bg-emerald-600 text-white rounded-md px-3 py-1.5 font-medium">Add &amp; select</button></div>
-      </div>}
     </div>}
+    {/* The create form IS the Add Ingredient modal - one component, so the fields, the unit
+        dropdowns, the pack-size validation and the allergen/supplier rows can never drift apart
+        again. It used to be a cut-down emerald card with free-text units and no allergens, which
+        produced ingredients shaped differently from the ones made on the Ingredients tab. */}
+    {nf && <IngredientEditor ing={nf} onClose={()=>setNf(null)} onSave={o=>{ const id=onCreate(o); pick(id); }} />}
   </div>;
 }
 function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDelete,update}){
@@ -6403,12 +6662,19 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
   const {unitCost:uc,margin}=marginOf(f,ingMap);
   const activeIngs = state.ingredients.filter(i=>!i.archived);
   const [showPick,setShowPick]=useState(false);
+  const [upBusy,setUpBusy]=useState(false);
   const linked = f.items.filter(it=>it.ingredientId).length;
   const fromImport = f.items.some(it=>it.rawName);
   return <Modal onClose={onClose} title={f.id?"Edit Recipe":"Add Recipe"} wide>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <Field label="Name"><input className="inp" value={f.name} onChange={e=>set("name",e.target.value)} /></Field>
       <Field label="Category"><input className="inp" value={f.category} onChange={e=>set("category",e.target.value)} /></Field>
+      {/* POS name links this recipe to the till. Sales reports match Square items on this field
+          first, so the recipe keeps the kitchen name the chefs already know. */}
+      <div className="sm:col-span-2"><Field label="POS name (Square)">
+        <input className="inp" placeholder="e.g. Avo and Feta (VE/GFO) - leave blank if identical to the name above" value={f.posName||""} onChange={e=>set("posName",e.target.value)} />
+        <div className="text-[11px] text-stone-400 mt-1">Exactly how this dish is written on the Square till. Sales reports use it to match takings to this recipe's cost - type it once and every later report picks it up.</div>
+      </Field></div>
       <Field label="Yield"><input type="number" className="inp" value={f.yield} onChange={e=>set("yield",Number(e.target.value))} /></Field>
       <Field label="Yield unit"><input className="inp" value={f.yieldUnit} onChange={e=>set("yieldUnit",e.target.value)} /></Field>
       <Field label="Sell price ($)"><input type="number" className="inp" value={f.sellPrice} onChange={e=>set("sellPrice",Number(e.target.value))} /></Field>
@@ -6418,9 +6684,17 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
       <Field label="Photo">
         <div className="flex gap-2 items-center flex-wrap">
           <input className="inp flex-1 min-w-[180px]" placeholder="https://.../photo.jpg" value={f.image||""} onChange={e=>set("image",e.target.value)} />
-          <label className="shrink-0 px-3 py-2 text-sm rounded-lg border border-[color:var(--line)] cursor-pointer hover:bg-stone-100">Upload<input type="file" accept="image/*" className="hidden" onChange={e=>{ const file=e.target.files[0]; if(file) cloudinaryUpload(file).then(url=>{ set("image",url); update && update(st=>{ st.photos=[...(st.photos||[]), {id:rid("ph"), url, name:file.name}]; }); }).catch(err=>alert("Upload failed: "+err.message)); e.target.value=""; }} /></label>
+          <label className={"shrink-0 px-3 py-2 text-sm rounded-lg border border-[color:var(--line)] "+(upBusy?"opacity-60":"cursor-pointer hover:bg-stone-100")}>{upBusy?"Uploading\u2026":"Upload"}<input type="file" accept="image/*" className="hidden" disabled={upBusy} onChange={e=>{ const file=e.target.files[0]; e.target.value=""; if(!file) return;
+            setUpBusy(true);
+            cloudinaryUpload(file).then(up=>{
+              const url=(up&&up.url)||"";
+              if(!url) throw new Error("Cloudinary returned no image URL");
+              set("image",url);
+              update && update(st=>{ st.photos=[...(st.photos||[]), {id:rid("ph"), url, name:file.name, publicId:(up&&up.publicId)||""}]; });
+            }).catch(err=>alert("Upload failed: "+(err&&err.message||err)))
+              .then(()=>setUpBusy(false)); }} /></label>
           <Btn tone="ghost" size="sm" onClick={()=>setShowPick(true)}>Choose from library</Btn>
-          {f.image && <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-100 shrink-0"><img src={f.image} className="w-full h-full object-cover" /></div>}
+          {f.image && <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-100 shrink-0"><img src={cld(f.image,48)} className="w-full h-full object-cover" /></div>}
           {f.image && <button onClick={()=>set("image","")} className="text-xs text-red-400">remove</button>}
         </div>
         <div className="text-[11px] text-stone-400 mt-1">Upload goes to your Cloudinary library (free, no card). Or paste any hosted image URL.</div>
@@ -6868,10 +7142,149 @@ function UnitNormalizer({state, update}){
     </div>}
   </div>;
 }
+/* pdf.js is fetched the first time somebody uploads a PDF, not in <head>: it is ~350KB and only the
+   person publishing a sheet ever needs it. The kitchen tablet opening that sheet just loads images. */
+let pdfJsReady=null;
+function ensurePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(pdfJsReady) return pdfJsReady;
+  pdfJsReady=new Promise((res,rej)=>{
+    const base="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    const el=document.createElement("script"); el.src=base+"pdf.min.js";
+    el.onload=()=>{
+      /* The worker CANNOT be pointed straight at the CDN: `new Worker(<other origin>)` is refused,
+         pdf.js falls back to its in-page fake worker, and rendering then never completes (parsing
+         still works, which makes it look like a hang rather than an error). Wrapping the CDN script
+         in a same-origin blob that importScripts() it is the standard way round that. */
+      try{
+        const w=base+"pdf.worker.min.js";
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc=
+          URL.createObjectURL(new Blob(["importScripts('"+w+"');"],{type:"application/javascript"}));
+      }catch(e){ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+"pdf.worker.min.js"; }catch(e2){} }
+      if(window.pdfjsLib) res(window.pdfjsLib); else { pdfJsReady=null; rej(new Error("PDF reader loaded but did not register")); } };
+    el.onerror=()=>{ pdfJsReady=null; rej(new Error("could not load the PDF reader \u2014 check the connection")); };
+    document.head.appendChild(el);
+  });
+  return pdfJsReady;
+}
+/* Turn a catering PDF into one JPEG per page. A sheet exported from Canva or Word is 1-3MB of
+   vector and font data; the same pages as JPEGs come to a few hundred KB and live in Cloudinary
+   instead of the Firestore state document. 1240px wide is ~150dpi for A4 - sharp on the kitchen
+   tablet and still clean on paper. */
+const PDF_PAGE_W=1240, PDF_JPEG_Q=0.72;
+async function pdfToJpegFiles(file, onProgress){
+  const lib=await ensurePdfJs();
+  const doc=await lib.getDocument({data:await file.arrayBuffer()}).promise;
+  const stem=file.name.replace(/\.pdf$/i,"");
+  const out=[];
+  /* pdf.js schedules its canvas rendering through requestAnimationFrame, and a browser freezes rAF
+     in a background tab - switch away mid-upload and the conversion would stall forever. Swap in a
+     timer while the page is hidden, and put the real rAF back when we are done. */
+  const raf=window.requestAnimationFrame;
+  window.requestAnimationFrame=cb=> document.hidden ? setTimeout(()=>cb(performance.now()),16) : raf.call(window,cb);
+  try{
+    for(let p=1;p<=doc.numPages;p++){
+      if(onProgress) onProgress(p, doc.numPages);
+      const page=await doc.getPage(p);
+      const base=page.getViewport({scale:1});
+      const viewport=page.getViewport({scale:Math.min(3, PDF_PAGE_W/base.width)});
+      const cv=document.createElement("canvas");
+      cv.width=Math.round(viewport.width); cv.height=Math.round(viewport.height);
+      const ctx=cv.getContext("2d",{willReadFrequently:true});
+      // PDF pages are transparent; JPEG has no alpha, so an unpainted canvas prints solid black
+      ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,cv.width,cv.height);
+      await page.render({canvasContext:ctx, viewport}).promise;
+      const blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",PDF_JPEG_Q));
+      if(!blob) throw new Error("page "+p+" could not be rendered");
+      out.push(new File([blob], stem+"-p"+p+".jpg", {type:"image/jpeg"}));
+    }
+  } finally { window.requestAnimationFrame=raf; try{ doc.destroy(); }catch(e){} }
+  return out;
+}
+/* Print the pages in their own window. Printing the modal would drag the whole app's chrome onto
+   the paper, and one image per sheet is exactly what the kitchen wants. */
+function printSheetPages(pages, title){
+  const w=window.open("","_blank");
+  if(!w){ alert("Allow pop-ups for this site to print the sheet, or open a page image in a new tab."); return; }
+  const t=String(title||"Catering sheet").replace(/[<>&]/g," ");
+  w.document.write("<!doctype html><meta charset='utf-8'><title>"+t+"</title>"
+    +"<style>@page{margin:8mm}html,body{margin:0;background:#fff}"
+    +"img{width:100%;display:block;page-break-after:always}img:last-child{page-break-after:auto}</style>"
+    +pages.map(p=>"<img src='"+cld(String(p.url),1600,1).replace(/'/g,"%27")+"'>").join("")
+    +"<script>window.onload=function(){window.focus();window.print();}<\/script>");
+  w.document.close();
+}
+
+/* Publish a catering sheet by hand, from a PDF or a photo, and have it show on Today alongside the
+   agent-published HTML sheets. A PDF is rasterised to one JPEG per page in the browser and the pages
+   go to Cloudinary; app state keeps only the URLs. The earlier version stored the raw PDF base64
+   across several Firestore documents - far bigger, and it ate into the shared 1MB state document. */
+function CateringSheetUpload({state, update}){
+  const ref=useRef();
+  const [title,setTitle]=useState("");
+  const [date,setDate]=useState(()=>new Date().toLocaleDateString("en-CA"));
+  const [branch,setBranch]=useState("");
+  const [msg,setMsg]=useState(""); const [bad,setBad]=useState(false); const [busy,setBusy]=useState(false);
+  const fail=m=>{ setMsg(m); setBad(true); setBusy(false); };
+  const onFile=async(file)=>{
+    if(!file) return;
+    setBad(false);
+    const isPdf=file.type==="application/pdf"||/\.pdf$/i.test(file.name);
+    const isImg=/^image\//.test(file.type)||/\.(jpe?g|png|webp|gif)$/i.test(file.name);
+    if(!isPdf&&!isImg) return fail("Pick a PDF or an image.");
+    setBusy(true);
+    try{
+      let files;
+      if(isPdf){
+        setMsg("Reading "+file.name+"\u2026");
+        files=await pdfToJpegFiles(file,(p,n)=>setMsg("Converting page "+p+" of "+n+"\u2026"));
+        if(!files.length) throw new Error("that PDF has no pages");
+      } else files=[file];
+      const pages=[];
+      for(let k=0;k<files.length;k++){
+        setMsg("Uploading page "+(k+1)+" of "+files.length+"\u2026");
+        const up=await cloudinaryUpload(files[k], "catering");
+        if(!up||!up.url) throw new Error("Cloudinary returned no image URL");
+        pages.push({url:up.url, publicId:up.publicId||""});
+      }
+      const kb=Math.round(files.reduce((n,f)=>n+(f.size||0),0)/1024);
+      update(s=>{ if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[];
+        s.cateringSheets.push({id:rid("cat"), date, branch,
+          title:(title.trim()||file.name.replace(/\.(pdf|jpe?g|png|webp|gif)$/i,"")),
+          client:"", pdf:true, pdfName:file.name, pages, archived:false}); });
+      setTitle(""); setBusy(false);
+      setMsg("Uploaded \u2713 "+pages.length+" page"+(pages.length===1?"":"s")+" \u00b7 "+kb+" KB \u2014 shows on Today from "+date+" onwards.");
+    }catch(e){ fail("Upload failed: "+((e&&e.message)||e)); }
+  };
+  return <div>
+    <div className="text-xs font-semibold mb-1" style={{color:"var(--color-ink)"}}>Upload a catering sheet (PDF or image)</div>
+    <div className="text-[11px] mb-2" style={{color:"var(--color-ink-muted-48)"}}>
+      A PDF is converted to one image per page before it uploads — a couple of hundred KB instead of a couple of MB, and it opens instantly on the kitchen tablet.
+    </div>
+    <div className="flex flex-wrap gap-2 items-center">
+      <input className="inp" style={{flex:"1 1 200px", minWidth:180}} placeholder="Title (defaults to the file name)" value={title} onChange={e=>setTitle(e.target.value)} />
+      <input type="date" className="inp" style={{width:160}} value={date} onChange={e=>setDate(e.target.value)} />
+      <select className="inp" style={{width:170}} value={branch} onChange={e=>setBranch(e.target.value)}>
+        <option value="">All stores</option>
+        {(state.branches||[]).map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
+      </select>
+      <input ref={ref} type="file" accept="application/pdf,.pdf,image/*" className="hidden" onChange={e=>{ const f=e.target.files[0]; e.target.value=""; onFile(f); }} />
+      <Btn size="sm" onClick={()=>{ if(!busy) ref.current.click(); }}>{busy?"Working\u2026":"Choose file"}</Btn>
+    </div>
+    {msg && <div className="text-xs mt-2" style={{color: bad?"#d70015":"var(--color-ink-muted-48)"}}>{msg}</div>}
+  </div>;
+}
 function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, meEmail, ingMap, onReset}){
   const DAYS=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
   const [openDay,setOpenDay]=useState(""); const [catDept,setCatDept]=useState(null);
   const routine=state.dailyRoutine||{}; const docs=state.infoDocs||[];
+  /* Staff notices. today() is UTC-based, which in Brisbane (UTC+10) reads a day behind until 10am -
+     exactly when a morning notice gets posted - so default `from` off the LOCAL date instead. */
+  const localYmd=()=>new Date().toLocaleDateString("en-CA");
+  const notices=Array.isArray(state.notices)?state.notices:[];
+  const setNoticeField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.notices)) s.notices=[]; if(s.notices[i]) s.notices[i][k]=v; });
+  const addNotice=()=>update(s=>{ if(!Array.isArray(s.notices)) s.notices=[]; s.notices.unshift({id:rid("nt"), title:"", body:"", from:localYmd(), until:"", pin:false, tone:"info", branch:"", archived:false}); });
+  const removeNotice=i=>{ if(!confirm("Remove this notice?")) return; update(s=>{ s.notices.splice(i,1); }); };
   const setRoutine=(d,v)=>update(s=>{ if(!s.dailyRoutine) s.dailyRoutine={}; s.dailyRoutine[d]=v; });
   const setDocField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; if(s.infoDocs[i]) s.infoDocs[i][k]=v; });
   const addDoc=()=>update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; s.infoDocs.push({key:"doc"+Date.now(), title:"New document", text:""}); });
@@ -6887,6 +7300,8 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
     const s0=(state.cateringSheets||[])[i];
     const docId=s0&&(s0.sheetDoc||(s0.id?"sheet_"+s0.id:""));
     if(docId){ try{ const fb=fbRef&&fbRef.current; if(fb&&fb.db) fb.db.collection("hideout_app").doc(docId).delete().catch(()=>{}); }catch(e){} }
+    // a hand-uploaded sheet is page images in Cloudinary - drop those too, or they bill forever
+    try{ ((s0&&s0.pages)||[]).forEach(p=>{ if(p&&p.publicId) cloudinaryRelay("destroy",{publicId:p.publicId}).catch(()=>{}); }); }catch(e){}
     update(s=>{ s.cateringSheets.splice(i,1); });
   };
   const Section=({title,desc,children})=> <div className="card p-5 mb-4"><div className="font-semibold text-stone-800 mb-1" style={{fontFamily:"var(--font-display)"}}>{title}</div>{desc&&<p className="text-xs text-stone-500 mb-3 leading-relaxed">{desc}</p>}{children}</div>;
@@ -6904,6 +7319,31 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
       : <Section title="Team Access" desc="Managers only."><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Ask a manager to change who has access.</p></Section>}
     </>}
     {sub==="daily" && <>
+    <Section title="Staff notices" desc="Anything the team needs to see on the Today page — a handover note, a roster change, a heads-up for the week. The title shows on the board; the body opens when they tap it. Leave Until blank to keep a notice up until you remove it.">
+      <div className="space-y-3">
+        {notices.map((n,i)=>(<div key={n.id||i} className="rounded-xl p-3" style={{border:"1px solid var(--color-hairline-alpha)", borderLeft:"3px solid "+(n.tone==="urgent"?"var(--color-primary)":"var(--color-hairline-alpha)")}}>
+          <div className="flex items-center gap-2 mb-2">
+            <input className="inp flex-1" placeholder="Notice title — shows on the board" value={n.title||""} onChange={e=>setNoticeField(i,"title",e.target.value)} />
+            <button onClick={()=>removeNotice(i)} className="text-xs shrink-0" style={{background:"none",border:"none",color:"#d70015",cursor:"pointer"}}>remove</button>
+          </div>
+          <textarea value={n.body||""} onChange={e=>setNoticeField(i,"body",e.target.value)} className="inp"
+            placeholder="The full message. Same markdown as the routines — # heading, - bullet, ☐ checkbox, **bold**. Leave blank for a title-only notice."
+            style={{height:130, fontFamily:"var(--font-text)", fontSize:13, lineHeight:1.5}} />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+            <label className="text-xs flex items-center gap-1.5" style={{color:"var(--color-ink-muted-48)"}}>From <input type="date" className="inp" style={{width:150}} value={n.from||""} onChange={e=>setNoticeField(i,"from",e.target.value)} /></label>
+            <label className="text-xs flex items-center gap-1.5" style={{color:"var(--color-ink-muted-48)"}}>Until <input type="date" className="inp" style={{width:150}} value={n.until||""} onChange={e=>setNoticeField(i,"until",e.target.value)} /></label>
+            <label className="text-xs flex items-center gap-1.5" style={{color:"var(--color-ink-muted-48)", cursor:"pointer"}}><input type="checkbox" checked={!!n.pin} onChange={e=>setNoticeField(i,"pin",e.target.checked)} style={{accentColor:"var(--color-primary)"}} /> Pin to top</label>
+            <label className="text-xs flex items-center gap-1.5" style={{color:"var(--color-ink-muted-48)", cursor:"pointer"}}><input type="checkbox" checked={n.tone==="urgent"} onChange={e=>setNoticeField(i,"tone",e.target.checked?"urgent":"info")} style={{accentColor:"var(--color-primary)"}} /> Mark urgent</label>
+            <select className="inp" style={{width:170}} value={n.branch||""} onChange={e=>setNoticeField(i,"branch",e.target.value)}>
+              <option value="">All stores</option>
+              {(state.branches||[]).map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
+            </select>
+          </div>
+        </div>))}
+        {notices.length===0 && <div className="text-sm text-stone-400">Nothing posted. Add a notice and it appears on Today straight away.</div>}
+      </div>
+      <div className="mt-3"><Btn size="sm" onClick={addNotice}>+ Post a notice</Btn></div>
+    </Section>
     <Section title="Weekday routines" desc="Edit the routine shown on the Today page for each day. Uses simple markdown — # heading, - bullet, ☐ checkbox item, **bold**, and ``` for a fixed block.">
       <div className="space-y-2">
         {DAYS.map(d=>(<div key={d} className="rounded-xl overflow-hidden" style={{border:"1px solid var(--color-hairline-alpha)"}}>
@@ -6932,12 +7372,17 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
           <div className="min-w-0">
             <div className="font-medium text-stone-800 truncate" style={{fontFamily:"var(--font-display)"}}>{c.title||c.client||"Catering sheet"}</div>
             <div className="text-xs mt-0.5" style={{color:"var(--color-ink-muted-48)"}}>
-              {[c.date, c.branch, c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, (c.sheetDoc||c.html)?"sheet attached":"no sheet yet"].filter(Boolean).join(" · ")}
+              {[c.date, c.branch, c.client&&c.client!==c.title?c.client:null, c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, (c.pages&&c.pages.length)?(c.pages.length+" page image"+(c.pages.length===1?"":"s")+(c.pdfName?" · "+c.pdfName:"")):(c.sheetDoc||c.html)?"sheet attached":"no sheet yet"].filter(Boolean).join(" · ")}
             </div>
           </div>
           <button onClick={()=>removeSheet(i)} className="text-xs shrink-0" style={{background:"none",border:"none",color:"#d70015",cursor:"pointer"}}>Remove</button>
         </div>))}
-        {sheets.length===0 && <div className="text-sm text-stone-400">Nothing published yet. Ask Claude to build a catering sheet and it will appear here.</div>}
+        {sheets.length===0 && <div className="text-sm text-stone-400">Nothing published yet. Ask Claude to build a catering sheet, or upload your own below.</div>}
+      </div>
+      {/* The agent publishes HTML sheets, but a sheet made outside the app (Canva, Word, a client's
+          own order form, a photo of a printed page) never is one - so it gets a manual path in. */}
+      <div className="mt-4 pt-4" style={{borderTop:"1px solid var(--color-hairline-alpha)"}}>
+        <CateringSheetUpload state={state} update={update} />
       </div>
       {sheets.length>0 && <div className="mt-3">
         {/* Each sheet's HTML lives in its own Firestore doc, so this list stays tiny no matter how many

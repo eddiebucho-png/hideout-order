@@ -3239,7 +3239,10 @@ body{
   function noticeHint(){
     var s=rccData(), d=new Date();
     var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-    var live=(s.notices||[]).filter(function(n){ return n && !n.archived && (!n.until || String(n.until)>=ds); });
+    /* HideoutRCC.notices() also carries the auto-generated meeting notices, which are derived and
+       never stored - reading s.notices alone would tell the model the board is empty. */
+    var all=[]; try{ all=(window.HideoutRCC&&window.HideoutRCC.notices)?window.HideoutRCC.notices():(s.notices||[]); }catch(e){ all=(s.notices||[]); }
+    var live=all.filter(function(n){ return n && !n.archived && (!n.until || String(n.until)>=ds); });
     var cur=live.length
       ? ("\nCURRENTLY ON THE BOARD: "+live.slice(0,20).map(function(n){
           return "\u2022 \""+String(n.title||"")+"\""+(n.until?(" (until "+n.until+")"):"")+(n.tone==="urgent"?" [urgent]":"")+(n.branch?(" ["+n.branch+"]"):"")+(String(n.body||"").trim()?(" \u2014 "+String(n.body).replace(/\s+/g," ").slice(0,120)):"");
@@ -4560,6 +4563,55 @@ const MEETING_PRINCIPLES={
   after:["Share the completed meeting record with the team.","Do what you committed to — next meeting opens by reviewing those actions. Follow-through is what makes the meeting worth having."]
 };
 function fmtMeetDate(d){ try{ const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-AU",{weekday:"short", day:"numeric", month:"short", year:"numeric"}); }catch(e){ return d; } }
+/* ---- Meeting -> notice board ---------------------------------------------------------------
+   Every venue gets one notice built from its own most recent meeting, and the next meeting at that
+   venue replaces it (they meet about every two months). Derived at render time instead of written
+   into state: no stale copies to clean up, no duplicates when a meeting is edited, and ticking an
+   action off in the meeting editor updates the board the moment it happens. */
+function meetingNoticeBody(m){
+  const L=[];
+  const acts=(m.actions||[]).filter(a=>a && String(a.text||"").trim());
+  if(acts.length){
+    L.push("# Actions from the meeting");
+    acts.forEach(a=>{
+      const tail=[a.owner&&String(a.owner).trim(), a.due&&("due "+a.due)].filter(Boolean).join(", ");
+      // \u2610 renders as a tick-box, a done action drops to a plain bullet with a check
+      L.push((a.done?"- \u2713 ":"\u2610 ")+String(a.text).trim()+(tail?(" ("+tail+")"):""));
+    });
+  }
+  const notes=MEETING_SECTIONS.map(sec=>{
+    const t=String((m.notes||{})[sec.id]||"").trim();
+    return t? {title:sec.title, text:t.replace(/\s+/g," ")} : null;
+  }).filter(Boolean);
+  if(notes.length){
+    if(L.length) L.push("");
+    L.push("# What we covered");
+    notes.forEach(n=>L.push("- **"+n.title+"** \u2014 "+n.text));
+  }
+  const who=[m.facilitator&&("Run by "+String(m.facilitator).trim()),
+             m.attendees&&("Present: "+String(m.attendees).trim())].filter(Boolean).join(" \u00b7 ");
+  if(who && L.length){ L.push(""); L.push(who); }
+  return L.join("\n");
+}
+function meetingNotices(state){
+  if(!state || state.noticeFromMeetings===false) return [];
+  const latest={};
+  (state.teamMeetings||[]).forEach(m=>{
+    if(!m || !m.date) return;
+    const k=m.branchId||"", cur=latest[k];
+    if(!cur || ((m.date||"")+(m.time||"")) > ((cur.date||"")+(cur.time||""))) latest[k]=m;
+  });
+  const names={}; (state.branches||[]).forEach(b=>{ names[b.id]=b.name; });
+  return Object.keys(latest).map(k=>{
+    const m=latest[k], body=meetingNoticeBody(m);
+    if(!body.trim()) return null;                       // an empty meeting record is not a notice
+    const open=(m.actions||[]).filter(a=>a && String(a.text||"").trim() && !a.done).length;
+    return { id:"auto-meet-"+m.id, auto:true, meetingId:m.id,
+      title:"Team meeting "+(fmtMeetDate(m.date)||m.date)+(open? (" \u2014 "+open+" open action"+(open>1?"s":"")) : " \u2014 recap"),
+      body, from:m.date, until:"", pin:true, tone:"info",
+      branch:names[k]||"", archived:false };
+  }).filter(Boolean);
+}
 function MeetGuideLine({sec}){ return <div className="text-xs mt-0.5 mb-2" style={{color:"var(--color-ink-muted-48, #a8a29e)"}}><b style={{fontWeight:600}}>Bring:</b> {sec.bring} <span className="mx-1">·</span> <b style={{fontWeight:600}}>Run it:</b> {sec.run}</div>; }
 function TeamMeetings({state, update, branch, branches}){
   const [view,setView]=useState("meetings"); // meetings | guide
@@ -4871,7 +4923,8 @@ function App(){
       /* Post to the Today notice board from the assistant. Everything is re-validated here rather
          than trusted from the model: a bad date would silently hide the notice for ever, and a
          branch name that matches nothing would hide it from every store. */
-      notices:()=> (stateRef.current.notices||[]).filter(n=>n&&!n.archived),
+      // derived meeting notices included, so the bot's view of the board matches what staff see
+      notices:()=> meetingNotices(stateRef.current).concat((stateRef.current.notices||[]).filter(n=>n&&!n.archived)),
       addNotice:(n)=>{
         n=n||{};
         const ymd=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||""))?String(v):"";
@@ -5288,6 +5341,32 @@ function parseIcs(text){
   });
   return evs;
 }
+/* Last-good calendar per branch. The feed it comes from is unreliable enough that a failed refresh
+   used to wipe the run sheet to an error message; keeping the previous load means the kitchen still
+   sees this morning's bookings, clearly labelled with when it was fetched. */
+const CAL_CACHE_KEY=b=>"hideout_cal_cache_"+(b||"");
+function loadCalCache(b){
+  try{
+    const j=JSON.parse(localStorage.getItem(CAL_CACHE_KEY(b))||"null");
+    if(!j||!Array.isArray(j.events)) return null;
+    return {ts:Number(j.ts)||0, full:!!j.full, events:j.events.map(e=>({
+      start:new Date(e.start), end:e.end?new Date(e.end):null,
+      summary:e.summary||"", location:e.location||"", allday:!!e.allday}))};
+  }catch(e){ return null; }
+}
+function saveCalCache(b, events, full){
+  try{
+    localStorage.setItem(CAL_CACHE_KEY(b), JSON.stringify({ts:Date.now(), full:!!full,
+      events:(events||[]).map(e=>({
+        start:e.start&&e.start.toISOString(), end:e.end?e.end.toISOString():null,
+        summary:e.summary||"", location:e.location||"", allday:!!e.allday}))}));
+  }catch(e){}
+}
+/* A free relay that hangs is as common as one that errors, so every attempt gets its own deadline. */
+function fetchDeadline(u, ms){
+  const c=new AbortController(); const t=setTimeout(()=>{ try{ c.abort(); }catch(e){} }, ms||9000);
+  return fetch(u,{cache:"no-store", signal:c.signal}).finally(()=>clearTimeout(t));
+}
 function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
   const [ics,setIcs]=useState(()=>loadIcs(branch));
   const [draft,setDraft]=useState("");
@@ -5297,6 +5376,9 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
   const [sheet,setSheet]=useState(null);
   const [notice,setNotice]=useState(null);      // notice opened from the board
   const [calAnchor,setCalAnchor]=useState(null); // month shown in the grid; null = follow the viewed day
+  const [staleAt,setStaleAt]=useState(0);        // >0 = showing a cached calendar from this timestamp
+  const calFullRef=useRef(false);                // true once a whole-calendar .ics load has landed
+  const calBranchRef=useRef(branch);
   /* Sheet HTML lives in its OWN Firestore doc (hideout_app/sheet_{id}), not in the app state.
      At ~19KB a sheet, keeping them in the shared state document would fill Firestore's 1MB limit
      within a few months at 6–10 caterings a month. So the list carries metadata only and the HTML is
@@ -5378,25 +5460,60 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
     const ds=now.getFullYear()+"-"+pad(now.getMonth()+1)+"-"+pad(now.getDate());
     const bn=(branchName||"").toLowerCase();
     const store=(bn.includes("valley")||bn.includes("515"))?"valley":(bn.includes("edward")||bn.includes("100"))?"city":"adelaide";
+    /* 1) the IOS backend reads the private .ics server-side and answers one day at a time. When its
+          Apps Script deployment is healthy this is the only request needed and no relay is involved. */
     try{
-      const r=await fetch(IOS_CAL_URL+"?action=calIcs&token="+IOS_CAL_TOKEN+"&date="+ds,{cache:"no-store"});
+      const r=await fetchDeadline(IOS_CAL_URL+"?action=calIcs&token="+IOS_CAL_TOKEN+"&date="+ds, 9000);
       if(r.ok){ const j=await r.json(); if(j && j.ok && Array.isArray(j.events)){
         const mk=h=>new Date(ds+"T"+((h&&/^\d{1,2}:\d{2}$/.test(h))?(h.length===4?"0"+h:h):"00:00")+":00");
-        setEvents(j.events.map(ev=>({start:mk(ev.start), end:mk(ev.end||ev.start), summary:ev.title||"(untitled)", location:ev.location||"", allday:!!ev.allDay})));
-        setStatus(""); return;
+        const evs=j.events.map(ev=>({start:mk(ev.start), end:mk(ev.end||ev.start), summary:ev.title||"(untitled)", location:ev.location||"", allday:!!ev.allDay}));
+        calFullRef.current=false;                 // one day only - a day switch has to re-ask
+        setEvents(evs); saveCalCache(branch, evs, false); setStaleAt(0); setStatus(""); return;
       }}
     }catch(e){}
+    /* 2) the .ics itself. Google serves it without CORS headers, so the direct hit only works from a
+          context that allows it; after that we are down to free public relays, which rate-limit and
+          go dark without warning. Whatever lands here is the WHOLE calendar, not just today. */
     if(url){
-      let u=url.trim().replace(/^webcal:/i,"https:");
-      const tries=[u, "https://corsproxy.io/?url="+encodeURIComponent(u), "https://api.allorigins.win/raw?url="+encodeURIComponent(u)];
-      for(const tu of tries){ try{ const r=await fetch(tu,{cache:"no-store"}); if(!r.ok) continue; const txt=await r.text(); if(txt.indexOf("VEVENT")===-1) continue; setEvents(parseIcs(txt)); setStatus(""); return; }catch(e){} }
+      const u=url.trim().replace(/^webcal:/i,"https:");
+      const tries=[u,
+        "https://corsproxy.io/?url="+encodeURIComponent(u),
+        "https://api.allorigins.win/raw?url="+encodeURIComponent(u),
+        "https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)];
+      for(const tu of tries){
+        try{
+          const r=await fetchDeadline(tu, 9000); if(!r.ok) continue;
+          const txt=await r.text(); if(txt.indexOf("VEVENT")===-1) continue;
+          const evs=parseIcs(txt);
+          calFullRef.current=true;                // whole calendar in hand - day switches are free
+          setEvents(evs); saveCalCache(branch, evs, true); setStaleAt(0); setStatus(""); return;
+        }catch(e){}
+      }
     }
-    setStatus("Could not load the calendar. The booking backend may be unavailable — try Refresh, or check the .ics link in Calendar settings."); setEvents([]);
+    /* 3) nothing answered. Fall back to the last good load rather than blanking the run sheet -
+          a two-hour-old booking list beats an error message in the middle of service. */
+    const cached=loadCalCache(branch);
+    if(cached && cached.events.length){
+      calFullRef.current=cached.full;
+      setEvents(cached.events); setStaleAt(cached.ts); setStatus(""); return;
+    }
+    setStaleAt(0);
+    setStatus("Calendar feed is not answering right now. Nothing cached to fall back on yet — try Refresh in a minute.");
+    setEvents([]);
   }
-  /* dayOffset is in the deps on purpose: the IOS backend is queried with ?date=<viewed day> and
-     returns that day only, so without a refetch Tomorrow always looked empty. The .ics fallback
-     returns the whole calendar, so refetching there is redundant but harmless. */
-  useEffect(()=>{ const v=loadIcs(branch); setIcs(v); setEvents(null); fetchCal(v); }, [branch, dayOffset]);
+  /* dayOffset is in the deps because the IOS backend is queried with ?date=<viewed day> and returns
+     that day only - without a refetch, Tomorrow always looked empty. But an .ics load already holds
+     the whole calendar, so once one lands, tapping through days must NOT fire more requests: the
+     relays it comes through rate-limit hard, and burning the quota is what makes the next real
+     refresh fail. */
+  useEffect(()=>{
+    const branchChanged=calBranchRef.current!==branch;
+    calBranchRef.current=branch;
+    if(!branchChanged && calFullRef.current) return;
+    const v=loadIcs(branch); setIcs(v);
+    if(branchChanged){ setEvents(null); setStaleAt(0); calFullRef.current=false; }
+    fetchCal(v);
+  }, [branch, dayOffset]);
   const today=(events||[]).filter(e=>isSameDay(e.start, now)).sort((a,b)=>a.start-b.start);
   useEffect(()=>{ try{ const bn=((state.branches||[]).find(b=>b.id===branch)||{}).name||String(branch||""); window.__HIDEOUT_CAL={ts:Date.now(), branch:bn, events:(events||[]).map(e=>({date:(e.start&&e.start.getFullYear)?(e.start.getFullYear()+"-"+String(e.start.getMonth()+1).padStart(2,"0")+"-"+String(e.start.getDate()).padStart(2,"0")):"", start:(e.start&&e.start.toTimeString)?e.start.toTimeString().slice(0,5):"", summary:e.summary||"", allday:!!e.allday, location:e.location||""}))}; }catch(err){} }, [events, branch]);
   // smart alerts from data
@@ -5421,7 +5538,7 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
      up from `from` until `until` (both inclusive); a blank `until` keeps it up until removed. The
      window is tested against the VIEWED day, so switching to Tomorrow previews what the team will
      see tomorrow, the same way the run sheet and routine already do. */
-  const liveNotices=(state.notices||[])
+  const liveNotices=meetingNotices(state).concat(state.notices||[])
     .filter(n=>n && !n.archived && (String(n.title||"").trim()||String(n.body||"").trim()))
     .filter(n=>!n.from  || String(n.from) <=dateViewStr)
     .filter(n=>!n.until || String(n.until)>=dateViewStr)
@@ -5519,7 +5636,7 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
                   background:n.tone==="urgent"?"rgba(200,26,34,.05)":"var(--color-canvas)", cursor:hasBody?"pointer":"default"}}>
                 <div className="flex items-baseline justify-between gap-3 flex-wrap">
                   <div className="font-semibold text-stone-800" style={{fontFamily:"var(--font-display)"}}>{n.pin?"★ ":""}{n.title||"Notice"}</div>
-                  <div className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{[noticeStamp(n), n.until?("until "+n.until):null].filter(Boolean).join(" · ")}</div>
+                  <div className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{[n.auto?"From the team meeting":noticeStamp(n), n.until?("until "+n.until):null].filter(Boolean).join(" · ")}</div>
                 </div>
                 {hasBody && <div className="text-xs mt-1" style={{color:"var(--color-ink-muted-48)"}}>
                   {noticeBlurb(n.body)}<span style={{color:"var(--color-primary)"}}> · read ›</span>
@@ -5531,7 +5648,7 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
       <div className="md:col-span-2">
         <div className="flex items-center justify-between mb-3 pb-2" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>
           <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>Calendar</div>
-          {(ics||(events&&events.length)) && <button onClick={()=>fetchCal(ics)} className="text-[11px]" style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer"}}>Refresh</button>}
+          {(ics||(events&&events.length)) && <button onClick={()=>{ calFullRef.current=false; fetchCal(ics); }} className="text-[11px]" style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer"}}>Refresh</button>}
         </div>
         <div className="flex items-center justify-between mb-2">
           <button onClick={()=>setCalAnchor(shiftMonth(calMonth,-1))} aria-label="Previous month" style={{minWidth:34, minHeight:34, border:"1px solid var(--color-hairline-alpha)", borderRadius:999, background:"var(--color-surface,#fff)", color:"var(--color-ink-muted-48)", cursor:"pointer", lineHeight:1}}>‹</button>
@@ -5564,7 +5681,10 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
           <div className="text-[11px] font-semibold mb-1 pb-1.5" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink-muted-48)", borderBottom:"1px solid var(--color-hairline-alpha)"}}>
             {dayOffset===0?"Today’s":dayOffset===1?"Tomorrow’s":dayOffset===-1?"Yesterday’s":now.toLocaleDateString("en-AU",{day:"numeric",month:"short"})+"’s"} run sheet
           </div>
-          {events===null && <div className="text-sm text-stone-400 py-4">{status||"Loading…"}</div>}
+          {staleAt>0 && <div className="text-[11px] mb-2" style={{color:"#b45309"}}>
+            Couldn’t reach the calendar just now — showing the last load ({new Date(staleAt).toLocaleString("en-AU",{weekday:"short", hour:"numeric", minute:"2-digit"})}). Tap Refresh to retry.
+          </div>}
+          {events===null && <div className="text-sm text-stone-400 py-4">{status||"Loading\u2026"}</div>}
           {events!==null && !ics && !(events&&events.length) && <div className="text-sm text-stone-500 py-3">Connect your Google Calendar to see bookings.<div className="mt-3"><Btn size="sm" onClick={()=>{ setDraft(""); setShowCfg(true); }}>Connect calendar</Btn></div></div>}
           {events!==null && ics && today.length===0 && <div className="text-sm text-stone-500 py-4">{status||"No bookings scheduled."}</div>}
           <div className="stagger">
@@ -5680,7 +5800,7 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
     {doc && <Modal title={doc.title} onClose={()=>setDoc("")} wide><MiniDoc text={doc.text} /></Modal>}
     {notice && <Modal title={notice.title||"Notice"} onClose={()=>setNotice(null)} wide>
       <div className="text-[11px] mb-3 pb-2" style={{color:"var(--color-ink-muted-48)", letterSpacing:"0.08em", textTransform:"uppercase", borderBottom:"1px solid var(--color-hairline-alpha)"}}>
-        {[noticeStamp(notice), notice.until?("up until "+notice.until):"no end date", notice.branch||"all stores"].filter(Boolean).join(" \u00b7 ")}
+        {[notice.auto?"Generated from the team meeting":noticeStamp(notice), notice.auto?"until the next meeting":(notice.until?("up until "+notice.until):"no end date"), notice.branch||"all stores"].filter(Boolean).join(" \u00b7 ")}
       </div>
       <MiniDoc text={notice.body} />
     </Modal>}
@@ -7282,6 +7402,7 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
      exactly when a morning notice gets posted - so default `from` off the LOCAL date instead. */
   const localYmd=()=>new Date().toLocaleDateString("en-CA");
   const notices=Array.isArray(state.notices)?state.notices:[];
+  const autoNotices=meetingNotices(state);
   const setNoticeField=(i,k,v)=>update(s=>{ if(!Array.isArray(s.notices)) s.notices=[]; if(s.notices[i]) s.notices[i][k]=v; });
   const addNotice=()=>update(s=>{ if(!Array.isArray(s.notices)) s.notices=[]; s.notices.unshift({id:rid("nt"), title:"", body:"", from:localYmd(), until:"", pin:false, tone:"info", branch:"", archived:false}); });
   const removeNotice=i=>{ if(!confirm("Remove this notice?")) return; update(s=>{ s.notices.splice(i,1); }); };
@@ -7340,9 +7461,31 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
             </select>
           </div>
         </div>))}
-        {notices.length===0 && <div className="text-sm text-stone-400">Nothing posted. Add a notice and it appears on Today straight away.</div>}
+        {notices.length===0 && <div className="text-sm text-stone-400">Nothing posted by hand. Add a notice and it appears on Today straight away.</div>}
       </div>
       <div className="mt-3"><Btn size="sm" onClick={addNotice}>+ Post a notice</Btn></div>
+      {/* Generated, not stored - so they are listed read-only here. Editing happens in Team Meeting. */}
+      <div className="mt-5 pt-4" style={{borderTop:"1px solid var(--color-hairline-alpha)"}}>
+        <label className="flex items-center gap-2 text-sm text-stone-700 mb-2" style={{cursor:"pointer"}}>
+          <input type="checkbox" checked={state.noticeFromMeetings!==false} style={{accentColor:"var(--color-primary)"}}
+            onChange={e=>update(s=>{ s.noticeFromMeetings=e.target.checked; })} />
+          Put the last team meeting on the board automatically
+        </label>
+        <div className="text-xs mb-3" style={{color:"var(--color-ink-muted-48)"}}>
+          One notice per store, built from that store's most recent meeting \u2014 open actions as tick-boxes plus what was covered. The next meeting at that store replaces it. Edit the content in Team Meeting, not here.
+        </div>
+        {autoNotices.length===0
+          ? <div className="text-sm text-stone-400">No meeting recorded yet \u2014 run one in Team Meeting and it lands on the board.</div>
+          : <div className="space-y-2">
+            {autoNotices.map(n=>(<div key={n.id} className="rounded-xl p-3" style={{border:"1px dashed var(--color-hairline-alpha)", background:"var(--color-canvas)"}}>
+              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                <div className="font-medium text-stone-800" style={{fontFamily:"var(--font-display)"}}>{n.title}</div>
+                <div className="text-[11px]" style={{color:"var(--color-ink-muted-48)"}}>{n.branch||"all stores"} \u00b7 auto</div>
+              </div>
+              <div className="text-xs mt-1" style={{color:"var(--color-ink-muted-48)"}}>{String(n.body||"").replace(/[#*`\u2610\u2713]/g," ").replace(/\s+/g," ").trim().slice(0,150)}\u2026</div>
+            </div>))}
+          </div>}
+      </div>
     </Section>
     <Section title="Weekday routines" desc="Edit the routine shown on the Today page for each day. Uses simple markdown — # heading, - bullet, ☐ checkbox item, **bold**, and ``` for a fixed block.">
       <div className="space-y-2">

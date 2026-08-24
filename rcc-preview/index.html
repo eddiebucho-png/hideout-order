@@ -5832,8 +5832,12 @@ const PREP_COLS=[["urgent","URGENT"],["todo","TO DO"],["done","DONE"]];
 function PrepHandover({state, update, branch, meEmail, composer=true}){
   const [draft,setDraft]=useState("");
   const [showDone,setShowDone]=useState(false);
-  const [showAdd,setShowAdd]=useState(false);   // the + card, used where there is no inline composer
+  const [showAdd,setShowAdd]=useState(false);   // the + card: multi-line note with photos
   const [allDone,setAllDone]=useState(false);   // "show everything" for the cleared list
+  const [draftPhotos,setDraftPhotos]=useState([]);
+  const [upBusy,setUpBusy]=useState(false);
+  const [viewPhoto,setViewPhoto]=useState("");  // tapped thumbnail, shown full size
+  const fileRef=useRef();
   /* Strictly this location. Handover is a per-venue thing - 340's chef must not see 515's lines,
      and the loose version of this test also let a note with no branch leak into every store. */
   const all=(state.prepNotes||[]).filter(n=>n && n.branch===branch);
@@ -5841,10 +5845,30 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
   const clearedAll=all.filter(n=>n.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
   const cleared=allDone?clearedAll:clearedAll.slice(0,20);
   const who=String(meEmail||"").split("@")[0]||"";
-  const add=()=>{ const t=draft.trim(); if(!t) return;
+  /* A photo on its own is a valid handover - a picture of the bench that still needs doing says
+     everything - so this accepts text, photos, or both. */
+  const add=()=>{ const t=draft.trim(); if(!t && !draftPhotos.length) return;
+    const ph=draftPhotos.slice();
     update(s=>{ if(!Array.isArray(s.prepNotes)) s.prepNotes=[];
-      s.prepNotes.unshift({id:rid("pn"), text:t, by:who, at:Date.now(), branch, done:false}); });
-    setDraft(""); setShowAdd(false); };
+      s.prepNotes.unshift({id:rid("pn"), text:t, by:who, at:Date.now(), branch, done:false, photos:ph}); });
+    setDraft(""); setDraftPhotos([]); setShowAdd(false); };
+  /* Tagged handover + handover_<venue>, never "dish". The photo library's "Choose from library"
+     lists by the dish tag only, so a picture of an uncleaned bench can never turn up as a menu
+     photo, and each venue's handover shots stay separately addressable in Cloudinary. */
+  const brName=((state.branches||[]).find(b=>b.id===branch)||{}).name||String(branch||"");
+  const photoTag="handover,handover_"+(brName.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"unknown");
+  const addPhotos=async(files)=>{
+    if(!files||!files.length) return;
+    setUpBusy(true);
+    for(const file of files){
+      try{
+        const up=await cloudinaryUpload(file, photoTag);
+        if(up&&up.url) setDraftPhotos(p=>p.concat([{url:up.url, publicId:up.publicId||""}]));
+        else throw new Error("Cloudinary returned no image URL");
+      }catch(e){ alert("Photo upload failed: "+((e&&e.message)||e)); }
+    }
+    setUpBusy(false);
+  };
   const setDone=(id,v)=>update(s=>{ const n=(s.prepNotes||[]).find(x=>x.id===id);
     if(n){ n.done=v; n.doneAt=v?Date.now():0; n.doneBy=v?who:""; } });
   const remove=id=>{ if(!confirm("Delete this handover line for good?")) return;
@@ -5864,8 +5888,9 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
           style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>
           {showDone?"Hide cleared":"Show cleared ("+clearedAll.length+")"}
         </button>}
-        {/* where the inline composer is hidden (Today), this is the way in */}
-        {!composer && <button onClick={()=>setShowAdd(true)} aria-label="Leave a note for tomorrow"
+        {/* the full card (multi-line + photos) is reachable from both surfaces; the inline box on
+            the Prep board stays for the one-line-and-go case */}
+        {<button onClick={()=>setShowAdd(true)} aria-label="Leave a note for tomorrow"
           style={{width:30, height:30, borderRadius:8, border:"none", background:"var(--color-primary)",
             color:"#fff", fontSize:19, lineHeight:1, cursor:"pointer", flexShrink:0}}>+</button>}
       </div>
@@ -5888,8 +5913,15 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
         <input type="checkbox" checked={false} onChange={()=>setDone(n.id,true)}
           style={{marginTop:2, width:18, height:18, flexShrink:0, accentColor:"var(--color-primary)"}} />
         <span className="flex-1 min-w-0">
-          <span className="text-sm" style={{color:"var(--color-ink)", lineHeight:1.45}}>{n.text}</span>
+          {/* pre-wrap: a note written in the card can be several lines */}
+          <span className="text-sm" style={{color:"var(--color-ink)", lineHeight:1.45, whiteSpace:"pre-wrap"}}>{n.text}</span>
           <span className="text-[11px] ml-2" style={{color:"var(--color-ink-muted-48)"}}>{[n.by, ago(n.at)].filter(Boolean).join(" \u00b7 ")}</span>
+          {(n.photos||[]).length>0 && <span className="flex gap-1.5 mt-1.5 flex-wrap">
+            {(n.photos||[]).map((p,pi)=>(<img key={pi} src={cld(p.url,72)} alt="" loading="lazy"
+              onClick={ev=>{ ev.preventDefault(); ev.stopPropagation(); setViewPhoto(p.url); }}
+              style={{width:72, height:72, objectFit:"cover", borderRadius:8, cursor:"zoom-in",
+                border:"1px solid var(--color-hairline-alpha)"}} />))}
+          </span>}
         </span>
         <button onClick={e=>{ e.preventDefault(); remove(n.id); }} className="text-xs shrink-0 opacity-0 group-hover:opacity-100"
           style={{background:"none", border:"none", color:"#d70015", cursor:"pointer"}}>delete</button>
@@ -5900,7 +5932,15 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
       {cleared.map(n=>(<label key={n.id} className="flex items-start gap-2.5" style={{cursor:"pointer", padding:"6px 0"}}>
         <input type="checkbox" checked onChange={()=>setDone(n.id,false)}
           style={{marginTop:2, width:18, height:18, flexShrink:0, accentColor:"var(--color-primary)"}} />
-        <span className="flex-1 min-w-0 text-sm" style={{color:"var(--color-ink-muted-48)", textDecoration:"line-through"}}>{n.text}</span>
+        <span className="flex-1 min-w-0">
+          <span className="text-sm" style={{color:"var(--color-ink-muted-48)", textDecoration:"line-through", whiteSpace:"pre-wrap"}}>{n.text}</span>
+          {(n.photos||[]).length>0 && <span className="flex gap-1.5 mt-1.5 flex-wrap">
+            {(n.photos||[]).map((p,pi)=>(<img key={pi} src={cld(p.url,56)} alt="" loading="lazy"
+              onClick={ev=>{ ev.preventDefault(); ev.stopPropagation(); setViewPhoto(p.url); }}
+              style={{width:56, height:56, objectFit:"cover", borderRadius:6, cursor:"zoom-in", opacity:.75,
+                border:"1px solid var(--color-hairline-alpha)"}} />))}
+          </span>}
+        </span>
         <span className="text-[11px] shrink-0" style={{color:"var(--color-ink-muted-48)"}}>{n.doneBy?("cleared by "+n.doneBy):"cleared"}</span>
       </label>))}
       {!allDone && clearedAll.length>20 && <button onClick={()=>setAllDone(true)} className="text-[11px] mt-1"
@@ -5908,15 +5948,46 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
         Show all {clearedAll.length}
       </button>}
     </div>}
-    {showAdd && <Modal title="Note for tomorrow&rsquo;s chef" onClose={()=>setShowAdd(false)}>
-      <input autoFocus className="inp" style={{height:44}} value={draft}
-        placeholder="Anything the next chef needs to know…"
+    {showAdd && <Modal wide title="Note for tomorrow&rsquo;s chef" onClose={()=>{ setShowAdd(false); setDraft(""); setDraftPhotos([]); }}>
+      {/* a textarea, not a one-line input: handover is usually two or three things, and Enter has to
+          make a new line rather than submit */}
+      <textarea autoFocus className="inp" rows={5} value={draft}
+        placeholder={"Anything the next chef needs to know\u2026\n\nOne thing per line reads best on the board."}
         onChange={e=>setDraft(e.target.value)}
-        onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } }} />
-      <div className="flex justify-end gap-2 mt-4">
-        <Btn tone="ghost" onClick={()=>setShowAdd(false)}>Cancel</Btn>
-        <Btn onClick={add}>Leave note</Btn>
+        style={{minHeight:130, fontFamily:"var(--font-text)", fontSize:14, lineHeight:1.5}} />
+      <div className="mt-3">
+        <div className="text-xs font-medium mb-2" style={{color:"var(--color-ink)"}}>Photos</div>
+        <div className="text-[11px] mb-2" style={{color:"var(--color-ink-muted-48)"}}>
+          A spot that still needs doing, or proof it is done. Filed under &ldquo;{photoTag.split(",")[1]}&rdquo; — separate from the dish photos, and separate per venue.
+        </div>
+        <div className="flex gap-2 flex-wrap items-center">
+          {draftPhotos.map((p,i)=>(<span key={i} className="relative" style={{display:"inline-block"}}>
+            <img src={cld(p.url,110)} alt="" style={{width:110, height:110, objectFit:"cover", borderRadius:10, border:"1px solid var(--color-hairline-alpha)", display:"block"}} />
+            <button onClick={()=>setDraftPhotos(list=>list.filter((_,j)=>j!==i))} aria-label="Remove photo"
+              style={{position:"absolute", top:-7, right:-7, width:24, height:24, borderRadius:999, border:"none",
+                background:"var(--color-ink)", color:"#fff", fontSize:14, lineHeight:1, cursor:"pointer"}}>&times;</button>
+          </span>))}
+          {/* accept=image/* lets a phone offer both the camera and the gallery */}
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e=>{ const fs=[...e.target.files]; e.target.value=""; addPhotos(fs); }} />
+          <button onClick={()=>{ if(!upBusy) fileRef.current.click(); }}
+            style={{width:110, height:110, borderRadius:10, cursor:upBusy?"default":"pointer",
+              border:"1px dashed var(--color-hairline-alpha)", background:"var(--color-canvas)",
+              color:"var(--color-ink-muted-48)", fontSize:12.5, display:"flex", flexDirection:"column",
+              alignItems:"center", justifyContent:"center", gap:4}}>
+            <span style={{fontSize:22, lineHeight:1}}>{upBusy?"\u2026":"+"}</span>
+            <span>{upBusy?"Uploading":"Add photo"}</span>
+          </button>
+        </div>
       </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <Btn tone="ghost" onClick={()=>{ setShowAdd(false); setDraft(""); setDraftPhotos([]); }}>Cancel</Btn>
+        <Btn onClick={add}>{upBusy?"Wait for the photo\u2026":"Leave note"}</Btn>
+      </div>
+    </Modal>}
+    {viewPhoto && <Modal wide title="Handover photo" onClose={()=>setViewPhoto("")}>
+      <img src={cld(viewPhoto,1400)} alt="" style={{width:"100%", maxHeight:"78vh", objectFit:"contain", display:"block", background:"#000", borderRadius:8}} />
+      <div className="mt-3 text-right"><a href={viewPhoto} target="_blank" rel="noopener noreferrer" className="text-xs" style={{color:"var(--color-primary)"}}>Open the original</a></div>
     </Modal>}
   </div>;
 }

@@ -1569,10 +1569,11 @@ function datesBetween(a,b){ const out=[]; let d=new Date(a+"T00:00:00"); const e
 function PeriodReport({ctx}){
   const [period,setPeriod]=useState("thisWeek");
   const [loc,setLoc]=useState("all");
+  const [metric,setMetric]=useState("qty");   // qty | value  (value = the old Usage Report)
   const [cs,setCs]=useState(""); const [ce,setCe]=useState("");
   const [start,end]= period==="custom" ? [cs||C.localISO(new Date()), ce||C.localISO(new Date())] : rangeFor(period);
   const [res,run]=useAsync(async ()=>{
-    const dates=datesBetween(start,end); const totals={}; 
+    const dates=datesBetween(start,end); const totals={};
     for(const dt of dates){ const all=await C.loadAllOrdersForDate(dt, ctx.locations); ctx.locations.forEach(l=>{ const o=all[l.id]||{}; Object.keys(o).forEach(id=>{ const n=Number(o[id].needed)||0; if(n>0){ totals[id]=totals[id]||{}; totals[id][l.id]=(totals[id][l.id]||0)+n; totals[id].__t=(totals[id].__t||0)+n; } }); }); }
     return totals;
   }, [start,end,ctx.department,ctx.locations.length]);
@@ -1580,13 +1581,21 @@ function PeriodReport({ctx}){
   // Location filter is applied here, not in the fetch — the fetch already pulls every location,
   // so switching locations is instant and costs no extra reads.
   const val=(t)=> loc==="all" ? (t.__t||0) : (t[loc]||0);
+  const costOf=(it)=>Number(it.cost)||0;
+  // metric drives BOTH the bar length and the sort, so "Value" answers the old Usage Report question
+  // ("what is eating the money") while "Qty" answers the old Period one ("what moves the most").
+  const size=(it)=> metric==="value" ? val(totals[it.id]||{})*costOf(it) : val(totals[it.id]||{});
   const locName=(ctx.locations.find(l=>l.id===loc)||{}).name||"";
-  const rows=(ctx.items||[]).filter(i=>totals[i.id] && val(totals[i.id])>0).sort((a,b)=>val(totals[b.id])-val(totals[a.id]));
+  const rows=(ctx.items||[]).filter(i=>totals[i.id] && val(totals[i.id])>0).sort((a,b)=>size(b)-size(a));
+  const sumQty=rows.reduce((a,it)=>a+val(totals[it.id]),0);
+  const sumVal=rows.reduce((a,it)=>a+val(totals[it.id])*costOf(it),0);
+  const noCost=rows.filter(it=>!costOf(it)).length;
   const exportCsv=()=>{
     const cols = loc==="all" ? ctx.locations : ctx.locations.filter(l=>l.id===loc);
-    const head=["Item","Unit",...cols.map(l=>l.name),"Total"];
+    const head=["Item","Unit",...cols.map(l=>l.name),"Total","Unit cost","Est. value"];
     const lines=[head.join(",")];
-    rows.forEach(it=>{ const t=totals[it.id]; lines.push([`"${it.name}"`,it.unit,...cols.map(l=>t[l.id]||0),val(t)].join(",")); });
+    rows.forEach(it=>{ const t=totals[it.id]; const q=val(t); lines.push([`"${it.name}"`,it.unit,...cols.map(l=>t[l.id]||0),q,costOf(it)||"",costOf(it)?(costOf(it)*q).toFixed(2):""].join(",")); });
+    lines.push(["TOTAL","",...cols.map(()=>""),sumQty,"",sumVal.toFixed(2)].join(","));
     const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`period_${start}_${end}${loc==="all"?"":"_"+loc}.csv`; a.click();
   };
   return <div>
@@ -1595,18 +1604,25 @@ function PeriodReport({ctx}){
       <div style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
         <Segmented value={period} onChange={setPeriod} options={[{v:"today",l:"Today"},{v:"thisWeek",l:"This week"},{v:"lastWeek",l:"Last week"},{v:"thisMonth",l:"This month"},{v:"lastMonth",l:"Last month"},{v:"custom",l:"Custom"}]} />
         <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,width:200}}><option value="all">All locations</option>{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        <Segmented value={metric} onChange={setMetric} options={[{v:"qty",l:"Quantity"},{v:"value",l:"Value"}]} />
         {period==="custom" && <div style={{display:"flex",gap:8,alignItems:"center"}}><input type="date" value={cs} onChange={e=>setCs(e.target.value)} style={{...inp,width:150}} /><span style={{color:"var(--color-ink-muted-48)"}}>→</span><input type="date" value={ce} onChange={e=>setCe(e.target.value)} style={{...inp,width:150}} /></div>}
       </div>
       <div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:8}}>{start} → {end}{loc==="all"?"":" · "+locName}</div>
+      {rows.length>0 && <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:12,paddingTop:12,borderTop:"1px solid var(--color-hairline-alpha)"}}>
+        <div><div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-ink-muted-48)",fontWeight:700}}>Items</div><div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:19,color:"var(--color-ink)"}}>{rows.length}</div></div>
+        <div><div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-ink-muted-48)",fontWeight:700}}>Units ordered</div><div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:19,color:"var(--color-ink)"}}>{sumQty}</div></div>
+        <div><div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-ink-muted-48)",fontWeight:700}}>Est. value</div><div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:19,color:"var(--color-ink)"}}>{money(sumVal)}</div></div>
+      </div>}
+      {metric==="value" && noCost>0 && <div style={{fontSize:11.5,color:"#b45309",marginTop:8}}>{noCost} of {rows.length} items have no unit cost set — they count as $0. Settings → Items → Edit.</div>}
     </Card>
     <Card>
-      {res.loading?<Skeleton />: rows.length===0?<Empty>{loc==="all"?"No orders in this period.":"No orders for "+locName+" in this period."}</Empty>: (()=>{ const max=rows[0]?(val(totals[rows[0].id])||1):1; return (
-      <div className="stagger" style={{display:"grid",gap:10}}>{rows.map(it=>{ const t=totals[it.id]; const v=val(t); const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <div key={it.id} className="row-live" style={{padding:"4px 2px"}}>
+      {res.loading?<Skeleton />: rows.length===0?<Empty>{loc==="all"?"No orders in this period.":"No orders for "+locName+" in this period."}</Empty>: (()=>{ const max=rows[0]?(size(rows[0])||1):1; return (
+      <div className="stagger" style={{display:"grid",gap:10}}>{rows.map(it=>{ const t=totals[it.id]; const v=val(t); const c=costOf(it); const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <div key={it.id} className="row-live" style={{padding:"4px 2px"}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10,marginBottom:5}}>
           <div style={{fontSize:14,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}<span style={{fontSize:11,fontWeight:500,color:"var(--color-ink-muted-48)",marginLeft:6}}>{it.unit}</span></div>
-          <CountUp value={v} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:17,color:"var(--color-ink)"}} />
+          <div style={{whiteSpace:"nowrap"}}><CountUp value={v} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:17,color:"var(--color-ink)"}} />{c?<span style={{fontSize:11,color:"var(--color-ink-muted-48)",marginLeft:6}}>{money(c*v)}</span>:null}</div>
         </div>
-        <Bar pct={v/max*100} height={9} color={catc} />
+        <Bar pct={size(it)/max*100} height={9} color={catc} />
         {loc==="all"
           ? <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap"}}>{ctx.locations.filter(l=>t[l.id]).map(l=><span key={l.id} style={{fontSize:10.5,color:"var(--color-ink-muted-48)"}}>{l.name.replace(/\s*\(.*\)/,"")} <b style={{color:"var(--color-ink)"}}>{t[l.id]}</b></span>)}</div>
           : <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap"}}><span style={{fontSize:10.5,color:"var(--color-ink-muted-48)"}}>전체 <b style={{color:"var(--color-ink)"}}>{t.__t||0}</b> 중 {locName.replace(/\s*\(.*\)/,"")} <b style={{color:"var(--color-ink)"}}>{v}</b>{t.__t?<span> · {Math.round(v/t.__t*100)}%</span>:null}</span></div>}
@@ -1663,42 +1679,223 @@ function StockTake({ctx}){
   </div>;
 }
 
-/* ===================== USAGE REPORT ===================== */
-function UsageReport({ctx}){
-  const [period,setPeriod]=useState("thisMonth");
-  const [loc,setLoc]=useState("all");
-  const [start,end]=rangeFor(period==="custom"?"thisMonth":period);
-  const [res]=useAsync(async ()=>{
-    const dates=datesBetween(start,end); const locs = loc==="all"?ctx.locations:ctx.locations.filter(l=>l.id===loc);
-    const usage={};
-    for(const dt of dates){ const all=await C.loadAllOrdersForDate(dt, locs); locs.forEach(l=>{ const o=all[l.id]||{}; Object.keys(o).forEach(id=>{ const n=Number(o[id].needed)||0; if(n>0){ usage[id]=(usage[id]||0)+n; } }); }); }
-    return usage;
-  }, [period,loc,ctx.department,ctx.locations.length]);
-  const usage=res.data||{};
-  const rows=(ctx.items||[]).filter(i=>usage[i.id]).sort((a,b)=>usage[b.id]-usage[a.id]);
-  const exportCsv=()=>{ const lines=["Item,Unit,Total ordered,Est. value"]; rows.forEach(it=>{ const q=usage[it.id]; lines.push([`"${it.name}"`,it.unit,q,(it.cost?(it.cost*q).toFixed(2):"")].join(",")); }); const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`usage_${start}_${end}.csv`; a.click(); };
-  return <div>
-    <Card style={{marginBottom:14}}>
-      <SectionLabel right={rows.length?<Btn size="sm" tone="ghost" onClick={exportCsv}>Export CSV</Btn>:null}>Usage — ordered quantities</SectionLabel>
-      <div style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
-        <Segmented value={period} onChange={setPeriod} options={[{v:"thisWeek",l:"This week"},{v:"lastWeek",l:"Last week"},{v:"thisMonth",l:"This month"},{v:"lastMonth",l:"Last month"}]} />
-        <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,width:200}}><option value="all">All locations</option>{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
-      </div>
-      <div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:8}}>{start} → {end} · usage estimated from submitted order quantities</div>
-    </Card>
-    <Card>{res.loading?<Skeleton />: rows.length===0?<Empty>No usage in this period.</Empty>: (()=>{ const max=usage[rows[0].id]||1; return (
-      <div className="stagger" style={{display:"grid",gap:10}}>{rows.map(it=>{ const q=usage[it.id]; const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <div key={it.id} style={{padding:"4px 2px"}}>
-        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10,marginBottom:5}}>
-          <div style={{fontSize:14,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}<span style={{fontSize:11,fontWeight:500,color:"var(--color-ink-muted-48)",marginLeft:6}}>{it.unit}</span></div>
-          <div style={{whiteSpace:"nowrap"}}><CountUp value={q} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:17,color:"var(--color-ink)"}} />{it.cost?<span style={{fontSize:11,color:"var(--color-ink-muted-48)",marginLeft:6}}>{money(it.cost*q)}</span>:null}</div>
-        </div>
-        <Bar pct={q/max*100} height={9} color={catc} />
-      </div>; })}</div>); })()}
-    </Card>
+/* ===================== TRENDS ===================== */
+/* Replaces the old Usage Report (its "what did this cost" job now lives in Period Report's
+   Value toggle). This tab answers the questions a single period can't: is it going up or down,
+   which items moved, and how much of it went in the bin. */
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function startOfWeekD(d){ const x=new Date(d); x.setHours(0,0,0,0); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); return x; }
+function buildBuckets(gran,n){
+  const out=[]; const now=new Date();
+  if(gran==="month"){
+    for(let i=n-1;i>=0;i--){ const s=new Date(now.getFullYear(),now.getMonth()-i,1); const e=new Date(s.getFullYear(),s.getMonth()+1,0);
+      out.push({label:MON[s.getMonth()],sub:s.getMonth()===0||i===n-1?"'"+String(s.getFullYear()).slice(2):"",start:C.localISO(s),end:C.localISO(e)}); }
+  }else{
+    const cur=startOfWeekD(now);
+    for(let i=n-1;i>=0;i--){ const s=new Date(cur); s.setDate(cur.getDate()-i*7); const e=new Date(s); e.setDate(s.getDate()+6);
+      out.push({label:(s.getMonth()+1)+"/"+s.getDate(),sub:"",start:C.localISO(s),end:C.localISO(e)}); }
+  }
+  return out;
+}
+const sumArr=a=>(a||[]).reduce((x,y)=>x+(Number(y)||0),0);
+function pctChange(now,before){ if(!before) return now>0?null:0; return (now-before)/before*100; }
+function Delta({pct}){
+  if(pct==null) return <span style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>new</span>;
+  const up=pct>0, flat=Math.abs(pct)<0.5;
+  return <span style={{fontSize:12,fontWeight:700,color:flat?"var(--color-ink-muted-48)":(up?"#0a7d3c":"#c2410c")}}>{flat?"—":(up?"▲":"▼")+" "+Math.abs(Math.round(pct))+"%"}</span>;
+}
+function BarChart({buckets,values,fmt,color,height}){
+  const vals=buckets.map((_,i)=>Number(values&&values[i])||0);
+  const max=Math.max(...vals,0)||1; const H=height||130;
+  return <div style={{display:"flex",alignItems:"flex-end",gap:5,minHeight:H+42}}>
+    {vals.map((v,i)=>(<div key={i} style={{flex:1,minWidth:16,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+      <div style={{fontSize:10,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{v?fmt(v):""}</div>
+      <div title={buckets[i].start+" → "+buckets[i].end+"  ·  "+fmt(v)} style={{width:"100%",height:Math.max(v>0?3:1,Math.round(v/max*H)),background:v>0?(color||"var(--color-primary)"):"var(--color-canvas-parchment)",borderRadius:"5px 5px 2px 2px",transition:"height .25s"}} />
+      <div style={{fontSize:10,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap",textAlign:"center",lineHeight:1.25}}>{buckets[i].label}{buckets[i].sub?<div style={{fontSize:9,opacity:.7}}>{buckets[i].sub}</div>:null}</div>
+    </div>))}
+  </div>;
+}
+function Spark({values,color}){
+  const max=Math.max(...values,0)||1;
+  return <div style={{display:"flex",alignItems:"flex-end",gap:1.5,height:22}} aria-hidden="true">
+    {values.map((v,i)=><div key={i} style={{width:4,height:Math.max(v>0?2:1,Math.round(v/max*22)),background:v>0?(color||"var(--color-primary)"):"var(--color-hairline-alpha)",borderRadius:1.5}} />)}
+  </div>;
+}
+function Stat({label,value,sub}){
+  return <div style={{minWidth:96}}>
+    <div style={{fontSize:10.5,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-ink-muted-48)",fontWeight:700}}>{label}</div>
+    <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:21,color:"var(--color-ink)",lineHeight:1.25}}>{value}</div>
+    {sub!=null&&<div style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{sub}</div>}
   </div>;
 }
 
-window.OrderTabs = { TodaySummary, SubmitOrder, PeriodReport, StockTake, UsageReport, inp, th, td, HScroll, SectionLabel, itemsByCat, useAsync };
+function TrendsReport({ctx}){
+  const [gran,setGran]=useState("week");     // week | month
+  const [span,setSpan]=useState(8);          // how many buckets back (incl. current)
+  const [loc,setLoc]=useState("all");
+  const [metric,setMetric]=useState("qty");  // qty | value
+  const [focus,setFocus]=useState("");       // item id — chart drills into one item
+  const buckets=useMemo(()=>buildBuckets(gran,span),[gran,span]);
+
+  const [res]=useAsync(async ()=>{
+    const dateBucket={}; buckets.forEach((b,i)=>datesBetween(b.start,b.end).forEach(d=>{ dateBucket[d]=i; }));
+    const nb=buckets.length; const zero=()=>Array.from({length:nb},()=>0);
+    const prefix=C.deptPrefix(); const keys=[]; const meta={};
+    // One flat key list instead of a fetch-per-day: a 12-month span is ~8 batched reads, not ~365.
+    Object.keys(dateBucket).forEach(d=>ctx.locations.forEach(l=>{ const k=prefix+"order:"+d+":"+l.id; keys.push(k); meta[k]={d:d,loc:l.id}; }));
+    const raw={}; const CH=180;
+    for(let i=0;i<keys.length;i+=CH){ Object.assign(raw, await C.kvGetBatch(keys.slice(i,i+CH))); }
+    const ordered={}, leftover={};
+    const bump=(store,id,locId,bi,n)=>{ const e=store[id]=store[id]||{}; const a=e[locId]=e[locId]||zero(); a[bi]+=n; };
+    keys.forEach(k=>{ const v=raw[k]; if(!v) return; let o; try{ o=JSON.parse(v); }catch(e){ return; }
+      const m=meta[k], bi=dateBucket[m.d]; if(bi==null) return;
+      Object.keys(o).forEach(id=>{ if(id==="_note"||id==="_by") return; const rec=o[id]||{};
+        const n=Number(rec.needed)||0, rem=Number(rec.remaining)||0;
+        if(n>0) bump(ordered,id,m.loc,bi,n);
+        if(rem>0) bump(leftover,id,m.loc,bi,rem);   // for daily items this is what got binned
+      });
+    });
+    return {ordered,leftover,nb};
+  },[gran,span,ctx.department,ctx.locations.length]);
+
+  const data=res.data||{ordered:{},leftover:{},nb:buckets.length};
+  const nb=buckets.length;
+  const stale=!!res.data && res.data.nb!==nb;   // fetch for the new span hasn't landed yet
+  const zeros=useMemo(()=>Array.from({length:nb},()=>0),[nb]);
+  // Location is filtered here, not in the fetch — every branch is already in hand, so the
+  // dropdown is instant and costs no extra reads.
+  const series=(store,id)=>{ const e=store[id]; if(!e) return zeros;
+    if(loc!=="all") return e[loc]||zeros;
+    const out=Array.from({length:nb},()=>0); Object.keys(e).forEach(l=>e[l].forEach((v,i)=>out[i]+=v)); return out; };
+  const itemById=id=>(ctx.items||[]).find(i=>i.id===id);
+  const gone=id=>!itemById(id);   // ordered once, since deleted from Settings → Items
+  const nameOf=id=>{ const it=itemById(id); return it?it.name:"Removed item"; };
+  const RemovedTag=()=><span style={{fontSize:9.5,fontWeight:700,color:"var(--color-ink-muted-48)",border:"1px solid var(--color-hairline-alpha)",borderRadius:4,padding:"1px 4px",marginLeft:6}}>removed</span>;
+  const costOf=it=>Number(it&&it.cost)||0;
+  const weigh=(id,arr)=> metric==="value" ? arr.map(v=>v*costOf(itemById(id))) : arr;
+  const fmt=v=> metric==="value" ? money(v) : Math.round(v);
+
+  const ids=Object.keys(data.ordered);
+  const totalSeries=useMemo(()=>{ const out=Array.from({length:nb},()=>0); ids.forEach(id=>weigh(id,series(data.ordered,id)).forEach((v,i)=>out[i]+=v)); return out; },[res.data,loc,metric,nb]);
+  const spanTotal=sumArr(totalSeries);
+  const last=totalSeries[nb-1]||0, prev=totalSeries[nb-2]||0;
+  const avg=nb?spanTotal/nb:0;
+  const perLocTotals=ctx.locations.map(l=>({l,v:ids.reduce((a,id)=>{ const e=data.ordered[id]; if(!e||!e[l.id]) return a; return a+sumArr(metric==="value"?e[l.id].map(v=>v*costOf(itemById(id))):e[l.id]); },0)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const noCost=ids.filter(id=>!gone(id)&&!costOf(itemById(id))).length;   // deleted items have nothing left to edit, so don't nag about them
+
+  /* ---- movers: last bucket vs the average of the earlier ones ---- */
+  const movers=useMemo(()=>{
+    if(nb<2) return [];
+    return ids.map(id=>{ const s=weigh(id,series(data.ordered,id)); const now=s[nb-1]||0; const base=sumArr(s.slice(0,nb-1))/(nb-1);
+      return {id,now,base,pct:pctChange(now,base),total:sumArr(s),s};
+    }).filter(m=>m.total>0);
+  },[res.data,loc,metric,nb]);
+  const risers=movers.filter(m=>!gone(m.id)&&m.pct!=null&&m.pct>5&&m.now>0).sort((a,b)=>b.pct-a.pct).slice(0,5);
+  const fallers=movers.filter(m=>!gone(m.id)&&m.pct!=null&&m.pct<-5).sort((a,b)=>a.pct-b.pct).slice(0,5);
+  const goneCount=movers.filter(m=>gone(m.id)).length;
+
+  /* ---- wastage: leftovers on items flagged "daily" in Settings → Items ---- */
+  const dailyIds=(ctx.items||[]).filter(i=>i.perishable).map(i=>i.id);
+  const wasteRows=dailyIds.map(id=>{ const it=itemById(id);
+    const wq=series(data.leftover,id), oq=series(data.ordered,id);
+    const wQty=sumArr(wq), oQty=sumArr(oq);
+    return {id,it,wq,oq,wQty,oQty,wVal:wQty*costOf(it),rate:oQty?wQty/oQty*100:null};
+  }).filter(r=>r.wQty>0||r.oQty>0);
+  const wasteSeries=Array.from({length:nb},(_,i)=>wasteRows.reduce((a,r)=>a+(metric==="value"?r.wq[i]*costOf(r.it):r.wq[i]),0));
+  const wasteTotalQty=wasteRows.reduce((a,r)=>a+r.wQty,0);
+  const wasteTotalVal=wasteRows.reduce((a,r)=>a+r.wVal,0);
+  const dailyOrderedQty=wasteRows.reduce((a,r)=>a+r.oQty,0);
+  const wasteRate=dailyOrderedQty?wasteTotalQty/dailyOrderedQty*100:null;
+
+  /* ---- per-item table ---- */
+  const [sortBy,setSortBy]=useState("total");   // total | change | name
+  const tableRows=movers.slice().sort((a,b)=>{
+    if(gone(a.id)!==gone(b.id)) return gone(a.id)?1:-1;   // deleted items sit at the bottom
+    if(sortBy==="change") return (b.pct==null?-1e9:b.pct)-(a.pct==null?-1e9:a.pct);
+    if(sortBy==="name") return nameOf(a.id).localeCompare(nameOf(b.id),undefined,{sensitivity:"base",numeric:true});
+    return b.total-a.total;
+  });
+  const focusItem=focus?itemById(focus):null;
+  const chartSeries=focus?weigh(focus,series(data.ordered,focus)):totalSeries;   // focus can be a deleted item, which has no ctx.items entry
+
+  return <div>
+    <Card style={{marginBottom:14}}>
+      <SectionLabel>Trends</SectionLabel>
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+        <Segmented value={gran} onChange={g=>{ setGran(g); setSpan(g==="month"?6:8); }} options={[{v:"week",l:"Weekly"},{v:"month",l:"Monthly"}]} />
+        <select value={String(span)} onChange={e=>setSpan(Number(e.target.value))} style={{...inp,width:150}}>
+          {(gran==="month"?[3,6,12]:[4,8,12,26]).map(n=><option key={n} value={n}>Last {n} {gran==="month"?"months":"weeks"}</option>)}
+        </select>
+        <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,width:190}}><option value="all">All locations</option>{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        <Segmented value={metric} onChange={setMetric} options={[{v:"qty",l:"Quantity"},{v:"value",l:"Value"}]} />
+      </div>
+      <div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:8}}>{buckets[0].start} → {buckets[nb-1].end} · based on submitted order quantities</div>
+      {metric==="value" && noCost>0 && <div style={{fontSize:11.5,color:"#b45309",marginTop:6}}>{noCost} ordered item{noCost>1?"s have":" has"} no unit cost set — counted as $0. Settings → Items → Edit.</div>}
+    </Card>
+
+    {res.loading || stale ? <Skeleton rows={4} height={90} /> : spanTotal===0 && wasteTotalQty===0 ? <Card><Empty>No orders in this span.</Empty></Card> : <div>
+
+      <Card style={{marginBottom:14}}>
+        <div style={{display:"flex",gap:22,flexWrap:"wrap",alignItems:"flex-start",marginBottom:14}}>
+          <Stat label={gran==="month"?"Last month":"This week"} value={fmt(last)} sub={<span>vs avg <Delta pct={pctChange(last,avg)} /></span>} />
+          <Stat label="Previous" value={fmt(prev)} sub={<span>change <Delta pct={pctChange(last,prev)} /></span>} />
+          <Stat label={"Total ("+nb+")"} value={fmt(spanTotal)} sub={"avg "+fmt(avg)+" / "+(gran==="month"?"month":"week")} />
+          {wasteRate!=null && <Stat label="Daily-item waste" value={metric==="value"?money(wasteTotalVal):Math.round(wasteTotalQty)} sub={Math.round(wasteRate)+"% of daily items ordered"} />}
+        </div>
+        {perLocTotals.length>1 && loc==="all" && <div style={{display:"flex",gap:10,flexWrap:"wrap",paddingTop:12,borderTop:"1px solid var(--color-hairline-alpha)"}}>
+          {perLocTotals.map(({l,v})=><span key={l.id} style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{l.name.replace(/\s*\(.*\)/,"")} <b style={{color:"var(--color-ink)"}}>{fmt(v)}</b> · {Math.round(v/spanTotal*100)}%</span>)}
+        </div>}
+      </Card>
+
+      <Card style={{marginBottom:14}}>
+        <SectionLabel right={focus?<Btn size="sm" tone="ghost" onClick={()=>setFocus("")}>← All items</Btn>:null}>{focus?nameOf(focus):"All items"} · {metric==="value"?"value":"quantity"} per {gran==="month"?"month":"week"}</SectionLabel>
+        <BarChart buckets={buckets} values={chartSeries} fmt={fmt} color={focusItem?((ctx.categories.find(c=>c.id===focusItem.cat)||{}).color||"var(--color-primary)"):"var(--color-primary)"} />
+      </Card>
+
+      {wasteRows.length>0 && <Card style={{marginBottom:14}}>
+        <SectionLabel>Waste — daily items binned</SectionLabel>
+        <div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:10}}>Leftovers counted on items flagged <b>daily</b> in Settings → Items. These get binned, so “remaining” is waste.</div>
+        <BarChart buckets={buckets} values={wasteSeries} fmt={fmt} color="#c2410c" height={80} />
+        <div style={{display:"grid",gap:9,marginTop:14}}>{wasteRows.slice().sort((a,b)=>(metric==="value"?b.wVal-a.wVal:b.wQty-a.wQty)).map(r=>(
+          <div key={r.id} style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.it?r.it.name:r.id}</div>
+            <Spark values={r.wq} color="#c2410c" />
+            <div style={{width:78,textAlign:"right",fontSize:12.5,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{Math.round(r.wQty)} / {Math.round(r.oQty)}</div>
+            <div style={{width:52,textAlign:"right",fontSize:13,fontWeight:700,color:r.rate!=null&&r.rate>=20?"#c2410c":"var(--color-ink)"}}>{r.rate==null?"—":Math.round(r.rate)+"%"}</div>
+          </div>))}
+        </div>
+        <div style={{fontSize:11,color:"var(--color-ink-muted-48)",marginTop:10}}>binned / ordered · waste rate</div>
+      </Card>}
+
+      {(risers.length>0||fallers.length>0) && <div style={{display:"grid",gap:14,gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",marginBottom:14}}>
+        <Card><SectionLabel>Going up</SectionLabel>{risers.length?<div style={{display:"grid",gap:8}}>{risers.map(m=>(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameOf(m.id)}</div>
+          <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{fmt(m.base)} → {fmt(m.now)}</span><Delta pct={m.pct} /></div>))}</div>:<Empty>Nothing rising.</Empty>}</Card>
+        <Card><SectionLabel>Going down</SectionLabel>{fallers.length?<div style={{display:"grid",gap:8}}>{fallers.map(m=>(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameOf(m.id)}</div>
+          <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{fmt(m.base)} → {fmt(m.now)}</span><Delta pct={m.pct} /></div>))}</div>:<Empty>Nothing falling.</Empty>}</Card>
+      </div>}
+
+      <Card>
+        <SectionLabel right={<Segmented value={sortBy} onChange={setSortBy} options={[{v:"total",l:"Total"},{v:"change",l:"Change"},{v:"name",l:"A–Z"}]} />}>Every item · click to chart it</SectionLabel>
+        {goneCount>0 && <div style={{fontSize:11.5,color:"var(--color-ink-muted-48)",marginBottom:8}}>{goneCount} item{goneCount>1?"s were":" was"} deleted from Settings → Items but still have order history. Counted in the totals, listed last, and kept out of Going up / Going down.</div>}
+        <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:440}}>
+          <thead><tr><th style={th}>Item</th><th style={{...th,textAlign:"center"}}>Trend</th><th style={{...th,textAlign:"right"}}>Total</th><th style={{...th,textAlign:"right"}}>Latest</th><th style={{...th,textAlign:"right"}}>vs avg</th></tr></thead>
+          <tbody>{tableRows.map(m=>{ const it=itemById(m.id)||{}; const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <tr key={m.id} className="row-live" onClick={()=>setFocus(focus===m.id?"":m.id)} style={{cursor:"pointer",background:focus===m.id?"var(--color-canvas-parchment)":"transparent"}}>
+            <td style={td}><div style={{fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{nameOf(m.id)}{gone(m.id)?<RemovedTag />:null}{it.perishable?<span style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px"}}>DAILY</span>:null}</div><div style={{fontSize:11,color:"var(--color-ink-muted-48)"}}>{it.unit}</div></td>
+            <td style={{...td,width:70}}><Spark values={m.s} color={catc} /></td>
+            <td style={{...td,textAlign:"right",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(m.total)}</td>
+            <td style={{...td,textAlign:"right",color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{fmt(m.now)}</td>
+            <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><Delta pct={m.pct} /></td>
+          </tr>; })}</tbody>
+        </table></HScroll>
+        {tableRows.length===0 && <Empty>No items ordered in this span.</Empty>}
+      </Card>
+    </div>}
+  </div>;
+}
+
+window.OrderTabs = { TodaySummary, SubmitOrder, PeriodReport, StockTake, TrendsReport, inp, th, td, HScroll, SectionLabel, itemsByCat, useAsync };
 })();
 
 </script>
@@ -1733,7 +1930,7 @@ function ItemsCard({ctx}){
       if(catFilter==="none"){ if(ctx.categories.some(c=>c.id===i.cat)) return false; }
       else if(catFilter!=="all" && (i.cat||"")!==catFilter) return false;
       if(!needle) return true;
-      return [i.name,i.unit,catLabel(i.cat),i.groupLabel,i.allergens].some(v=>String(v||"").toLowerCase().includes(needle));
+      return [i.name,i.unit,catLabel(i.cat),i.groupLabel,i.allergens,i.perishable?"daily":""].some(v=>String(v||"").toLowerCase().includes(needle));
     });
   },[ctx.items,ctx.categories,q,catFilter]);
 
@@ -1765,7 +1962,7 @@ function ItemsCard({ctx}){
   const removeItem=(it)=>{ if(!confirm(`Delete "${it.name}"? This can't be undone.`)) return; ctx.saveItems(ctx.items.filter(x=>x.id!==it.id)); setSel(s=>{ const n={...s}; delete n[it.id]; return n; }); toast("Deleted ✓"); };
   const removeSelected=()=>{ if(!selIds.length) return; if(!confirm(`Delete ${selIds.length} item${selIds.length>1?"s":""}? This can't be undone.`)) return; const kill=new Set(selIds); ctx.saveItems(ctx.items.filter(x=>!kill.has(x.id))); setSel({}); toast(`Deleted ${selIds.length} ✓`); };
 
-  const blank=()=>({id:uid("i"),name:"",unit:"ea",cat:ctx.categories[0]?.id||"",allergens:"",cost:"",minOrderQty:null,groupLabel:"",parLevels:{}});
+  const blank=()=>({id:uid("i"),name:"",unit:"ea",cat:ctx.categories[0]?.id||"",allergens:"",cost:"",minOrderQty:null,groupLabel:"",perishable:false,parLevels:{}});
   const commit=(it)=>{ if(!it.name.trim()){ toast("Name required",true); return; } let next; if(ctx.items.find(x=>x.id===it.id)) next=ctx.items.map(x=>x.id===it.id?it:x); else next=[...ctx.items,it]; ctx.saveItems(next); setEdit(null); setAdding(false); toast("Saved ✓"); };
 
   const sortTh=(k,label,extra)=>{
@@ -1797,7 +1994,7 @@ function ItemsCard({ctx}){
       </tr></thead>
       <tbody>{view.map(it=>(<tr key={it.id} style={sel[it.id]?{background:"var(--color-canvas-parchment)"}:null}>
         <td style={{...td,paddingRight:0}}><input type="checkbox" checked={!!sel[it.id]} onChange={()=>toggleOne(it.id)} style={{cursor:"pointer",width:15,height:15}} /></td>
-        <td style={td}><div style={{fontWeight:600}}>{it.name}</div>{it.allergens&&<div style={{fontSize:11,color:"#b45309"}}>{it.allergens}</div>}</td>
+        <td style={td}><div style={{fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{it.name}{it.perishable?<span title="Daily item — leftovers are binned and counted as waste" style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px"}}>DAILY</span>:null}</div>{it.allergens&&<div style={{fontSize:11,color:"#b45309"}}>{it.allergens}</div>}</td>
         <td style={{...td,color:"var(--color-ink-muted-48)"}}>{it.unit}</td>
         <td style={{...td,color:"var(--color-ink-muted-48)"}}>{catLabel(it.cat)}</td>
         <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }} style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer",fontSize:13,fontWeight:600,marginRight:10}}>Edit</button><button onClick={()=>removeItem(it)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>Delete</button></td>
@@ -1828,6 +2025,10 @@ function ItemsCard({ctx}){
           <Field label="Cost (optional)"><input inputMode="decimal" value={edit.cost??""} onChange={e=>setEdit({...edit,cost:e.target.value===""?"":Number(e.target.value)})} style={inp} /></Field>
           <Field label="Min order qty (optional)"><input inputMode="decimal" value={edit.minOrderQty??""} onChange={e=>setEdit({...edit,minOrderQty:e.target.value===""?null:Number(e.target.value)})} style={inp} /></Field>
         </div>
+        <label style={{display:"flex",gap:9,alignItems:"flex-start",cursor:"pointer",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"10px 12px"}}>
+          <input type="checkbox" checked={!!edit.perishable} onChange={e=>setEdit({...edit,perishable:e.target.checked})} style={{cursor:"pointer",width:16,height:16,marginTop:1}} />
+          <span><span style={{fontSize:13,fontWeight:700,color:"var(--color-ink)"}}>Daily use item (dispose)</span><br /><span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>Binned if unsold — danish, almond croissant. Leftovers counted at ordering are logged as waste in Trends. Leave off for anything that keeps.</span></span>
+        </label>
         <Field label="Allergens (comma separated)"><input value={edit.allergens||""} onChange={e=>setEdit({...edit,allergens:e.target.value})} style={inp} placeholder={C.ALLERGEN_OPTIONS.slice(0,4).join(", ")} /></Field>
         <Field label={'Group (combines totals — e.g. "Croissant dough")'}><input value={edit.groupLabel||""} onChange={e=>setEdit({...edit,groupLabel:e.target.value})} style={inp} list="ord-group-options" placeholder="Optional — items sharing this label are summed in Today" /><datalist id="ord-group-options">{Array.from(new Set((ctx.items||[]).map(i=>(i.groupLabel||"").trim()).filter(Boolean))).map(g=><option key={g} value={g} />)}</datalist></Field>
       </div>
@@ -2267,8 +2468,8 @@ const T = window.OrderTabs;
 const { Settings, AiWidget } = window.OrderSettings;
 const LOGO = window.HIDEOUT_LOGO || "";
 
-const TABS = [["daily","Today"],["order","Submit Order"],["period","Period Report"],["stock","Stock Take"],["usage","Usage Report"],["settings","Settings"]];
-const TT = { daily:["Today at The Hideout","What’s ordered, where it goes, and who’s on delivery"], order:["Submit Order","Count what’s left — par levels fill the rest"], period:["Period Report","Order totals across a date range"], stock:["Stock Take","Count on-hand stock by branch"], usage:["Usage Report","How much you’re getting through"], settings:["Settings","Items, par levels, branches & connection"] };
+const TABS = [["daily","Today"],["order","Submit Order"],["period","Period Report"],["stock","Stock Take"],["trends","Trends"],["settings","Settings"]];
+const TT = { daily:["Today at The Hideout","What’s ordered, where it goes, and who’s on delivery"], order:["Submit Order","Count what’s left — par levels fill the rest"], period:["Period Report","Order totals across a date range"], stock:["Stock Take","Count on-hand stock by branch"], trends:["Trends","Where orders, spend and waste are heading"], settings:["Settings","Items, par levels, branches & connection"] };
 
 /* ---- branch + department gate ---- */
 function Gate({locations, onUnlock}){
@@ -2511,7 +2712,7 @@ function App(){
       {tab==="order" && <T.SubmitOrder ctx={ctx} />}
       {tab==="period" && <T.PeriodReport ctx={ctx} />}
       {tab==="stock" && <T.StockTake ctx={ctx} />}
-      {tab==="usage" && <T.UsageReport ctx={ctx} />}
+      {tab==="trends" && <T.TrendsReport ctx={ctx} />}
       {tab==="settings" && <Settings ctx={ctx} />}
     </div>
     <ToastHost />

@@ -1768,6 +1768,9 @@ function TrendsReport({ctx}){
     if(loc!=="all") return e[loc]||zeros;
     const out=Array.from({length:nb},()=>0); Object.keys(e).forEach(l=>e[l].forEach((v,i)=>out[i]+=v)); return out; };
   const itemById=id=>(ctx.items||[]).find(i=>i.id===id);
+  const gone=id=>!itemById(id);   // ordered once, since deleted from Settings → Items
+  const nameOf=id=>{ const it=itemById(id); return it?it.name:"Removed item"; };
+  const RemovedTag=()=><span style={{fontSize:9.5,fontWeight:700,color:"var(--color-ink-muted-48)",border:"1px solid var(--color-hairline-alpha)",borderRadius:4,padding:"1px 4px",marginLeft:6}}>removed</span>;
   const costOf=it=>Number(it&&it.cost)||0;
   const weigh=(id,arr)=> metric==="value" ? arr.map(v=>v*costOf(itemById(id))) : arr;
   const fmt=v=> metric==="value" ? money(v) : Math.round(v);
@@ -1778,7 +1781,7 @@ function TrendsReport({ctx}){
   const last=totalSeries[nb-1]||0, prev=totalSeries[nb-2]||0;
   const avg=nb?spanTotal/nb:0;
   const perLocTotals=ctx.locations.map(l=>({l,v:ids.reduce((a,id)=>{ const e=data.ordered[id]; if(!e||!e[l.id]) return a; return a+sumArr(metric==="value"?e[l.id].map(v=>v*costOf(itemById(id))):e[l.id]); },0)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
-  const noCost=ids.filter(id=>!costOf(itemById(id))).length;
+  const noCost=ids.filter(id=>!gone(id)&&!costOf(itemById(id))).length;   // deleted items have nothing left to edit, so don't nag about them
 
   /* ---- movers: last bucket vs the average of the earlier ones ---- */
   const movers=useMemo(()=>{
@@ -1787,8 +1790,9 @@ function TrendsReport({ctx}){
       return {id,now,base,pct:pctChange(now,base),total:sumArr(s),s};
     }).filter(m=>m.total>0);
   },[res.data,loc,metric,nb]);
-  const risers=movers.filter(m=>m.pct!=null&&m.pct>5&&m.now>0).sort((a,b)=>b.pct-a.pct).slice(0,5);
-  const fallers=movers.filter(m=>m.pct!=null&&m.pct<-5).sort((a,b)=>a.pct-b.pct).slice(0,5);
+  const risers=movers.filter(m=>!gone(m.id)&&m.pct!=null&&m.pct>5&&m.now>0).sort((a,b)=>b.pct-a.pct).slice(0,5);
+  const fallers=movers.filter(m=>!gone(m.id)&&m.pct!=null&&m.pct<-5).sort((a,b)=>a.pct-b.pct).slice(0,5);
+  const goneCount=movers.filter(m=>gone(m.id)).length;
 
   /* ---- wastage: leftovers on items flagged "daily" in Settings → Items ---- */
   const dailyIds=(ctx.items||[]).filter(i=>i.perishable).map(i=>i.id);
@@ -1806,12 +1810,13 @@ function TrendsReport({ctx}){
   /* ---- per-item table ---- */
   const [sortBy,setSortBy]=useState("total");   // total | change | name
   const tableRows=movers.slice().sort((a,b)=>{
+    if(gone(a.id)!==gone(b.id)) return gone(a.id)?1:-1;   // deleted items sit at the bottom
     if(sortBy==="change") return (b.pct==null?-1e9:b.pct)-(a.pct==null?-1e9:a.pct);
-    if(sortBy==="name") return String((itemById(a.id)||{}).name||"").localeCompare(String((itemById(b.id)||{}).name||""),undefined,{sensitivity:"base",numeric:true});
+    if(sortBy==="name") return nameOf(a.id).localeCompare(nameOf(b.id),undefined,{sensitivity:"base",numeric:true});
     return b.total-a.total;
   });
   const focusItem=focus?itemById(focus):null;
-  const chartSeries=focusItem?weigh(focus,series(data.ordered,focus)):totalSeries;
+  const chartSeries=focus?weigh(focus,series(data.ordered,focus)):totalSeries;   // focus can be a deleted item, which has no ctx.items entry
 
   return <div>
     <Card style={{marginBottom:14}}>
@@ -1843,7 +1848,7 @@ function TrendsReport({ctx}){
       </Card>
 
       <Card style={{marginBottom:14}}>
-        <SectionLabel right={focusItem?<Btn size="sm" tone="ghost" onClick={()=>setFocus("")}>← All items</Btn>:null}>{focusItem?focusItem.name:"All items"} · {metric==="value"?"value":"quantity"} per {gran==="month"?"month":"week"}</SectionLabel>
+        <SectionLabel right={focus?<Btn size="sm" tone="ghost" onClick={()=>setFocus("")}>← All items</Btn>:null}>{focus?nameOf(focus):"All items"} · {metric==="value"?"value":"quantity"} per {gran==="month"?"month":"week"}</SectionLabel>
         <BarChart buckets={buckets} values={chartSeries} fmt={fmt} color={focusItem?((ctx.categories.find(c=>c.id===focusItem.cat)||{}).color||"var(--color-primary)"):"var(--color-primary)"} />
       </Card>
 
@@ -1863,20 +1868,21 @@ function TrendsReport({ctx}){
       </Card>}
 
       {(risers.length>0||fallers.length>0) && <div style={{display:"grid",gap:14,gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",marginBottom:14}}>
-        <Card><SectionLabel>Going up</SectionLabel>{risers.length?<div style={{display:"grid",gap:8}}>{risers.map(m=>{ const it=itemById(m.id)||{}; return <div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name||m.id}</div>
-          <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{fmt(m.base)} → {fmt(m.now)}</span><Delta pct={m.pct} /></div>; })}</div>:<Empty>Nothing rising.</Empty>}</Card>
-        <Card><SectionLabel>Going down</SectionLabel>{fallers.length?<div style={{display:"grid",gap:8}}>{fallers.map(m=>{ const it=itemById(m.id)||{}; return <div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name||m.id}</div>
-          <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{fmt(m.base)} → {fmt(m.now)}</span><Delta pct={m.pct} /></div>; })}</div>:<Empty>Nothing falling.</Empty>}</Card>
+        <Card><SectionLabel>Going up</SectionLabel>{risers.length?<div style={{display:"grid",gap:8}}>{risers.map(m=>(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameOf(m.id)}</div>
+          <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{fmt(m.base)} → {fmt(m.now)}</span><Delta pct={m.pct} /></div>))}</div>:<Empty>Nothing rising.</Empty>}</Card>
+        <Card><SectionLabel>Going down</SectionLabel>{fallers.length?<div style={{display:"grid",gap:8}}>{fallers.map(m=>(<div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameOf(m.id)}</div>
+          <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>{fmt(m.base)} → {fmt(m.now)}</span><Delta pct={m.pct} /></div>))}</div>:<Empty>Nothing falling.</Empty>}</Card>
       </div>}
 
       <Card>
         <SectionLabel right={<Segmented value={sortBy} onChange={setSortBy} options={[{v:"total",l:"Total"},{v:"change",l:"Change"},{v:"name",l:"A–Z"}]} />}>Every item · click to chart it</SectionLabel>
+        {goneCount>0 && <div style={{fontSize:11.5,color:"var(--color-ink-muted-48)",marginBottom:8}}>{goneCount} item{goneCount>1?"s were":" was"} deleted from Settings → Items but still have order history. Counted in the totals, listed last, and kept out of Going up / Going down.</div>}
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:440}}>
           <thead><tr><th style={th}>Item</th><th style={{...th,textAlign:"center"}}>Trend</th><th style={{...th,textAlign:"right"}}>Total</th><th style={{...th,textAlign:"right"}}>Latest</th><th style={{...th,textAlign:"right"}}>vs avg</th></tr></thead>
           <tbody>{tableRows.map(m=>{ const it=itemById(m.id)||{}; const catc=(ctx.categories.find(c=>c.id===it.cat)||{}).color||"var(--color-primary)"; return <tr key={m.id} className="row-live" onClick={()=>setFocus(focus===m.id?"":m.id)} style={{cursor:"pointer",background:focus===m.id?"var(--color-canvas-parchment)":"transparent"}}>
-            <td style={td}><div style={{fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{it.name||m.id}{it.perishable?<span style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px"}}>DAILY</span>:null}</div><div style={{fontSize:11,color:"var(--color-ink-muted-48)"}}>{it.unit}</div></td>
+            <td style={td}><div style={{fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{nameOf(m.id)}{gone(m.id)?<RemovedTag />:null}{it.perishable?<span style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px"}}>DAILY</span>:null}</div><div style={{fontSize:11,color:"var(--color-ink-muted-48)"}}>{it.unit}</div></td>
             <td style={{...td,width:70}}><Spark values={m.s} color={catc} /></td>
             <td style={{...td,textAlign:"right",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(m.total)}</td>
             <td style={{...td,textAlign:"right",color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{fmt(m.now)}</td>

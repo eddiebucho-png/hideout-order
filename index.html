@@ -1476,7 +1476,7 @@ function TodaySummary({ctx}){
           <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:120+ctx.locations.length*74+80}}>
             <thead><tr>
               <th style={{...th,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1}}>Item</th>
-              {ctx.locations.map(l=><th key={l.id} style={{...th,textAlign:"center",borderLeft:vline}}><div style={{fontWeight:700,color:"var(--color-ink)"}}>{l.id}</div><div style={{fontWeight:500,fontSize:10,textTransform:"none",letterSpacing:0}}>{l.name.split(" (")[0]}</div></th>)}
+              {ctx.locations.map(l=><th key={l.id} style={{...th,textAlign:"center",borderLeft:vline}}>{/* One bold line per venue. The id is the street number for the three shops (515 / 100 / 340) so it belongs in the label, but the coffee cart's id is an arbitrary 7393 that means nothing to anyone - anything longer than three characters is treated as an internal id and left out. */}<div style={{fontWeight:700,color:"var(--color-ink)",fontSize:11,textTransform:"none",letterSpacing:0,lineHeight:1.25}}>{(String(l.id).length<=3? String(l.id)+" " : "")+l.name.split(" (")[0]}</div></th>)}
               <th style={{...th,textAlign:"center",borderLeft:vline}}>Total</th>
             </tr></thead>
             <tbody>{visible.map(({item,total,perLoc})=>(<tr key={item.id} className="row-live">

@@ -4242,6 +4242,13 @@ function migrate(s){
   // Posted by hand in Settings -> Daily content. `from`/`until` are inclusive YYYY-MM-DD; blank
   // `until` means the notice stays up until it is removed.
   if(!Array.isArray(s.notices)) s.notices=[];
+  /* Prep-board handover lines: {id,text,by,at,branch,done,doneAt,doneBy}. `at` is when it was
+     written, and a line simply stays up until someone ticks it - that is what carries it to the
+     next day's chef. Ticked lines are kept (not deleted) so they can be pulled back. */
+  if(!Array.isArray(s.prepNotes)) s.prepNotes=[];
+  // ticked handover lines are only useful for a little while; past that they are clutter
+  if(s.prepNotes.length>200) s.prepNotes=s.prepNotes.filter(n=>n&&!n.done).concat(
+    s.prepNotes.filter(n=>n&&n.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,100));
   // ---- LOG CAPS (2026-08-03) ----------------------------------------------------------------
   // The whole app is ONE Firestore document with a hard 1 MB ceiling. Recipes and ingredients are
   // real data and stay; these three are append-only logs that would otherwise grow forever and
@@ -5112,7 +5119,7 @@ function App(){
     <div id="pc-tray-host"></div>
     <main key={tab} className="max-w-5xl mx-auto px-5 md:px-9 py-8 tab-in">
     {tab==="daily" && <DailyReminder state={state} ingMap={ingMap} setTab={setTab} branch={curBranch} branchName={branchName} fbRef={fbRef} />}
-    {tab==="prep" && <PrepBoard state={state} ingMap={ingMap} update={update} branch={curBranch} />}
+    {tab==="prep" && <PrepBoard state={state} ingMap={ingMap} update={update} branch={curBranch} meEmail={(cloud.user&&cloud.user.email)||""} />}
     {tab==="ing" && <Ingredients state={state} update={update} setState={setState} />}
     {tab==="rec" && <Recipes state={state} update={update} setState={setState} ingMap={ingMap} />}
     {tab==="dish" && <Dishes state={state} ingMap={ingMap} update={update} branch={curBranch} />}
@@ -5816,7 +5823,73 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
 
 /* ---------------- Prep board ---------------- */
 const PREP_COLS=[["urgent","URGENT"],["todo","TO DO"],["done","DONE"]];
-function PrepBoard({state, ingMap, update, branch}){
+/* Handover strip on the Prep board. Deliberately NOT tied to a date: a line written today is still
+   on the board tomorrow, which is the whole point - the next chef reads it and ticks it off. Ticking
+   sets `done` rather than deleting, so "Show cleared" can put anything back. */
+function PrepHandover({state, update, branch, meEmail}){
+  const [draft,setDraft]=useState("");
+  const [showDone,setShowDone]=useState(false);
+  const all=(state.prepNotes||[]).filter(n=>n && !n.branch || (n&&n.branch===branch));
+  const open=all.filter(n=>!n.done).sort((a,b)=>(b.at||0)-(a.at||0));
+  const cleared=all.filter(n=>n.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,20);
+  const who=String(meEmail||"").split("@")[0]||"";
+  const add=()=>{ const t=draft.trim(); if(!t) return;
+    update(s=>{ if(!Array.isArray(s.prepNotes)) s.prepNotes=[];
+      s.prepNotes.unshift({id:rid("pn"), text:t, by:who, at:Date.now(), branch, done:false}); });
+    setDraft(""); };
+  const setDone=(id,v)=>update(s=>{ const n=(s.prepNotes||[]).find(x=>x.id===id);
+    if(n){ n.done=v; n.doneAt=v?Date.now():0; n.doneBy=v?who:""; } });
+  const remove=id=>{ if(!confirm("Delete this handover line for good?")) return;
+    update(s=>{ s.prepNotes=(s.prepNotes||[]).filter(x=>x.id!==id); }); };
+  /* "today / yesterday / 3 days ago" reads faster mid-service than a date does, and it makes an old
+     line that nobody has dealt with obvious. */
+  const ago=t=>{ if(!t) return "";
+    const d=Math.floor((new Date().setHours(0,0,0,0)-new Date(Number(t)).setHours(0,0,0,0))/86400000);
+    return d<=0?"today":d===1?"yesterday":(d+" days ago"); };
+  return <div className="mb-4 rounded-[18px] p-4" style={{background:"var(--color-canvas)", border:"1px solid var(--color-hairline-alpha)"}}>
+    <div className="flex items-center justify-between gap-3 mb-2.5 flex-wrap">
+      <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>
+        Note for tomorrow&rsquo;s chef{open.length? (" \u00b7 "+open.length):""}
+      </div>
+      {cleared.length>0 && <button onClick={()=>setShowDone(v=>!v)} className="text-[11px]"
+        style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>
+        {showDone?"Hide cleared":"Show cleared ("+cleared.length+")"}
+      </button>}
+    </div>
+    <div className="flex gap-2 items-center mb-3">
+      {/* Enter posts, so a chef on the way out the door can type one line and go */}
+      <input className="inp" style={{flex:"1 1 auto", minWidth:0, height:44}} value={draft}
+        placeholder="Anything the next chef needs to know…"
+        onChange={e=>setDraft(e.target.value)}
+        onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } }} />
+      <Btn onClick={add}>Leave note</Btn>
+    </div>
+    {open.length===0 && !showDone && <div className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Nothing handed over. Type a line above and it stays on the board until someone ticks it off.</div>}
+    <div className="space-y-1.5">
+      {open.map(n=>(<label key={n.id} className="flex items-start gap-2.5 group" style={{cursor:"pointer", padding:"7px 0"}}>
+        {/* 18px box: this gets tapped with a thumb on the kitchen tablet */}
+        <input type="checkbox" checked={false} onChange={()=>setDone(n.id,true)}
+          style={{marginTop:2, width:18, height:18, flexShrink:0, accentColor:"var(--color-primary)"}} />
+        <span className="flex-1 min-w-0">
+          <span className="text-sm" style={{color:"var(--color-ink)", lineHeight:1.45}}>{n.text}</span>
+          <span className="text-[11px] ml-2" style={{color:"var(--color-ink-muted-48)"}}>{[n.by, ago(n.at)].filter(Boolean).join(" \u00b7 ")}</span>
+        </span>
+        <button onClick={e=>{ e.preventDefault(); remove(n.id); }} className="text-xs shrink-0 opacity-0 group-hover:opacity-100"
+          style={{background:"none", border:"none", color:"#d70015", cursor:"pointer"}}>delete</button>
+      </label>))}
+    </div>
+    {showDone && <div className="mt-3 pt-3" style={{borderTop:"1px solid var(--color-hairline-alpha)"}}>
+      <div className="text-[11px] mb-1.5" style={{color:"var(--color-ink-muted-48)", letterSpacing:"0.08em", textTransform:"uppercase"}}>Cleared — tick to put back on the board</div>
+      {cleared.map(n=>(<label key={n.id} className="flex items-start gap-2.5" style={{cursor:"pointer", padding:"6px 0"}}>
+        <input type="checkbox" checked onChange={()=>setDone(n.id,false)}
+          style={{marginTop:2, width:18, height:18, flexShrink:0, accentColor:"var(--color-primary)"}} />
+        <span className="flex-1 min-w-0 text-sm" style={{color:"var(--color-ink-muted-48)", textDecoration:"line-through"}}>{n.text}</span>
+        <span className="text-[11px] shrink-0" style={{color:"var(--color-ink-muted-48)"}}>{n.doneBy?("cleared by "+n.doneBy):"cleared"}</span>
+      </label>))}
+    </div>}
+  </div>;
+}
+function PrepBoard({state, ingMap, update, branch, meEmail}){
   const [view,setView]=useState(null); const [q,setQ]=useState(""); const [showAdd,setShowAdd]=useState(false); const [addQ,setAddQ]=useState("");
   const [editRec,setEditRec]=useState(null);
   const prepCreateIng=(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; };
@@ -5874,6 +5947,7 @@ function PrepBoard({state, ingMap, update, branch}){
         <Btn onClick={()=>{setShowAdd(true); setAddQ("");}}>+ Add task</Btn>
       </div>
     </div>
+    <PrepHandover state={state} update={update} branch={branch} meEmail={meEmail} />
     <div ref={gridRef} className="prep-grid" style={{"--pc":cols.length}}>
       {cols.map(([key,label])=>{ const items=filtered.filter(r=>pStatus(r,branch,dept)===key);
         return <div key={key} data-col={key} className="rounded-[18px] p-3 prep-col-pad" style={{background:"var(--color-surface-tile-1)", outline: overCol===key && dragId ? "2px solid var(--color-primary-focus)" : "none", transition:"outline-color .12s"}}

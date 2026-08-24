@@ -5118,7 +5118,7 @@ function App(){
     {/* Instagram-style staff story row — same slot as IOS (below header, above content). Filled by shared postcards.js. */}
     <div id="pc-tray-host"></div>
     <main key={tab} className="max-w-5xl mx-auto px-5 md:px-9 py-8 tab-in">
-    {tab==="daily" && <DailyReminder state={state} ingMap={ingMap} setTab={setTab} branch={curBranch} branchName={branchName} fbRef={fbRef} />}
+    {tab==="daily" && <DailyReminder state={state} ingMap={ingMap} update={update} setTab={setTab} branch={curBranch} branchName={branchName} fbRef={fbRef} meEmail={(cloud.user&&cloud.user.email)||""} />}
     {tab==="prep" && <PrepBoard state={state} ingMap={ingMap} update={update} branch={curBranch} meEmail={(cloud.user&&cloud.user.email)||""} />}
     {tab==="ing" && <Ingredients state={state} update={update} setState={setState} />}
     {tab==="rec" && <Recipes state={state} update={update} setState={setState} ingMap={ingMap} />}
@@ -5374,7 +5374,7 @@ function fetchDeadline(u, ms){
   const c=new AbortController(); const t=setTimeout(()=>{ try{ c.abort(); }catch(e){} }, ms||9000);
   return fetch(u,{cache:"no-store", signal:c.signal}).finally(()=>clearTimeout(t));
 }
-function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
+function DailyReminder({state, ingMap, update, setTab, branch, branchName, fbRef, meEmail}){
   const [ics,setIcs]=useState(()=>loadIcs(branch));
   const [draft,setDraft]=useState("");
   const [events,setEvents]=useState(null);
@@ -5651,6 +5651,9 @@ function DailyReminder({state, ingMap, setTab, branch, branchName, fbRef}){
               </button>;
             })}
           </div>}
+        {/* Same component the Prep board uses - one implementation, so ticking a line here and
+            ticking it there are the same action and the two views can never disagree. */}
+        <div className="mt-5"><PrepHandover state={state} update={update} branch={branch} meEmail={meEmail} /></div>
       </div>
       <div className="md:col-span-2">
         <div className="flex items-center justify-between mb-3 pb-2" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>

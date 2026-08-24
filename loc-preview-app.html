@@ -1715,30 +1715,113 @@ const MASTER = "340340";
 
 /* ---------- Items ---------- */
 function ItemsCard({ctx}){
-  const [q,setQ]=useState(""); const [edit,setEdit]=useState(null); const [adding,setAdding]=useState(false);
-  const items=(ctx.items||[]).filter(i=>!q||i.name.toLowerCase().includes(q.toLowerCase()));
+  const [q,setQ]=useState("");
+  const [catFilter,setCatFilter]=useState("all");
+  const [sort,setSort]=useState({key:"name",dir:1});   // name | unit | cat · dir 1=asc, -1=desc
+  const [pageSize,setPageSize]=useState(25);           // 25 | 50 | 100 | "all"
+  const [page,setPage]=useState(1);
+  const [sel,setSel]=useState({});                     // {itemId:true} — bulk delete
+  const [edit,setEdit]=useState(null); const [adding,setAdding]=useState(false);
+
   const catLabel=id=>{ const c=ctx.categories.find(c=>c.id===id); return c?c.label:"—"; };
-  const removeItem=(it)=>{ if(!confirm(`Delete "${it.name}"? This can't be undone.`)) return; const next=ctx.items.filter(x=>x.id!==it.id); ctx.saveItems(next); toast("Deleted ✓"); };
+  const catRank=id=>{ const i=ctx.categories.findIndex(c=>c.id===id); return i<0?9999:i; };  // uncategorised sinks to the bottom
+  const cmpName=(a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{sensitivity:"base",numeric:true});
+
+  const filtered=useMemo(()=>{
+    const needle=q.trim().toLowerCase();
+    return (ctx.items||[]).filter(i=>{
+      if(catFilter==="none"){ if(ctx.categories.some(c=>c.id===i.cat)) return false; }
+      else if(catFilter!=="all" && (i.cat||"")!==catFilter) return false;
+      if(!needle) return true;
+      return [i.name,i.unit,catLabel(i.cat),i.groupLabel,i.allergens].some(v=>String(v||"").toLowerCase().includes(needle));
+    });
+  },[ctx.items,ctx.categories,q,catFilter]);
+
+  const sorted=useMemo(()=>{
+    const rows=[...filtered];
+    rows.sort((a,b)=>{
+      let r=0;
+      if(sort.key==="unit"){ r=String(a.unit||"").toLowerCase().localeCompare(String(b.unit||"").toLowerCase(),undefined,{sensitivity:"base"}); if(!r) r=cmpName(a,b); }
+      else if(sort.key==="cat"){ r=catRank(a.cat)-catRank(b.cat); if(!r) r=cmpName(a,b); }
+      else r=cmpName(a,b);
+      return r*sort.dir;
+    });
+    return rows;
+  },[filtered,sort,ctx.categories]);
+
+  const total=sorted.length;
+  const size=pageSize==="all"?Math.max(1,total):pageSize;
+  const pages=Math.max(1,Math.ceil(total/size));
+  const cur=Math.min(page,pages);
+  const start=(cur-1)*size;
+  const view=sorted.slice(start,start+size);
+  useEffect(()=>{ setPage(1); },[q,catFilter,sort.key,sort.dir,pageSize]);
+
+  const selIds=Object.keys(sel).filter(id=>sel[id]);
+  const pageAllSelected=view.length>0 && view.every(it=>sel[it.id]);
+  const toggleAllOnPage=()=>setSel(s=>{ const n={...s}; view.forEach(it=>{ if(pageAllSelected) delete n[it.id]; else n[it.id]=true; }); return n; });
+  const toggleOne=id=>setSel(s=>{ const n={...s}; if(n[id]) delete n[id]; else n[id]=true; return n; });
+
+  const removeItem=(it)=>{ if(!confirm(`Delete "${it.name}"? This can't be undone.`)) return; ctx.saveItems(ctx.items.filter(x=>x.id!==it.id)); setSel(s=>{ const n={...s}; delete n[it.id]; return n; }); toast("Deleted ✓"); };
+  const removeSelected=()=>{ if(!selIds.length) return; if(!confirm(`Delete ${selIds.length} item${selIds.length>1?"s":""}? This can't be undone.`)) return; const kill=new Set(selIds); ctx.saveItems(ctx.items.filter(x=>!kill.has(x.id))); setSel({}); toast(`Deleted ${selIds.length} ✓`); };
+
   const blank=()=>({id:uid("i"),name:"",unit:"ea",cat:ctx.categories[0]?.id||"",allergens:"",cost:"",minOrderQty:null,groupLabel:"",parLevels:{}});
   const commit=(it)=>{ if(!it.name.trim()){ toast("Name required",true); return; } let next; if(ctx.items.find(x=>x.id===it.id)) next=ctx.items.map(x=>x.id===it.id?it:x); else next=[...ctx.items,it]; ctx.saveItems(next); setEdit(null); setAdding(false); toast("Saved ✓"); };
+
+  const sortTh=(k,label,extra)=>{
+    const on=sort.key===k;
+    return <th style={{...th,cursor:"pointer",userSelect:"none",...(extra||{})}} onClick={()=>setSort(s=>s.key===k?{key:k,dir:-s.dir}:{key:k,dir:1})} title="Click to sort">
+      {label}<span style={{marginLeft:5,fontSize:9,opacity:on?.85:.25}}>{on&&sort.dir===-1?"▼":"▲"}</span>
+    </th>;
+  };
+  const units=Array.from(new Set((ctx.items||[]).map(i=>(i.unit||"").trim()).filter(Boolean))).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+
   return <Card>
-    <SectionLabel right={<Btn size="sm" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</Btn>}>Items ({ctx.items.length})</SectionLabel>
-    <input placeholder="Search items…" value={q} onChange={e=>setQ(e.target.value)} style={{...inp,marginBottom:12}} />
-    <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:420}}>
-      <thead><tr><th style={th}>Name</th><th style={th}>Unit</th><th style={th}>Category</th><th style={{...th,textAlign:"right"}}></th></tr></thead>
-      <tbody>{items.map(it=>(<tr key={it.id}>
+    <SectionLabel right={<div style={{display:"flex",gap:8,alignItems:"center"}}>{selIds.length>0&&<Btn size="sm" tone="danger" onClick={removeSelected}>Delete {selIds.length}</Btn>}<Btn size="sm" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</Btn></div>}>Items ({total===ctx.items.length?total:total+" / "+ctx.items.length})</SectionLabel>
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+      <input placeholder="Search name, unit, category…" value={q} onChange={e=>setQ(e.target.value)} style={{...inp,flex:"1 1 220px",width:"auto"}} />
+      <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{...inp,flex:"0 1 190px",width:"auto"}}>
+        <option value="all">All categories</option>
+        {ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+        <option value="none">Uncategorised</option>
+      </select>
+      {(q||catFilter!=="all")&&<Btn size="sm" tone="ghost" onClick={()=>{setQ("");setCatFilter("all");}}>Clear</Btn>}
+    </div>
+    <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:460}}>
+      <thead><tr>
+        <th style={{...th,width:30,paddingRight:0}}><input type="checkbox" checked={pageAllSelected} onChange={toggleAllOnPage} style={{cursor:"pointer",width:15,height:15}} title="Select page" /></th>
+        {sortTh("name","Name")}
+        {sortTh("unit","Unit")}
+        {sortTh("cat","Category")}
+        <th style={{...th,textAlign:"right"}}></th>
+      </tr></thead>
+      <tbody>{view.map(it=>(<tr key={it.id} style={sel[it.id]?{background:"var(--color-canvas-parchment)"}:null}>
+        <td style={{...td,paddingRight:0}}><input type="checkbox" checked={!!sel[it.id]} onChange={()=>toggleOne(it.id)} style={{cursor:"pointer",width:15,height:15}} /></td>
         <td style={td}><div style={{fontWeight:600}}>{it.name}</div>{it.allergens&&<div style={{fontSize:11,color:"#b45309"}}>{it.allergens}</div>}</td>
         <td style={{...td,color:"var(--color-ink-muted-48)"}}>{it.unit}</td>
         <td style={{...td,color:"var(--color-ink-muted-48)"}}>{catLabel(it.cat)}</td>
         <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }} style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer",fontSize:13,fontWeight:600,marginRight:10}}>Edit</button><button onClick={()=>removeItem(it)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>Delete</button></td>
       </tr>))}</tbody>
     </table></HScroll>
-    {items.length===0 && <Empty>No items.</Empty>}
+    {total===0 && <Empty>{ctx.items.length?"No items match this search.":"No items."}</Empty>}
+    {total>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,flexWrap:"wrap"}}>
+      <div style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>{start+1}–{Math.min(start+size,total)} of {total}</div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <select value={String(pageSize)} onChange={e=>setPageSize(e.target.value==="all"?"all":Number(e.target.value))} style={{...inp,width:"auto",fontSize:13,padding:"7px 9px"}}>
+          <option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option><option value="all">Show all</option>
+        </select>
+        {pages>1&&<React.Fragment>
+          <Btn size="sm" tone="ghost" disabled={cur<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>‹</Btn>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--color-ink)",minWidth:52,textAlign:"center"}}>{cur} / {pages}</div>
+          <Btn size="sm" tone="ghost" disabled={cur>=pages} onClick={()=>setPage(p=>Math.min(pages,p+1))}>›</Btn>
+        </React.Fragment>}
+      </div>
+    </div>}
     {edit && <Modal title={adding?"Add item":"Edit item"} onClose={()=>{setEdit(null);setAdding(false);}} footer={<><Btn tone="ghost" onClick={()=>{setEdit(null);setAdding(false);}}>Cancel</Btn><Btn onClick={()=>commit(edit)}>Save</Btn></>}>
       <div style={{display:"grid",gap:12}}>
         <Field label="Name"><input value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})} style={inp} autoFocus /></Field>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Field label="Unit"><input value={edit.unit} onChange={e=>setEdit({...edit,unit:e.target.value})} style={inp} /></Field>
+          <Field label="Unit"><input value={edit.unit} onChange={e=>setEdit({...edit,unit:e.target.value})} style={inp} list="ord-unit-options" /><datalist id="ord-unit-options">{units.map(u=><option key={u} value={u} />)}</datalist></Field>
           <Field label="Category"><select value={edit.cat} onChange={e=>setEdit({...edit,cat:e.target.value})} style={inp}>{ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>

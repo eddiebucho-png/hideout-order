@@ -4246,9 +4246,9 @@ function migrate(s){
      written, and a line simply stays up until someone ticks it - that is what carries it to the
      next day's chef. Ticked lines are kept (not deleted) so they can be pulled back. */
   if(!Array.isArray(s.prepNotes)) s.prepNotes=[];
-  // ticked handover lines are only useful for a little while; past that they are clutter
-  if(s.prepNotes.length>200) s.prepNotes=s.prepNotes.filter(n=>n&&!n.done).concat(
-    s.prepNotes.filter(n=>n&&n.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,100));
+  /* No cap here on purpose. A handover line is ~143 bytes, so a few a day is well under a hundred KB
+     over years, and these are a record the kitchen has to be able to read back. If the shared state
+     document ever does get tight, archive them to their own doc - do NOT silently drop them. */
   // ---- LOG CAPS (2026-08-03) ----------------------------------------------------------------
   // The whole app is ONE Firestore document with a hard 1 MB ceiling. Recipes and ingredients are
   // real data and stay; these three are append-only logs that would otherwise grow forever and
@@ -5653,7 +5653,7 @@ function DailyReminder({state, ingMap, update, setTab, branch, branchName, fbRef
           </div>}
         {/* Same component the Prep board uses - one implementation, so ticking a line here and
             ticking it there are the same action and the two views can never disagree. */}
-        <div className="mt-5"><PrepHandover state={state} update={update} branch={branch} meEmail={meEmail} /></div>
+        <div className="mt-5"><PrepHandover state={state} update={update} branch={branch} meEmail={meEmail} composer={false} /></div>
       </div>
       <div className="md:col-span-2">
         <div className="flex items-center justify-between mb-3 pb-2" style={{borderBottom:"1px solid var(--color-hairline-alpha)"}}>
@@ -5829,17 +5829,22 @@ const PREP_COLS=[["urgent","URGENT"],["todo","TO DO"],["done","DONE"]];
 /* Handover strip on the Prep board. Deliberately NOT tied to a date: a line written today is still
    on the board tomorrow, which is the whole point - the next chef reads it and ticks it off. Ticking
    sets `done` rather than deleting, so "Show cleared" can put anything back. */
-function PrepHandover({state, update, branch, meEmail}){
+function PrepHandover({state, update, branch, meEmail, composer=true}){
   const [draft,setDraft]=useState("");
   const [showDone,setShowDone]=useState(false);
-  const all=(state.prepNotes||[]).filter(n=>n && !n.branch || (n&&n.branch===branch));
+  const [showAdd,setShowAdd]=useState(false);   // the + card, used where there is no inline composer
+  const [allDone,setAllDone]=useState(false);   // "show everything" for the cleared list
+  /* Strictly this location. Handover is a per-venue thing - 340's chef must not see 515's lines,
+     and the loose version of this test also let a note with no branch leak into every store. */
+  const all=(state.prepNotes||[]).filter(n=>n && n.branch===branch);
   const open=all.filter(n=>!n.done).sort((a,b)=>(b.at||0)-(a.at||0));
-  const cleared=all.filter(n=>n.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,20);
+  const clearedAll=all.filter(n=>n.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  const cleared=allDone?clearedAll:clearedAll.slice(0,20);
   const who=String(meEmail||"").split("@")[0]||"";
   const add=()=>{ const t=draft.trim(); if(!t) return;
     update(s=>{ if(!Array.isArray(s.prepNotes)) s.prepNotes=[];
       s.prepNotes.unshift({id:rid("pn"), text:t, by:who, at:Date.now(), branch, done:false}); });
-    setDraft(""); };
+    setDraft(""); setShowAdd(false); };
   const setDone=(id,v)=>update(s=>{ const n=(s.prepNotes||[]).find(x=>x.id===id);
     if(n){ n.done=v; n.doneAt=v?Date.now():0; n.doneBy=v?who:""; } });
   const remove=id=>{ if(!confirm("Delete this handover line for good?")) return;
@@ -5854,20 +5859,29 @@ function PrepHandover({state, update, branch, meEmail}){
       <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>
         Note for tomorrow&rsquo;s chef{open.length? (" \u00b7 "+open.length):""}
       </div>
-      {cleared.length>0 && <button onClick={()=>setShowDone(v=>!v)} className="text-[11px]"
-        style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>
-        {showDone?"Hide cleared":"Show cleared ("+cleared.length+")"}
-      </button>}
+      <div className="flex items-center gap-3">
+        {clearedAll.length>0 && <button onClick={()=>setShowDone(v=>!v)} className="text-[11px]"
+          style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>
+          {showDone?"Hide cleared":"Show cleared ("+clearedAll.length+")"}
+        </button>}
+        {/* where the inline composer is hidden (Today), this is the way in */}
+        {!composer && <button onClick={()=>setShowAdd(true)} aria-label="Leave a note for tomorrow"
+          style={{width:30, height:30, borderRadius:8, border:"none", background:"var(--color-primary)",
+            color:"#fff", fontSize:19, lineHeight:1, cursor:"pointer", flexShrink:0}}>+</button>}
+      </div>
     </div>
-    <div className="flex gap-2 items-center mb-3">
+    {composer && <div className="flex gap-2 items-center mb-3">
       {/* Enter posts, so a chef on the way out the door can type one line and go */}
       <input className="inp" style={{flex:"1 1 auto", minWidth:0, height:44}} value={draft}
         placeholder="Anything the next chef needs to know…"
         onChange={e=>setDraft(e.target.value)}
         onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } }} />
       <Btn onClick={add}>Leave note</Btn>
-    </div>
-    {open.length===0 && !showDone && <div className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Nothing handed over. Type a line above and it stays on the board until someone ticks it off.</div>}
+    </div>}
+    {open.length===0 && !showDone && <div className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>
+      {composer? "Nothing handed over. Type a line above and it stays on the board until someone ticks it off."
+               : "Nothing handed over."}
+    </div>}
     <div className="space-y-1.5">
       {open.map(n=>(<label key={n.id} className="flex items-start gap-2.5 group" style={{cursor:"pointer", padding:"7px 0"}}>
         {/* 18px box: this gets tapped with a thumb on the kitchen tablet */}
@@ -5889,7 +5903,21 @@ function PrepHandover({state, update, branch, meEmail}){
         <span className="flex-1 min-w-0 text-sm" style={{color:"var(--color-ink-muted-48)", textDecoration:"line-through"}}>{n.text}</span>
         <span className="text-[11px] shrink-0" style={{color:"var(--color-ink-muted-48)"}}>{n.doneBy?("cleared by "+n.doneBy):"cleared"}</span>
       </label>))}
+      {!allDone && clearedAll.length>20 && <button onClick={()=>setAllDone(true)} className="text-[11px] mt-1"
+        style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>
+        Show all {clearedAll.length}
+      </button>}
     </div>}
+    {showAdd && <Modal title="Note for tomorrow&rsquo;s chef" onClose={()=>setShowAdd(false)}>
+      <input autoFocus className="inp" style={{height:44}} value={draft}
+        placeholder="Anything the next chef needs to know…"
+        onChange={e=>setDraft(e.target.value)}
+        onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } }} />
+      <div className="flex justify-end gap-2 mt-4">
+        <Btn tone="ghost" onClick={()=>setShowAdd(false)}>Cancel</Btn>
+        <Btn onClick={add}>Leave note</Btn>
+      </div>
+    </Modal>}
   </div>;
 }
 function PrepBoard({state, ingMap, update, branch, meEmail}){
@@ -7801,6 +7829,59 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
     document.addEventListener("pointercancel",end,true);
     window.addEventListener("blur",end);
   }catch(_){/* never break the app */}
+})();
+</script>
+<script>
+/* The chat button and the postcards button both live in the bottom-right corner, which on a phone is
+   exactly where a Save button or a file link ends up - they were covering things people needed to
+   tap. Long-press either one (about a third of a second) and it can be dragged anywhere; the spot is
+   remembered per device. A short tap still opens the panel as before.
+   Wired from here rather than from each widget because postcards.js is served from another app. */
+(function(){
+  function wire(el, key){
+    if(!el || el.__fabDrag) return; el.__fabDrag=true;
+    var LS="hideout_fabpos_"+key;
+    el.style.touchAction="none";                       // so a drag does not scroll the page instead
+    function place(x,y){
+      var w=el.offsetWidth||62, h=el.offsetHeight||62;
+      var cx=Math.max(4, Math.min(x, window.innerWidth-w-4));
+      var cy=Math.max(4, Math.min(y, window.innerHeight-h-4));
+      el.style.left=cx+"px"; el.style.top=cy+"px"; el.style.right="auto"; el.style.bottom="auto";
+    }
+    try{ var p=JSON.parse(localStorage.getItem(LS)||"null"); if(p) place(p.x,p.y); }catch(e){}
+    var hold=null, dragging=false, sx=0, sy=0, ox=0, oy=0;
+    el.addEventListener("pointerdown", function(e){
+      var r=el.getBoundingClientRect(); sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
+      hold=setTimeout(function(){
+        dragging=true; el.style.transition="none"; el.style.opacity="0.85";
+        try{ el.setPointerCapture(e.pointerId); }catch(err){}
+        try{ if(navigator.vibrate) navigator.vibrate(15); }catch(err){}   // "you can move me now"
+      }, 380);
+    });
+    el.addEventListener("pointermove", function(e){
+      if(!dragging) return; e.preventDefault();
+      place(ox+(e.clientX-sx), oy+(e.clientY-sy));
+    });
+    function end(){
+      clearTimeout(hold);
+      if(!dragging) return;
+      dragging=false; el.style.opacity=""; el.style.transition="";
+      var r=el.getBoundingClientRect();
+      /* a hidden button measures 0x0 - never write that, or the next load restores it to the corner */
+      if(r.width>0 && r.height>0){ try{ localStorage.setItem(LS, JSON.stringify({x:r.left, y:r.top})); }catch(err){} }
+      /* the pointerup that finishes a drag also fires a click - swallow that one so letting go
+         of the button does not open the panel you were trying to move out of the way */
+      el.addEventListener("click", function sw(ev){ ev.stopPropagation(); ev.preventDefault(); }, {capture:true, once:true});
+    }
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+    window.addEventListener("resize", function(){ var r=el.getBoundingClientRect(); place(r.left, r.top); });
+  }
+  function scan(){ wire(document.getElementById("hb-fab"),"chat"); wire(document.getElementById("pc-fab"),"postcards"); }
+  scan();
+  // both buttons are injected after load (the chatbot on sign-in, postcards from its own script)
+  try{ new MutationObserver(scan).observe(document.body, {childList:true}); }catch(e){}
+  [800, 2500, 6000].forEach(function(ms){ setTimeout(scan, ms); });
 })();
 </script>
 </body>

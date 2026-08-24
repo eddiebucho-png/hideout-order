@@ -5857,12 +5857,30 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
      photo, and each venue's handover shots stay separately addressable in Cloudinary. */
   const brName=((state.branches||[]).find(b=>b.id===branch)||{}).name||String(branch||"");
   const photoTag="handover,handover_"+(brName.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"unknown");
+  /* Resize in the browser first. A phone photo is 3-6MB; the board shows a 72px thumbnail and the
+     viewer at most 1400px, so 1600px at q0.82 loses nothing anyone can see and uploads in a second
+     on kitchen wifi. compressImage is the same helper the dish photos use. Falls back to the
+     original file if the canvas step fails for any reason. */
+  const shrink=file=>new Promise(res=>{
+    try{
+      compressImage(file, dataUrl=>{
+        try{
+          const b=atob(String(dataUrl).split(",")[1]||"");
+          const buf=new Uint8Array(b.length);
+          for(let i=0;i<b.length;i++) buf[i]=b.charCodeAt(i);
+          const name=(file.name||"photo").replace(/\.[^.]+$/,"")+".jpg";
+          res(new File([buf], name, {type:"image/jpeg"}));
+        }catch(e){ res(file); }
+      }, 1600);
+    }catch(e){ res(file); }
+  });
   const addPhotos=async(files)=>{
     if(!files||!files.length) return;
     setUpBusy(true);
     for(const file of files){
       try{
-        const up=await cloudinaryUpload(file, photoTag);
+        const small=/^image\//.test(file.type)? await shrink(file) : file;
+        const up=await cloudinaryUpload(small, photoTag);
         if(up&&up.url) setDraftPhotos(p=>p.concat([{url:up.url, publicId:up.publicId||""}]));
         else throw new Error("Cloudinary returned no image URL");
       }catch(e){ alert("Photo upload failed: "+((e&&e.message)||e)); }
@@ -5908,13 +5926,16 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
                : "Nothing handed over."}
     </div>}
     <div className="space-y-1.5">
-      {open.map(n=>(<label key={n.id} className="flex items-start gap-2.5 group" style={{cursor:"pointer", padding:"7px 0"}}>
+      {open.map(n=>(<label key={n.id} className="flex items-start gap-2.5 group" style={{cursor:"pointer", padding:"7px 0", minWidth:0}}>
         {/* 18px box: this gets tapped with a thumb on the kitchen tablet */}
         <input type="checkbox" checked={false} onChange={()=>setDone(n.id,true)}
           style={{marginTop:2, width:18, height:18, flexShrink:0, accentColor:"var(--color-primary)"}} />
         <span className="flex-1 min-w-0">
           {/* pre-wrap: a note written in the card can be several lines */}
-          <span className="text-sm" style={{color:"var(--color-ink)", lineHeight:1.45, whiteSpace:"pre-wrap"}}>{n.text}</span>
+          {/* display:block + overflowWrap:anywhere - a chef pasting one long unbroken string used to
+              push the whole note out past the panel and over the calendar next to it. */}
+          <span className="text-sm" style={{color:"var(--color-ink)", lineHeight:1.45, whiteSpace:"pre-wrap",
+            display:"block", overflowWrap:"anywhere", wordBreak:"break-word"}}>{n.text}</span>
           <span className="text-[11px] ml-2" style={{color:"var(--color-ink-muted-48)"}}>{[n.by, ago(n.at)].filter(Boolean).join(" \u00b7 ")}</span>
           {(n.photos||[]).length>0 && <span className="flex gap-1.5 mt-1.5 flex-wrap">
             {(n.photos||[]).map((p,pi)=>(<img key={pi} src={cld(p.url,72)} alt="" loading="lazy"
@@ -5933,7 +5954,8 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
         <input type="checkbox" checked onChange={()=>setDone(n.id,false)}
           style={{marginTop:2, width:18, height:18, flexShrink:0, accentColor:"var(--color-primary)"}} />
         <span className="flex-1 min-w-0">
-          <span className="text-sm" style={{color:"var(--color-ink-muted-48)", textDecoration:"line-through", whiteSpace:"pre-wrap"}}>{n.text}</span>
+          <span className="text-sm" style={{color:"var(--color-ink-muted-48)", textDecoration:"line-through", whiteSpace:"pre-wrap",
+            display:"block", overflowWrap:"anywhere", wordBreak:"break-word"}}>{n.text}</span>
           {(n.photos||[]).length>0 && <span className="flex gap-1.5 mt-1.5 flex-wrap">
             {(n.photos||[]).map((p,pi)=>(<img key={pi} src={cld(p.url,56)} alt="" loading="lazy"
               onClick={ev=>{ ev.preventDefault(); ev.stopPropagation(); setViewPhoto(p.url); }}
@@ -5948,13 +5970,18 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
         Show all {clearedAll.length}
       </button>}
     </div>}
-    {showAdd && <Modal wide title="Note for tomorrow&rsquo;s chef" onClose={()=>{ setShowAdd(false); setDraft(""); setDraftPhotos([]); }}>
+    {showAdd && <Modal sheet title="Note for tomorrow&rsquo;s chef" onClose={()=>{ setShowAdd(false); setDraft(""); setDraftPhotos([]); }}>
       {/* a textarea, not a one-line input: handover is usually two or three things, and Enter has to
           make a new line rather than submit */}
-      <textarea autoFocus className="inp" rows={5} value={draft}
+      {/* Grows with what is typed instead of scrolling inside a fixed box - a handover is sometimes
+          one line and sometimes twenty, and neither should feel cramped. Capped at 70vh so the Save
+          buttons never get pushed off screen. */}
+      <textarea autoFocus className="inp" rows={14} value={draft}
         placeholder={"Anything the next chef needs to know\u2026\n\nOne thing per line reads best on the board."}
-        onChange={e=>setDraft(e.target.value)}
-        style={{minHeight:130, fontFamily:"var(--font-text)", fontSize:14, lineHeight:1.5}} />
+        onChange={e=>{ setDraft(e.target.value);
+          const el=e.target; el.style.height="auto";
+          el.style.height=Math.min(el.scrollHeight+2, Math.round(window.innerHeight*0.7))+"px"; }}
+        style={{minHeight:"45vh", maxHeight:"70vh", fontFamily:"var(--font-text)", fontSize:15, lineHeight:1.6, resize:"vertical"}} />
       <div className="mt-3">
         <div className="text-xs font-medium mb-2" style={{color:"var(--color-ink)"}}>Photos</div>
         <div className="text-[11px] mb-2" style={{color:"var(--color-ink-muted-48)"}}>

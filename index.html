@@ -373,8 +373,15 @@ const cfg = {
   // Direct Firestore (skips the slow Apps Script hop). Project is the ordering backend's own
   // FIRESTORE_PROJECT_ID. fsApiKey must be a *Firebase Web / browser* API key for THAT project
   // (client-safe, not a server secret) — set it below to turn the fast path on.
-  fsProjectId: 'hideout-firestore-hb20',
-  fsApiKey: 'AIzaSyCBx4hHu3eJJeuyF84jWimxLx5sDVuVmgE',
+  /* 2026-08-25 이사: hideout-firestore-hb20 → hideout-recipe-cost.
+     왜: 보안 감사 P1 — 발주 kv 741키가 공개 키만으로 읽기/쓰기 가능했다. 잠갔더니 이 fast path 가
+     403 이 되어 앱이 Apps Script 폴백으로만 돌았고, 부팅이 수십 초가 됐다(같은 날 실측, 롤백).
+     해결: 데이터를 **구글 로그인이 이미 있는 프로젝트**(RCC, 스태프 게이트가 쓰는 그 세션)로 옮기고,
+     fast path 요청마다 그 로그인의 ID 토큰을 Authorization 헤더로 붙인다(아래 fsAuthHdr).
+     RCC 쪽 Firestore 규칙은 kv 를 signedIn() 으로만 허용한다 — 빠르고, 잠겨 있다.
+     753키 전량 복사·값 대조 완료(2026-08-25 밤). hb20 은 검증 후 전면 잠금으로 퇴역한다. */
+  fsProjectId: 'hideout-recipe-cost',
+  fsApiKey: 'AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s',
   fsDirect: false,
   department: null,       // 'chef' | 'barista'
   cache: {},              // key -> {value, ts}
@@ -461,11 +468,25 @@ async function withRetry(fn, attempts){
 function fsBase(){ return 'https://firestore.googleapis.com/v1/projects/'+cfg.fsProjectId+'/databases/(default)/documents'; }
 function fsKeyQ(){ return 'key='+encodeURIComponent(cfg.fsApiKey); }
 function fsExtract(doc){ return (doc&&doc.fields&&doc.fields.value&&doc.fields.value.stringValue!==undefined)?doc.fields.value.stringValue:null; }
-async function fsDirectGet(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{cache:'no-store'}); if(r.status===404) return null; if(!r.ok) throw new Error('fs '+r.status); return fsExtract(await r.json()); }
-async function fsDirectSet(key,value){ const body={fields:{key:{stringValue:String(key)},value:{stringValue:String(value)},updatedAt:{timestampValue:new Date().toISOString()}}}; const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); if(!r.ok) throw new Error('fs set '+r.status); }
-async function fsDirectDelete(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'DELETE'}); if(!r.ok&&r.status!==404) throw new Error('fs del '+r.status); }
-async function fsDirectBatch(keys){ const docs=keys.map(k=>'projects/'+cfg.fsProjectId+'/databases/(default)/documents/kv/'+k); /* [FIX 2026-07-20] no encodeURIComponent: batchGet resource names must be raw, else colon keys (barista:, order:) never match */ const r=await fetch(fsBase()+':batchGet?'+fsKeyQ(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documents:docs})}); if(!r.ok) throw new Error('fs batch '+r.status); const arr=await r.json(); const out={}; (arr||[]).forEach(e=>{ if(e.found){ const k=decodeURIComponent(e.found.name.split('/').pop()); out[k]=fsExtract(e.found); } }); keys.forEach(k=>{ if(out[k]===undefined) out[k]=null; }); return out; }
-async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collectionId:'kv'}],where:{compositeFilter:{op:'AND',filters:[{fieldFilter:{field:{fieldPath:'key'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:prefix}}},{fieldFilter:{field:{fieldPath:'key'},op:'LESS_THAN',value:{stringValue:prefix+'\uf8ff'}}}]}}}}; const r=await fetch(fsBase()+':runQuery?'+fsKeyQ(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(q)}); if(!r.ok) throw new Error('fs list '+r.status); const arr=await r.json(); const keys=[]; (arr||[]).forEach(e=>{ if(e.document&&e.document.fields&&e.document.fields.key) keys.push(e.document.fields.key.stringValue); }); return keys; }
+/* 2026-08-25 \u2014 fast path \uc5d0 **\uc2a4\ud0dc\ud504 \ub85c\uadf8\uc778 \ud1a0\ud070**\uc744 \ubd99\uc778\ub2e4.
+   \ub370\uc774\ud130\uac00 RCC \ud504\ub85c\uc81d\ud2b8\ub85c \uc774\uc0ac\ud588\uace0 \uadf8\ucabd \uaddc\uce59\uc740 kv \ub97c signedIn() \uc73c\ub85c\ub9cc \ud5c8\uc6a9\ud55c\ub2e4. \uc2a4\ud0dc\ud504 \uac8c\uc774\ud2b8\uac00
+   \uc774\ubbf8 \uc774 origin \uc5d0 \uadf8 \ud504\ub85c\uc81d\ud2b8\uc758 Firebase \uc138\uc158\uc744 \ub9cc\ub4e4\uc5b4 \ub450\ubbc0\ub85c(staff-gate.js), \uadf8 ID \ud1a0\ud070\uc744
+   Authorization \ud5e4\ub354\ub85c \uc2e4\uc73c\uba74 \uaddc\uce59\uc744 \ud1b5\uacfc\ud55c\ub2e4 \u2014 getIdToken() \uc740 \ub9cc\ub8cc\ub97c SDK \uac00 \uc54c\uc544\uc11c \uac31\uc2e0\ud55c\ub2e4.
+   \ub85c\uadf8\uc778 \uc804(\uac8c\uc774\ud2b8 \ud654\uba74)\uc5d0\ub294 \ud1a0\ud070\uc774 \uc5c6\uc5b4 fast path \uac00 403 \u2192 probeFsDirect \uac00 \uaebc\uc9d0 \u2192
+   Apps Script \ud3f4\ubc31\uc73c\ub85c \ub3d9\uc791\ud558\uace0, \ub85c\uadf8\uc778 \ud6c4 \uccab kv \ud638\ucd9c\ubd80\ud130 fast path \ub85c \ub3cc\uc544\uc628\ub2e4. */
+async function fsAuthHdr(extra){
+  const h = Object.assign({}, extra||{});
+  try{
+    const u = (window.firebase && firebase.apps && firebase.apps.length) ? firebase.app().auth().currentUser : null;
+    if(u){ h['Authorization'] = 'Bearer ' + await u.getIdToken(); }
+  }catch(e){ /* \ud1a0\ud070 \uc2e4\ud328 \uc2dc \ubb34\ud5e4\ub354\ub85c \uc9c4\ud589 \u2014 \uaddc\uce59\uc774 \uac70\ubd80\ud558\uba74 \uae30\uc874 \ud3f4\ubc31 \uacbd\ub85c\uac00 \ubc1b\ub294\ub2e4 */ }
+  return h;
+}
+async function fsDirectGet(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{cache:'no-store',headers:await fsAuthHdr()}); if(r.status===404) return null; if(!r.ok) throw new Error('fs '+r.status); return fsExtract(await r.json()); }
+async function fsDirectSet(key,value){ const body={fields:{key:{stringValue:String(key)},value:{stringValue:String(value)},updatedAt:{timestampValue:new Date().toISOString()}}}; const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'PATCH',headers:await fsAuthHdr({'Content-Type':'application/json'}),body:JSON.stringify(body)}); if(!r.ok) throw new Error('fs set '+r.status); }
+async function fsDirectDelete(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'DELETE',headers:await fsAuthHdr()}); if(!r.ok&&r.status!==404) throw new Error('fs del '+r.status); }
+async function fsDirectBatch(keys){ const docs=keys.map(k=>'projects/'+cfg.fsProjectId+'/databases/(default)/documents/kv/'+k); /* [FIX 2026-07-20] no encodeURIComponent: batchGet resource names must be raw, else colon keys (barista:, order:) never match */ const r=await fetch(fsBase()+':batchGet?'+fsKeyQ(),{method:'POST',headers:await fsAuthHdr({'Content-Type':'application/json'}),body:JSON.stringify({documents:docs})}); if(!r.ok) throw new Error('fs batch '+r.status); const arr=await r.json(); const out={}; (arr||[]).forEach(e=>{ if(e.found){ const k=decodeURIComponent(e.found.name.split('/').pop()); out[k]=fsExtract(e.found); } }); keys.forEach(k=>{ if(out[k]===undefined) out[k]=null; }); return out; }
+async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collectionId:'kv'}],where:{compositeFilter:{op:'AND',filters:[{fieldFilter:{field:{fieldPath:'key'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:prefix}}},{fieldFilter:{field:{fieldPath:'key'},op:'LESS_THAN',value:{stringValue:prefix+'\uf8ff'}}}]}}}}; const r=await fetch(fsBase()+':runQuery?'+fsKeyQ(),{method:'POST',headers:await fsAuthHdr({'Content-Type':'application/json'}),body:JSON.stringify(q)}); if(!r.ok) throw new Error('fs list '+r.status); const arr=await r.json(); const keys=[]; (arr||[]).forEach(e=>{ if(e.document&&e.document.fields&&e.document.fields.key) keys.push(e.document.fields.key.stringValue); }); return keys; }
 // Probe once at startup: only switch to the fast path if this project actually has the ordering
 // data (a non-empty 'locations'). A missing doc means we're pointed at the wrong Firestore project,
 // so we stay on Apps Script (which has the real data) rather than silently showing empty/defaults.

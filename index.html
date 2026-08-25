@@ -464,6 +464,17 @@ async function withRetry(fn, attempts){
   throw lastErr;
 }
 
+/* ---- 품목 단가 (2026-08-26 — RCC 연결) ----
+   품목에 rccId 가 있으면 RCC 재료 구매가 × 배수(rccQtyPerUnit, 기본 1)가 단가다.
+   연결이 없거나 가격표가 아직 안 왔으면 예전처럼 수동 cost 를 쓴다 — 기존 데이터와 100% 호환. */
+function itemCost(it){
+  if(it && it.rccId && cfg.rccPriceMap && cfg.rccPriceMap[it.rccId]){
+    const g=cfg.rccPriceMap[it.rccId];
+    return (Number(g.p)||0) * (Number(it.rccQtyPerUnit)||1);
+  }
+  return Number(it && it.cost)||0;
+}
+
 /* ---- direct Firestore REST (fast path; bypasses Apps Script) ---- */
 function fsBase(){ return 'https://firestore.googleapis.com/v1/projects/'+cfg.fsProjectId+'/databases/(default)/documents'; }
 function fsKeyQ(){ return 'key='+encodeURIComponent(cfg.fsApiKey); }
@@ -719,7 +730,7 @@ window.OrderCore = {
   cacheGet, cachePut, cacheClearPrefix, clearCache, hasArtifactStorage, isConnected, withRetry, probeFsDirect,
   kvGet, kvGetFresh, kvSet, kvDelete, kvListPrefix, kvGetBatch, kvSetChunked, kvGetChunkedBatch, kvSetLongText, kvGetLongText,
   loadOrder, saveOrder, loadAllOrdersForDate, stockKey, loadStockTake, saveStockTake, listStockTakeDatesForLocation, listOrderDates,
-  setKey, getKey,
+  setKey, getKey, itemCost,
 };
 })();
 
@@ -1631,7 +1642,7 @@ function PeriodReport({ctx}){
   // Location filter is applied here, not in the fetch — the fetch already pulls every location,
   // so switching locations is instant and costs no extra reads.
   const val=(t)=> loc==="all" ? (t.__t||0) : (t[loc]||0);
-  const costOf=(it)=>Number(it.cost)||0;
+  const costOf=(it)=>C.itemCost(it);   // 2026-08-26 RCC 연결 우선(rccId), 없으면 수동 cost
   // metric drives BOTH the bar length and the sort, so "Value" answers the old Usage Report question
   // ("what is eating the money") while "Qty" answers the old Period one ("what moves the most").
   const size=(it)=> metric==="value" ? val(totals[it.id]||{})*costOf(it) : val(totals[it.id]||{});
@@ -1821,7 +1832,7 @@ function TrendsReport({ctx}){
   const gone=id=>!itemById(id);   // ordered once, since deleted from Settings → Items
   const nameOf=id=>{ const it=itemById(id); return it?it.name:"Removed item"; };
   const RemovedTag=()=><span style={{fontSize:9.5,fontWeight:700,color:"var(--color-ink-muted-48)",border:"1px solid var(--color-hairline-alpha)",borderRadius:4,padding:"1px 4px",marginLeft:6}}>removed</span>;
-  const costOf=it=>Number(it&&it.cost)||0;
+  const costOf=it=>C.itemCost(it);   // 2026-08-26 RCC 연결 우선(rccId), 없으면 수동 cost
   const weigh=(id,arr)=> metric==="value" ? arr.map(v=>v*costOf(itemById(id))) : arr;
   const fmt=v=> metric==="value" ? money(v) : Math.round(v);
 
@@ -2072,9 +2083,24 @@ function ItemsCard({ctx}){
           <Field label="Category"><select value={edit.cat} onChange={e=>setEdit({...edit,cat:e.target.value})} style={inp}>{ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Field label="Cost (optional)"><input inputMode="decimal" value={edit.cost??""} onChange={e=>setEdit({...edit,cost:e.target.value===""?"":Number(e.target.value)})} style={inp} /></Field>
+          <Field label={edit.rccId?"Cost (auto from RCC)":"Cost (optional)"}><input inputMode="decimal" disabled={!!edit.rccId} value={edit.rccId?C.itemCost(edit).toFixed(2):(edit.cost??"")} onChange={e=>setEdit({...edit,cost:e.target.value===""?"":Number(e.target.value)})} style={{...inp,...(edit.rccId?{opacity:.65,background:"var(--color-canvas-parchment)"}:{})}} /></Field>
           <Field label="Min order qty (optional)"><input inputMode="decimal" value={edit.minOrderQty??""} onChange={e=>setEdit({...edit,minOrderQty:e.target.value===""?null:Number(e.target.value)})} style={inp} /></Field>
         </div>
+        {/* RCC 재료 연결 (2026-08-26 주인 요청 "IOS 아이템들 RCC 에서 가격 불러오게, 매칭해서").
+            ⚠ 이름 자동매칭은 안 쓴다 — 실측 81품목 중 정확일치 3개뿐 + 7월 substring 오매칭 전례(SOFT 교훈 1).
+            사람이 한 번 고르면(datalist 정확일치) 그 뒤로 가격은 RCC 를 영원히 따라간다.
+            packs per unit = 발주 단위 1개가 RCC 구매포장 몇 개인가 (예: bottle=2L팩 1개 → 1). */}
+        <Field label="RCC ingredient link (price follows RCC)">
+          {edit.rccId ? (()=>{ const g=(ctx.rccPrices||[]).find(x=>x.i===edit.rccId); return <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"9px 12px"}}>
+            <span style={{flex:"1 1 160px",fontSize:13}}><b>{g?g.n:edit.rccId}</b>{g?<span style={{color:"var(--color-ink-muted-48)"}}> — ${g.p}{g.q?` / ${g.q}${g.u||""}`:""}</span>:<span style={{color:"#b45309"}}> (가격표에 없음)</span>}</span>
+            <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>packs per {edit.unit||"unit"}</span>
+            <input inputMode="decimal" value={edit.rccQtyPerUnit??1} onChange={e=>setEdit({...edit,rccQtyPerUnit:e.target.value===""?1:Number(e.target.value)})} style={{...inp,width:64,textAlign:"center"}} />
+            <button onClick={()=>setEdit({...edit,rccId:null,rccQtyPerUnit:null})} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:12}}>unlink</button>
+          </div>; })() : <React.Fragment>
+            <input list="rcc-price-options" placeholder={(ctx.rccPrices&&ctx.rccPrices.length)?("Search "+ctx.rccPrices.length+" RCC ingredients…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} onChange={e=>{ const g=(ctx.rccPrices||[]).find(x=>x.n===e.target.value); if(g){ setEdit({...edit,rccId:g.i,rccQtyPerUnit:edit.rccQtyPerUnit||1}); e.target.value=""; } }} style={inp} />
+            <datalist id="rcc-price-options">{(ctx.rccPrices||[]).map(g=><option key={g.i} value={g.n}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}</option>)}</datalist>
+          </React.Fragment>}
+        </Field>
         <label style={{display:"flex",gap:9,alignItems:"flex-start",cursor:"pointer",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"10px 12px"}}>
           <input type="checkbox" checked={!!edit.perishable} onChange={e=>setEdit({...edit,perishable:e.target.checked})} style={{cursor:"pointer",width:16,height:16,marginTop:1}} />
           <span><span style={{fontSize:13,fontWeight:700,color:"var(--color-ink)"}}>Daily use item (dispose)</span><br /><span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>Binned if unsold — danish, almond croissant. Leftovers counted at ordering are logged as waste in Trends. Leave off for anything that keeps.</span></span>
@@ -2673,7 +2699,10 @@ function App(){
     try{
       // parSuggest: read-only advice written by the sales analysis (Square 30d x RCC recipes).
       // The app never writes it - it only shows it beside the par the team types in.
-      const keys=["locations","suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes","parSuggest",catKey];
+      /* rcc_prices: 백엔드가 1시간마다 RCC 재료 559개의 구매가를 한 장으로 구워 둔다(rcc-price-map.gs).
+         품목에 rccId 가 연결돼 있으면 이 표의 가격이 수동 cost 대신 쓰인다 — RCC 에서 가격이 바뀌면
+         Period/Trends 의 Est. value 가 자동으로 따라온다 (주인 요청 2026-08-26). */
+      const keys=["locations","suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes","parSuggest","rcc_prices",catKey];
       const [vals,itemVals]=await Promise.all([C.kvGetBatch(keys), C.kvGetChunkedBatch([itemKey])]);
       const locs=vals.locations?JSON.parse(vals.locations):C.DEFAULT_LOCATIONS;
       const parse=(v,d)=>{ try{ return v?JSON.parse(v):d; }catch(e){ return d; } };
@@ -2690,7 +2719,10 @@ function App(){
         deliveryOverrides:parse(vals.deliveryOverrides,{}),
         qcNotes:parse(vals.qcNotes,[]),
         parSuggest:parse(vals.parSuggest,null),
+        rccPrices:parse(vals.rcc_prices,[]),   // [{i,n,p,q,u}] — 없으면 빈 배열(연결 UI 가 안내문을 띄운다)
       };
+      // 단가 조회용 맵 — costOf 들이 전역에서 쓴다 (품목 rccId → {p:구매가,q:수량,u:단위,n:이름})
+      C.cfg.rccPriceMap={}; c.rccPrices.forEach(g=>{ C.cfg.rccPriceMap[g.i]=g; });
       // seed defaults if empty (matches original)
       // seed defaults if empty (matches original) — [FIX 2026-07-23] only seed items when the
       // dept actually HAS defaults. Barista's default list is empty ([]), so the old code fired

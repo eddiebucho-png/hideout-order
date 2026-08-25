@@ -484,10 +484,18 @@ function fsAuthReady(){
     let done=false; const fin=()=>{ if(!done){ done=true; res(); } };
     try{
       if(window.firebase && firebase.apps){
-        firebase.apps.forEach(function(a){ try{ a.auth().onAuthStateChanged(fin); }catch(e){} });
+        firebase.apps.forEach(function(a){ try{ a.auth().onAuthStateChanged(function(u){
+          /* ⚠ 첫 신호에 풀면 안 된다 — 세션 없는 인스턴스가 null 을 먼저 쏘면 토큰 없이 진행돼
+             403→느린 폴백으로 굳는다(주인 기기 실측 "로딩이 왜 이리 느려"). **user 가 잡혔을 때만**
+             즉시 풀고, 아니면 타임아웃까지 다른 인스턴스의 복원을 기다린다. */
+          if(u) fin();
+          /* 로그인이 부팅 **후에** 일어나도(첫 방문 흐름) 빠른 경로를 되살린다 —
+             probe 가 한 번 실패하면 세션 내내 느린 길로 고정되던 구멍. */
+          if(u && !cfg.fsDirect){ probeFsDirect().catch(function(){}); }
+        }); }catch(e){} });
       }
     }catch(e){}
-    setTimeout(fin, 4000);
+    setTimeout(fin, 1500);   // 로그아웃 상태 부팅은 1.5초 뒤 폴백으로 — 게이트 화면이라 체감 없음
   });
   return _authReady;
 }

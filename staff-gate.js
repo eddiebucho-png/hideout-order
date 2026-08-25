@@ -275,11 +275,37 @@
       g.setAttribute("role","dialog"); g.setAttribute("aria-modal","true"); g.setAttribute("aria-label","The Hideout staff sign-in");
       g.innerHTML='<div id="hg-card"></div>';
       document.body.appendChild(g);
+      /* 2026-08-25 보안감사 P1 "Login modal focus leak" — aria-modal 은 스크린리더 안내일 뿐
+         Tab 순서를 막지 못한다. 재감사 실측: 다이얼로그 뒤 지점 버튼 5개가 전부 Tab 으로 닿았다.
+         ① 게이트 뒤 형제 요소 전부에 inert(키보드·포인터·AT 제외)를 건다 — 걸었던 것만 표시해 두고
+            게이트가 걷힐 때 그대로 되돌린다(원래 inert 였던 요소를 건드리지 않기 위해 표시 필수).
+         ② inert 미지원 구형 브라우저 폴백: 포커스가 게이트 밖으로 새면 로그인 버튼으로 되끌어온다. */
+      try{
+        var kids=document.body.children;
+        for(var i=0;i<kids.length;i++){
+          var el=kids[i];
+          if(el===g||el.id==="hg-toast"||el.hasAttribute("inert")) continue;
+          el.setAttribute("inert",""); el.setAttribute("aria-hidden","true"); el.setAttribute("data-hg-inert","1");
+        }
+      }catch(e){}
+      document.addEventListener("focusin", hgTrapFocus_, true);
     }
     return document.getElementById("hg-card");
   }
+  function hgTrapFocus_(ev){
+    var g=document.getElementById("hg-gate");
+    if(!g) return;
+    if(!g.contains(ev.target)){ ev.stopPropagation(); focusCard(); }
+  }
   function focusCard(){ try{ var b=document.getElementById("hg-btn"); if(b) b.focus(); }catch(e){} }
-  function removeGate(){ var g=document.getElementById("hg-gate"); if(g) g.parentNode.removeChild(g); }
+  function removeGate(){
+    var g=document.getElementById("hg-gate"); if(g) g.parentNode.removeChild(g);
+    document.removeEventListener("focusin", hgTrapFocus_, true);
+    try{
+      var marked=document.querySelectorAll('[data-hg-inert]');
+      for(var i=0;i<marked.length;i++){ marked[i].removeAttribute("inert"); marked[i].removeAttribute("aria-hidden"); marked[i].removeAttribute("data-hg-inert"); }
+    }catch(e){}
+  }
 
   var GOOGLE_G='<svg aria-hidden="true" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.5 29.6 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5c11 0 19.5-8 19.5-19.5 0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.5 29.6 4.5 24 4.5 16.3 4.5 9.7 8.9 6.3 14.7z"/><path fill="#4CAF50" d="M24 43.5c5.5 0 10.3-1.9 13.8-5.1l-6.4-5.4C29.4 34.7 26.9 35.5 24 35.5c-5.3 0-9.7-3.1-11.3-7.5l-6.6 5.1C9.6 39 16.2 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.4 5.4c-.5.4 6.8-4.9 6.8-14.9 0-1.3-.1-2.3-.9-3.5z"/></svg>';
   var SHIELD='<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';

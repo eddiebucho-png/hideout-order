@@ -474,10 +474,31 @@ function fsExtract(doc){ return (doc&&doc.fields&&doc.fields.value&&doc.fields.v
    Authorization \ud5e4\ub354\ub85c \uc2e4\uc73c\uba74 \uaddc\uce59\uc744 \ud1b5\uacfc\ud55c\ub2e4 \u2014 getIdToken() \uc740 \ub9cc\ub8cc\ub97c SDK \uac00 \uc54c\uc544\uc11c \uac31\uc2e0\ud55c\ub2e4.
    \ub85c\uadf8\uc778 \uc804(\uac8c\uc774\ud2b8 \ud654\uba74)\uc5d0\ub294 \ud1a0\ud070\uc774 \uc5c6\uc5b4 fast path \uac00 403 \u2192 probeFsDirect \uac00 \uaebc\uc9d0 \u2192
    Apps Script \ud3f4\ubc31\uc73c\ub85c \ub3d9\uc791\ud558\uace0, \ub85c\uadf8\uc778 \ud6c4 \uccab kv \ud638\ucd9c\ubd80\ud130 fast path \ub85c \ub3cc\uc544\uc628\ub2e4. */
+/* \ubd80\ud305 \uacbd\ud569 \ubc29\uc9c0 \u2014 Firebase \ub294 \uc800\uc7a5\ub41c \uc138\uc158\uc744 **\ube44\ub3d9\uae30\ub85c** \ubcf5\uc6d0\ud558\ubbc0\ub85c, \ubd80\ud305 \uc9c1\ud6c4 currentUser \ub294
+   \ub85c\uadf8\uc778\ub3fc \uc788\uc5b4\ub3c4 null \uc774\ub2e4. \uadf8 \uc21c\uac04 probeFsDirect \uac00 \ub3cc\uba74 \ud1a0\ud070 \uc5c6\uc774 403 \u2192 fast path \uac00 \uc138\uc158 \ub0b4\ub0b4
+   \uaebc\uc9c4\ub2e4(\uc8fc\uc778 \uae30\uae30\uc5d0\uc11c \uc2e4\uce21: \ubc30\ud3ec \ud6c4\uc5d0\ub3c4 "\uac81\ub098 \ub290\ub824"). \uccab onAuthStateChanged \uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\ucd5c\ub300 4\ucd08). */
+let _authReady = null;
+function fsAuthReady(){
+  if(_authReady) return _authReady;
+  _authReady = new Promise(res=>{
+    let done=false; const fin=()=>{ if(!done){ done=true; res(); } };
+    try{
+      if(window.firebase && firebase.apps){
+        firebase.apps.forEach(function(a){ try{ a.auth().onAuthStateChanged(fin); }catch(e){} });
+      }
+    }catch(e){}
+    setTimeout(fin, 4000);
+  });
+  return _authReady;
+}
 async function fsAuthHdr(extra){
   const h = Object.assign({}, extra||{});
   try{
-    const u = (window.firebase && firebase.apps && firebase.apps.length) ? firebase.app().auth().currentUser : null;
+    await fsAuthReady();
+    /* 로그인 세션은 어느 인스턴스에든 있을 수 있다 — postcards.js 는 기본 앱, 게이트는 "postcards"
+       이름 앱을 쓴다(같은 설정이라 저장소는 공유). 전 인스턴스를 뒤져 로그인된 쪽의 토큰을 쓴다. */
+    let u = null;
+    if(window.firebase && firebase.apps){ for(const a of firebase.apps){ try{ if(a.auth().currentUser){ u=a.auth().currentUser; break; } }catch(e){} } }
     if(u){ h['Authorization'] = 'Bearer ' + await u.getIdToken(); }
   }catch(e){ /* \ud1a0\ud070 \uc2e4\ud328 \uc2dc \ubb34\ud5e4\ub354\ub85c \uc9c4\ud589 \u2014 \uaddc\uce59\uc774 \uac70\ubd80\ud558\uba74 \uae30\uc874 \ud3f4\ubc31 \uacbd\ub85c\uac00 \ubc1b\ub294\ub2e4 */ }
   return h;
@@ -2615,6 +2636,14 @@ function App(){
   useEffect(()=>{ C.cfg.backendUrl=LS.get("hideout_ord_backendUrl","")||C.DEFAULT_BACKEND_URL;
     C.cfg.fsProjectId=LS.get("hideout_ord_fsProject","")||C.cfg.fsProjectId;
     C.cfg.fsApiKey=LS.get("hideout_ord_fsKey","")||C.cfg.fsApiKey;
+    /* 2026-08-25 이사 마이그레이션 — 기기에 저장된 옛 프로젝트(hb20)가 코드 기본값을 덮어써서,
+       새 코드를 배포해도 그 기기는 **잠긴 퇴역 프로젝트**를 두드리다 403→느린 폴백으로 떨어졌다
+       (주인 기기에서 실측). 옛 값이면 강제로 새 값으로 바꾸고 저장까지 갱신한다. */
+    if(C.cfg.fsProjectId==='hideout-firestore-hb20'){
+      C.cfg.fsProjectId='hideout-recipe-cost';
+      C.cfg.fsApiKey='AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s';
+      try{ LS.set("hideout_ord_fsProject", C.cfg.fsProjectId); LS.set("hideout_ord_fsKey", C.cfg.fsApiKey); }catch(e){}
+    }
     (async()=>{
     try{ await C.probeFsDirect(); }catch(e){}
     try{ const raw=await C.kvGet("locations"); const locs=raw?JSON.parse(raw):C.DEFAULT_LOCATIONS; setLocations(locs); setSync({ok:true,err:""}); }

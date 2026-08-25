@@ -2525,6 +2525,13 @@ function Gate({locations, onUnlock}){
       {!b ? <div>
         <div style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-body-muted)",marginBottom:10}}>Select your branch</div>
         <div style={{display:"grid",gap:8}}>{locations.map(x=><button key={x.id} onClick={()=>pick(x.id)} className="vbtn-card" style={{width:"100%",textAlign:"left",borderRadius:12,padding:"14px 16px",background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.08)",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:600}}>{x.name}</span><span style={{color:"var(--color-body-muted)"}}>{x.passcode?<Ico name="lock" size={15} style={{verticalAlign:"middle"}} />:"›"}</span></button>)}</div>
+      </div> : !b.passcode ? <div style={{textAlign:"center",color:"var(--color-body-muted)",padding:"18px 0"}}>
+        {/* 2026-08-25 — passcode 없는 지점은 pick() 이 즉시 onUnlock 하지만, 그 뒤 데이터 로딩이
+            느리면 화면이 이 분기 자리에서 **비밀번호 입력칸을 보여준 채** 머물렀다(주인 실측:
+            "없던 비밀번호 화면이 생겼다"). 실제로는 입력할 필요가 없는 칸이었다 — passcode 없는
+            지점은 입력칸 대신 진행 표시를 보여준다. 구글 로그인이 이미 접근을 걸러 준다. */}
+        <div style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:600,fontSize:18,marginBottom:10}}>{b.name}</div>
+        Opening…
       </div> : <div className={shake?"anim-shake":""}>
         <button onClick={()=>{setSel("");setErr("");}} style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:12,marginBottom:12}}>‹ Back</button>
         <div style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:600,fontSize:18,marginBottom:14}}>{b.name}</div>

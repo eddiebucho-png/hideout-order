@@ -1888,23 +1888,40 @@
     },true);
     
     function liveBoot(){
-      /* 읽기는 로그인 없이도 된다 — 판은 바로 띄우고, 로그인은 *쓰기* 에만 건다.
-         둘을 묶어 놨더니 로그인 전에는 화면이 통째로 비어 있었다. */
-      liveSubscribe();
+      /* ★ 2026-08-25 — 로그인 **후에만** 구독한다. (보안감사 P1 "Pre-auth Postcards delivery")
+         예전 주석: "읽기는 로그인 없이도 된다 — 판은 바로 띄우고, 로그인은 *쓰기* 에만 건다."
+         그 설계가 만든 것 두 가지:
+           ① 로그인 전 브라우저에 직원 엽서 사진·글·댓글이 그대로 내려갔다
+              (감사 실측: 418개 DOM 요소 + 외부 이미지 10장, 두 사이트 모두).
+           ② 2026-08-25 Firestore 규칙을 signedIn() 으로 잠근 뒤로는 이 구독이 **시작하자마자
+              permission-denied 로 죽는다.** onSnapshot 리스너는 거부되면 종료되고 auth 가 바뀌어도
+              스스로 되살아나지 않는다 → 로그인해도 피드가 빈 채로 남는 회귀가 생긴다.
+         그래서 구독 시작을 onAuthStateChanged 안으로 옮기고, 로그아웃 시엔 끊고 비운다.
+         이 파일 하나가 두 앱을 덮는다 — RCC 도 order.hideoutdb.com/postcards.js 를 로드한다. */
       LIVE.auth.onAuthStateChanged(function(u){
         LIVE.me=u||null; ME=u?(u.email||"").toLowerCase():"";
         var b=document.getElementById("v3signin");
         if(u){ if(b) b.parentNode.remove();
+          liveSubscribe();   // ← 로그인 확인 후 여기서 시작
           LIVE.db.collection("allowlist").limit(200).get().then(function(qs){
             LIVE.staff=[]; qs.forEach(function(d){ var x=d.data()||{};
               LIVE.staff.push({email:(x.email||d.id||"").toLowerCase(),name:x.name||x.displayName||""}); });
           }).catch(function(err){ console.warn("allowlist read failed",err); })
           .then(function(){ syncItems(); render(); });
-        } else if(!b){
+        } else {
+          /* 로그아웃(또는 첫 방문) — 구독을 끊고 이미 받은 내용을 화면에서 지운다.
+             안 지우면 로그아웃한 뒤에도 마지막 피드가 남아 다음 사람이 본다. */
+          if(LIVE.unsub){ try{ LIVE.unsub(); }catch(e){} LIVE.unsub=null; }
+          LIVE.docs=[]; LIVE.cm={}; LIVE.staff=[];
+          try{ syncItems(); render(); }catch(e){}
+        }
+        if(!u && !b){
           document.querySelector(".app").insertAdjacentHTML("afterbegin",
             '<div style="padding:14px 18px;border-bottom:2px solid var(--ink);display:flex;align-items:center;gap:12px">'+
-            '<button id="v3signin" class="cbtn primary">Sign in to post</button>'+
-            '<span style="font-weight:800;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.5">Reading only until you sign in</span></div>');
+            '<button id="v3signin" class="cbtn primary">Sign in to view</button>'+
+            /* 문구도 사실에 맞춘다 — 예전 "Reading only until you sign in" 은 로그인 전에도
+               읽힌다는 뜻이었고, 2026-08-25 이후로는 로그인 전에 아무것도 안 내려온다. */
+            '<span style="font-weight:800;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.5">Staff only — sign in to see the feed</span></div>');
           document.getElementById("v3signin").onclick=function(){
             LIVE.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
               .catch(function(e){ alert("Sign-in failed: "+(e&&e.code||"")+" "+(e&&e.message||"")); });

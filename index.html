@@ -470,7 +470,12 @@ async function withRetry(fn, attempts){
 function itemCost(it){
   if(it && it.rccId && cfg.rccPriceMap && cfg.rccPriceMap[it.rccId]){
     const g=cfg.rccPriceMap[it.rccId];
-    return (Number(g.p)||0) * (Number(it.rccQtyPerUnit)||1);
+    /* rccMode 'unit' = RCC 구매수량으로 나눈 **낱개 단가** 기준 (2026-08-26 주인: "단위는 못 쪼개나" —
+       크루아상은 60개들이 $91.65 라 팩 기준이면 개당 $91.65 가 붙는다. 낱개 $1.53 이 맞다).
+       'pack' = 포장 통째 기준 (우유 1병 = 2L 팩 1개 같은 경우).
+       예전 데이터(rccMode 없음)는 pack 으로 읽는다 — 기존 연결과 호환. */
+    const per = (it.rccMode==='unit' && Number(g.q)>0) ? (Number(g.p)||0)/Number(g.q) : (Number(g.p)||0);
+    return per * (Number(it.rccQtyPerUnit)||1);
   }
   return Number(it && it.cost)||0;
 }
@@ -2091,13 +2096,23 @@ function ItemsCard({ctx}){
             사람이 한 번 고르면(datalist 정확일치) 그 뒤로 가격은 RCC 를 영원히 따라간다.
             packs per unit = 발주 단위 1개가 RCC 구매포장 몇 개인가 (예: bottle=2L팩 1개 → 1). */}
         <Field label="RCC ingredient link (price follows RCC)">
-          {edit.rccId ? (()=>{ const g=(ctx.rccPrices||[]).find(x=>x.i===edit.rccId); return <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"9px 12px"}}>
-            <span style={{flex:"1 1 160px",fontSize:13}}><b>{g?g.n:edit.rccId}</b>{g?<span style={{color:"var(--color-ink-muted-48)"}}> — ${g.p}{g.q?` / ${g.q}${g.u||""}`:""}</span>:<span style={{color:"#b45309"}}> (가격표에 없음)</span>}</span>
-            <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>packs per {edit.unit||"unit"}</span>
-            <input inputMode="decimal" value={edit.rccQtyPerUnit??1} onChange={e=>setEdit({...edit,rccQtyPerUnit:e.target.value===""?1:Number(e.target.value)})} style={{...inp,width:64,textAlign:"center"}} />
-            <button onClick={()=>setEdit({...edit,rccId:null,rccQtyPerUnit:null})} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:12}}>unlink</button>
+          {edit.rccId ? (()=>{ const g=(ctx.rccPrices||[]).find(x=>x.i===edit.rccId); const mode=edit.rccMode||"pack"; return <div style={{display:"grid",gap:8,background:"var(--color-canvas-parchment)",borderRadius:10,padding:"9px 12px"}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{flex:"1 1 160px",fontSize:13}}><b>{g?g.n:edit.rccId}</b>{g?<span style={{color:"var(--color-ink-muted-48)"}}> — ${g.p}{g.q?` / ${g.q}${g.u||""}`:""}</span>:<span style={{color:"#b45309"}}> (가격표에 없음)</span>}</span>
+              <button onClick={()=>setEdit({...edit,rccId:null,rccQtyPerUnit:null,rccMode:null})} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:12}}>unlink</button>
+            </div>
+            {/* 기준 선택 — '낱개' = 구매수량으로 나눔(60개들이 $91.65 → 개당 $1.5275), '팩' = 포장 통째 */}
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <select value={mode} onChange={e=>setEdit({...edit,rccMode:e.target.value})} style={{...inp,width:"auto",padding:"6px 10px"}}>
+                <option value="unit">{g&&g.q?`per ${g.u||"unit"} ($${(g.p/(g.q||1)).toFixed(4)})`:"per unit"}</option>
+                <option value="pack">{`per pack ($${g?g.p:"?"})`}</option>
+              </select>
+              <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>× per {edit.unit||"unit"}</span>
+              <input inputMode="decimal" value={edit.rccQtyPerUnit??1} onChange={e=>setEdit({...edit,rccQtyPerUnit:e.target.value===""?1:Number(e.target.value)})} style={{...inp,width:64,textAlign:"center"}} />
+              <span style={{fontSize:13,fontWeight:700}}>= ${C.itemCost(edit).toFixed(4)} / {edit.unit||"unit"}</span>
+            </div>
           </div>; })() : <React.Fragment>
-            <input list="rcc-price-options" placeholder={(ctx.rccPrices&&ctx.rccPrices.length)?("Search "+ctx.rccPrices.length+" RCC ingredients…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} onChange={e=>{ const g=(ctx.rccPrices||[]).find(x=>x.n===e.target.value); if(g){ setEdit({...edit,rccId:g.i,rccQtyPerUnit:edit.rccQtyPerUnit||1}); e.target.value=""; } }} style={inp} />
+            <input list="rcc-price-options" placeholder={(ctx.rccPrices&&ctx.rccPrices.length)?("Search "+ctx.rccPrices.length+" RCC ingredients…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} onChange={e=>{ const g=(ctx.rccPrices||[]).find(x=>x.n===e.target.value); if(g){ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(Number(g.q)>1?"unit":"pack")}); e.target.value=""; } }} style={inp} />
             <datalist id="rcc-price-options">{(ctx.rccPrices||[]).map(g=><option key={g.i} value={g.n}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}</option>)}</datalist>
           </React.Fragment>}
         </Field>

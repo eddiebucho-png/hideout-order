@@ -1574,7 +1574,12 @@ function SubmitOrder({ctx}){
   const groups=itemsByCat(ctx);
   const setCell=(id,field,val)=>setDraft(d=>({...d,[id]:{...(d[id]||{remaining:"",needed:""}),[field]:val}}));
   const parFor=(it)=>{ const p=it.parLevels&&it.parLevels[loc]&&it.parLevels[loc][dayKey]; return p!=null?Number(p):null; };
-  const onRemaining=(it,val)=>{ setCell(it.id,"remaining",val); const par=parFor(it); if(par!=null){ let calc=Math.max(0,par-(Number(val)||0)); if(it.minOrderQty!=null && calc>0 && calc<it.minOrderQty) calc=it.minOrderQty; setCell(it.id,"needed",String(calc)); } };
+  const onRemaining=(it,val)=>{ setCell(it.id,"remaining",val); const par=parFor(it); if(par!=null){
+    /* daily(perishable) 품목은 남은 수량으로 파를 깎지 않는다 (2026-08-26 주인):
+       데니시·아몬드 크루아상류는 어차피 다음날 못 쓰고 버린다 — Remaining 은 wastage 집계용
+       기록일 뿐이고, 주문은 항상 파레벨 그대로 나가야 한다. */
+    let calc=it.perishable?par:Math.max(0,par-(Number(val)||0));
+    if(it.minOrderQty!=null && calc>0 && calc<it.minOrderQty) calc=it.minOrderQty; setCell(it.id,"needed",String(calc)); } };
   const totalNeeded=Object.values(draft).reduce((a,d)=>a+(Number(d.needed)||0),0);
   const save=async ()=>{
     if(!by.trim()){ toast("Enter your name (Ordered by) first",true); return; }
@@ -1602,7 +1607,7 @@ function SubmitOrder({ctx}){
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:480}}>
           <thead><tr><th style={th}>Item</th><th style={{...th,textAlign:"center",borderLeft:vline}}>Par ({C.DAY_LABELS[dayKey]})</th><th style={{...th,textAlign:"center",borderLeft:vline}}>Remaining</th><th style={{...th,textAlign:"center",borderLeft:vline}}>Needed</th></tr></thead>
           <tbody>{list.map(it=>{ const par=parFor(it); const d=draft[it.id]||{remaining:"",needed:""}; const on=(Number(d.needed)||0)>0; return <tr key={it.id} className="row-live" style={{background:on?"rgba(200,26,34,.05)":"transparent"}}>
-            <td style={td}><div style={{fontWeight:600,fontSize:15.5,letterSpacing:"-0.2px",color:"var(--color-ink)",fontFamily:"var(--font-display)"}}>{familyNameNodes(it.name,dup)}</div><div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:1}}>{it.unit}</div></td>
+            <td style={td}><div style={{fontWeight:600,fontSize:15.5,letterSpacing:"-0.2px",color:"var(--color-ink)",fontFamily:"var(--font-display)",display:"flex",alignItems:"center",gap:6}}>{familyNameNodes(it.name,dup)}{it.perishable?<span title="Daily item — Remaining is logged as waste only; the order stays at full par" style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px",fontFamily:"var(--font-body)"}}>DAILY</span>:null}</div><div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:1}}>{it.unit}</div></td>
             <td style={{...td,textAlign:"center",color:"var(--color-ink-muted-48)",borderLeft:vline}}>{par!=null?par:"—"}</td>
             <td style={{...td,borderLeft:vline}}><input inputMode="decimal" value={d.remaining} onChange={e=>onRemaining(it,e.target.value)} style={{...inp,width:74,textAlign:"center",padding:"8px 6px"}} /></td>
             <td style={{...td,borderLeft:vline}}><input inputMode="decimal" value={d.needed} onChange={e=>setCell(it.id,"needed",e.target.value)} style={{...inp,width:74,textAlign:"center",padding:"8px 6px",fontWeight:700,borderColor:(Number(d.needed)||0)>0?"var(--color-primary)":"var(--color-hairline-alpha)"}} /></td>

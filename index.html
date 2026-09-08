@@ -404,9 +404,12 @@ function summaryDefaultISO(){ const now=new Date(); if(now.getHours()<SUMMARY_RO
 
 /* ---- defaults (unchanged) ---- */
 const DEFAULT_LOCATIONS = [
-  {id:'515', name:'Fortitude Valley (515)'},
-  {id:'340', name:'Brisbane City (340)'},
-  {id:'100', name:'Adelaide St (100)'}
+  /* Offline fallback only - shown when the backend cannot be reached. Names match the live
+     `locations` record (515 St Pauls Ter / 100 Edward St / 340 Adelaide St); the old copy had
+     100 labelled "Adelaide St", which is the 340 shop. */
+  {id:'515', name:'St Pauls Ter'},
+  {id:'100', name:'Edward St'},
+  {id:'340', name:'Adelaide St'},
 ];
 const DEFAULT_CATEGORIES = [
   {id:'pastry', label:'Pastry', color:'#C2693F'},
@@ -1404,6 +1407,11 @@ function useAsync(fn, deps){
 /* ===================== TODAY'S SUMMARY ===================== */
 function TodaySummary({ctx}){
   const [date,setDate]=useState(C.summaryDefaultISO());
+  /* Which category tables are open. Unset = default: open if it has orders today, collapsed if it
+     is all zeros - a wall of empty rows was eating the screen. Reset when the date changes, so a
+     category the user opened on one day does not stay forced open on the next. */
+  const [openCats,setOpenCats]=useState({});
+  useEffect(()=>{ setOpenCats({}); }, [date, ctx.department]);
   const [orders,run]=useAsync(()=>C.loadAllOrdersForDate(date, ctx.locations), [date, ctx.department, ctx.locations.length]);
   const deliveryPerson = ctx.deliveryOverrides[date] || ctx.weeklyDeliveryInfo[C.dayKeyForDate(date)] || "";
   const data = orders.data || {};
@@ -1533,12 +1541,22 @@ function TodaySummary({ctx}){
         const catTotal=visible.reduce((s,v)=>s+(Number(v.total)||0),0);
         const cunits=new Set(visible.filter(v=>(Number(v.total)||0)>0).map(v=>v.item.unit).filter(Boolean));
         const catMixed=cunits.size>1; const catUnit=catMixed?"mixed":([...cunits][0]||"");
-        return (<div key={cat.id} style={{marginBottom:18}}>
-        <div className="masthead" style={{paddingBottom:8,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{width:10,height:10,borderRadius:3,background:cat.color||"var(--color-primary)"}}></span>
-          <span className="u-label" style={{color:"var(--color-ink)"}}>{cat.label}</span>
-        </div>
-        <Card style={{padding:0,overflow:"hidden"}}>
+        const isEmpty=catTotal===0;
+        const expanded=(cat.id in openCats)? openCats[cat.id] : !isEmpty;
+        return (<div key={cat.id} style={{marginBottom:expanded?18:10}}>
+        {/* minHeight 40: this is tapped on the kitchen tablet, and the empty ones are the norm */}
+        <button type="button" onClick={()=>setOpenCats(o=>({...o,[cat.id]:!expanded}))}
+          aria-expanded={expanded}
+          className="masthead" style={{width:"100%",minHeight:40,paddingBottom:8,marginBottom:expanded?10:0,display:"flex",alignItems:"center",gap:8,
+            background:"none",border:"none",borderBottom:expanded?undefined:"1px solid var(--color-hairline)",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+          <span style={{width:10,height:10,borderRadius:3,background:cat.color||"var(--color-primary)",flexShrink:0}}></span>
+          <span className="u-label" style={{color:isEmpty&&!expanded?"var(--color-ink-muted-48)":"var(--color-ink)"}}>{cat.label}</span>
+          {!expanded && <span style={{fontSize:11,color:"var(--color-ink-muted-48)",marginLeft:4}}>
+            {isEmpty? "nothing ordered today \u00b7 "+visible.length+" item"+(visible.length===1?"":"s") : (Math.round(catTotal*1000)/1000)+(catUnit&&!catMixed?" "+catUnit:"")+" ordered"}
+          </span>}
+          <span style={{marginLeft:"auto",fontSize:14,color:"var(--color-ink-muted-48)",transform:expanded?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>⌄</span>
+        </button>
+        {expanded && <Card style={{padding:0,overflow:"hidden"}}>
           <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:120+ctx.locations.length*74+80}}>
             <thead><tr>
               <th style={{...th,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1}}>Item</th>
@@ -1556,7 +1574,7 @@ function TodaySummary({ctx}){
               <td style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800}}>{Math.round(catTotal*1000)/1000}<span style={{fontSize:10,fontWeight:500,color:catMixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={catMixed?"This category mixes units — total may be misleading":undefined}>{catUnit}</span></td>
             </tr></tfoot>
           </table></HScroll>
-        </Card>
+        </Card>}
       </div>); })}
       {cats.length===0 && <Card><Empty>No items to show.</Empty></Card>}
     </div>}

@@ -373,8 +373,15 @@ const cfg = {
   // Direct Firestore (skips the slow Apps Script hop). Project is the ordering backend's own
   // FIRESTORE_PROJECT_ID. fsApiKey must be a *Firebase Web / browser* API key for THAT project
   // (client-safe, not a server secret) — set it below to turn the fast path on.
-  fsProjectId: 'hideout-firestore-hb20',
-  fsApiKey: 'AIzaSyCBx4hHu3eJJeuyF84jWimxLx5sDVuVmgE',
+  /* 2026-08-25 이사: hideout-firestore-hb20 → hideout-recipe-cost.
+     왜: 보안 감사 P1 — 발주 kv 741키가 공개 키만으로 읽기/쓰기 가능했다. 잠갔더니 이 fast path 가
+     403 이 되어 앱이 Apps Script 폴백으로만 돌았고, 부팅이 수십 초가 됐다(같은 날 실측, 롤백).
+     해결: 데이터를 **구글 로그인이 이미 있는 프로젝트**(RCC, 스태프 게이트가 쓰는 그 세션)로 옮기고,
+     fast path 요청마다 그 로그인의 ID 토큰을 Authorization 헤더로 붙인다(아래 fsAuthHdr).
+     RCC 쪽 Firestore 규칙은 kv 를 signedIn() 으로만 허용한다 — 빠르고, 잠겨 있다.
+     753키 전량 복사·값 대조 완료(2026-08-25 밤). hb20 은 검증 후 전면 잠금으로 퇴역한다. */
+  fsProjectId: 'hideout-recipe-cost',
+  fsApiKey: 'AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s',
   fsDirect: false,
   department: null,       // 'chef' | 'barista'
   cache: {},              // key -> {value, ts}
@@ -397,9 +404,12 @@ function summaryDefaultISO(){ const now=new Date(); if(now.getHours()<SUMMARY_RO
 
 /* ---- defaults (unchanged) ---- */
 const DEFAULT_LOCATIONS = [
-  {id:'515', name:'Fortitude Valley (515)'},
-  {id:'340', name:'Brisbane City (340)'},
-  {id:'100', name:'Adelaide St (100)'}
+  /* Offline fallback only - shown when the backend cannot be reached. Names match the live
+     `locations` record (515 St Pauls Ter / 100 Edward St / 340 Adelaide St); the old copy had
+     100 labelled "Adelaide St", which is the 340 shop. */
+  {id:'515', name:'St Pauls Ter'},
+  {id:'100', name:'Edward St'},
+  {id:'340', name:'Adelaide St'},
 ];
 const DEFAULT_CATEGORIES = [
   {id:'pastry', label:'Pastry', color:'#C2693F'},
@@ -457,15 +467,74 @@ async function withRetry(fn, attempts){
   throw lastErr;
 }
 
+/* ---- 품목 단가 (2026-08-26 — RCC 연결) ----
+   품목에 rccId 가 있으면 RCC 재료 구매가 × 배수(rccQtyPerUnit, 기본 1)가 단가다.
+   연결이 없거나 가격표가 아직 안 왔으면 예전처럼 수동 cost 를 쓴다 — 기존 데이터와 100% 호환. */
+function itemCost(it){
+  if(it && it.rccId && cfg.rccPriceMap && cfg.rccPriceMap[it.rccId]){
+    const g=cfg.rccPriceMap[it.rccId];
+    /* rccMode 'unit' = RCC 구매수량으로 나눈 **낱개 단가** 기준 (2026-08-26 주인: "단위는 못 쪼개나" —
+       크루아상은 60개들이 $91.65 라 팩 기준이면 개당 $91.65 가 붙는다. 낱개 $1.53 이 맞다).
+       'pack' = 포장 통째 기준 (우유 1병 = 2L 팩 1개 같은 경우).
+       예전 데이터(rccMode 없음)는 pack 으로 읽는다 — 기존 연결과 호환. */
+    const per = (it.rccMode==='unit' && Number(g.q)>0) ? (Number(g.p)||0)/Number(g.q) : (Number(g.p)||0);
+    return per * (Number(it.rccQtyPerUnit)||1);
+  }
+  return Number(it && it.cost)||0;
+}
+
 /* ---- direct Firestore REST (fast path; bypasses Apps Script) ---- */
 function fsBase(){ return 'https://firestore.googleapis.com/v1/projects/'+cfg.fsProjectId+'/databases/(default)/documents'; }
 function fsKeyQ(){ return 'key='+encodeURIComponent(cfg.fsApiKey); }
 function fsExtract(doc){ return (doc&&doc.fields&&doc.fields.value&&doc.fields.value.stringValue!==undefined)?doc.fields.value.stringValue:null; }
-async function fsDirectGet(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{cache:'no-store'}); if(r.status===404) return null; if(!r.ok) throw new Error('fs '+r.status); return fsExtract(await r.json()); }
-async function fsDirectSet(key,value){ const body={fields:{key:{stringValue:String(key)},value:{stringValue:String(value)},updatedAt:{timestampValue:new Date().toISOString()}}}; const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); if(!r.ok) throw new Error('fs set '+r.status); }
-async function fsDirectDelete(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'DELETE'}); if(!r.ok&&r.status!==404) throw new Error('fs del '+r.status); }
-async function fsDirectBatch(keys){ const docs=keys.map(k=>'projects/'+cfg.fsProjectId+'/databases/(default)/documents/kv/'+k); /* [FIX 2026-07-20] no encodeURIComponent: batchGet resource names must be raw, else colon keys (barista:, order:) never match */ const r=await fetch(fsBase()+':batchGet?'+fsKeyQ(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documents:docs})}); if(!r.ok) throw new Error('fs batch '+r.status); const arr=await r.json(); const out={}; (arr||[]).forEach(e=>{ if(e.found){ const k=decodeURIComponent(e.found.name.split('/').pop()); out[k]=fsExtract(e.found); } }); keys.forEach(k=>{ if(out[k]===undefined) out[k]=null; }); return out; }
-async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collectionId:'kv'}],where:{compositeFilter:{op:'AND',filters:[{fieldFilter:{field:{fieldPath:'key'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:prefix}}},{fieldFilter:{field:{fieldPath:'key'},op:'LESS_THAN',value:{stringValue:prefix+'\uf8ff'}}}]}}}}; const r=await fetch(fsBase()+':runQuery?'+fsKeyQ(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(q)}); if(!r.ok) throw new Error('fs list '+r.status); const arr=await r.json(); const keys=[]; (arr||[]).forEach(e=>{ if(e.document&&e.document.fields&&e.document.fields.key) keys.push(e.document.fields.key.stringValue); }); return keys; }
+/* 2026-08-25 \u2014 fast path \uc5d0 **\uc2a4\ud0dc\ud504 \ub85c\uadf8\uc778 \ud1a0\ud070**\uc744 \ubd99\uc778\ub2e4.
+   \ub370\uc774\ud130\uac00 RCC \ud504\ub85c\uc81d\ud2b8\ub85c \uc774\uc0ac\ud588\uace0 \uadf8\ucabd \uaddc\uce59\uc740 kv \ub97c signedIn() \uc73c\ub85c\ub9cc \ud5c8\uc6a9\ud55c\ub2e4. \uc2a4\ud0dc\ud504 \uac8c\uc774\ud2b8\uac00
+   \uc774\ubbf8 \uc774 origin \uc5d0 \uadf8 \ud504\ub85c\uc81d\ud2b8\uc758 Firebase \uc138\uc158\uc744 \ub9cc\ub4e4\uc5b4 \ub450\ubbc0\ub85c(staff-gate.js), \uadf8 ID \ud1a0\ud070\uc744
+   Authorization \ud5e4\ub354\ub85c \uc2e4\uc73c\uba74 \uaddc\uce59\uc744 \ud1b5\uacfc\ud55c\ub2e4 \u2014 getIdToken() \uc740 \ub9cc\ub8cc\ub97c SDK \uac00 \uc54c\uc544\uc11c \uac31\uc2e0\ud55c\ub2e4.
+   \ub85c\uadf8\uc778 \uc804(\uac8c\uc774\ud2b8 \ud654\uba74)\uc5d0\ub294 \ud1a0\ud070\uc774 \uc5c6\uc5b4 fast path \uac00 403 \u2192 probeFsDirect \uac00 \uaebc\uc9d0 \u2192
+   Apps Script \ud3f4\ubc31\uc73c\ub85c \ub3d9\uc791\ud558\uace0, \ub85c\uadf8\uc778 \ud6c4 \uccab kv \ud638\ucd9c\ubd80\ud130 fast path \ub85c \ub3cc\uc544\uc628\ub2e4. */
+/* \ubd80\ud305 \uacbd\ud569 \ubc29\uc9c0 \u2014 Firebase \ub294 \uc800\uc7a5\ub41c \uc138\uc158\uc744 **\ube44\ub3d9\uae30\ub85c** \ubcf5\uc6d0\ud558\ubbc0\ub85c, \ubd80\ud305 \uc9c1\ud6c4 currentUser \ub294
+   \ub85c\uadf8\uc778\ub3fc \uc788\uc5b4\ub3c4 null \uc774\ub2e4. \uadf8 \uc21c\uac04 probeFsDirect \uac00 \ub3cc\uba74 \ud1a0\ud070 \uc5c6\uc774 403 \u2192 fast path \uac00 \uc138\uc158 \ub0b4\ub0b4
+   \uaebc\uc9c4\ub2e4(\uc8fc\uc778 \uae30\uae30\uc5d0\uc11c \uc2e4\uce21: \ubc30\ud3ec \ud6c4\uc5d0\ub3c4 "\uac81\ub098 \ub290\ub824"). \uccab onAuthStateChanged \uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\ucd5c\ub300 4\ucd08). */
+let _authReady = null;
+function fsAuthReady(){
+  if(_authReady) return _authReady;
+  _authReady = new Promise(res=>{
+    let done=false; const fin=()=>{ if(!done){ done=true; res(); } };
+    try{
+      if(window.firebase && firebase.apps){
+        firebase.apps.forEach(function(a){ try{ a.auth().onAuthStateChanged(function(u){
+          /* ⚠ 첫 신호에 풀면 안 된다 — 세션 없는 인스턴스가 null 을 먼저 쏘면 토큰 없이 진행돼
+             403→느린 폴백으로 굳는다(주인 기기 실측 "로딩이 왜 이리 느려"). **user 가 잡혔을 때만**
+             즉시 풀고, 아니면 타임아웃까지 다른 인스턴스의 복원을 기다린다. */
+          if(u) fin();
+          /* 로그인이 부팅 **후에** 일어나도(첫 방문 흐름) 빠른 경로를 되살린다 —
+             probe 가 한 번 실패하면 세션 내내 느린 길로 고정되던 구멍. */
+          if(u && !cfg.fsDirect){ probeFsDirect().catch(function(){}); }
+        }); }catch(e){} });
+      }
+    }catch(e){}
+    setTimeout(fin, 1500);   // 로그아웃 상태 부팅은 1.5초 뒤 폴백으로 — 게이트 화면이라 체감 없음
+  });
+  return _authReady;
+}
+async function fsAuthHdr(extra){
+  const h = Object.assign({}, extra||{});
+  try{
+    await fsAuthReady();
+    /* 로그인 세션은 어느 인스턴스에든 있을 수 있다 — postcards.js 는 기본 앱, 게이트는 "postcards"
+       이름 앱을 쓴다(같은 설정이라 저장소는 공유). 전 인스턴스를 뒤져 로그인된 쪽의 토큰을 쓴다. */
+    let u = null;
+    if(window.firebase && firebase.apps){ for(const a of firebase.apps){ try{ if(a.auth().currentUser){ u=a.auth().currentUser; break; } }catch(e){} } }
+    if(u){ h['Authorization'] = 'Bearer ' + await u.getIdToken(); }
+  }catch(e){ /* \ud1a0\ud070 \uc2e4\ud328 \uc2dc \ubb34\ud5e4\ub354\ub85c \uc9c4\ud589 \u2014 \uaddc\uce59\uc774 \uac70\ubd80\ud558\uba74 \uae30\uc874 \ud3f4\ubc31 \uacbd\ub85c\uac00 \ubc1b\ub294\ub2e4 */ }
+  return h;
+}
+async function fsDirectGet(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{cache:'no-store',headers:await fsAuthHdr()}); if(r.status===404) return null; if(!r.ok) throw new Error('fs '+r.status); return fsExtract(await r.json()); }
+async function fsDirectSet(key,value){ const body={fields:{key:{stringValue:String(key)},value:{stringValue:String(value)},updatedAt:{timestampValue:new Date().toISOString()}}}; const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'PATCH',headers:await fsAuthHdr({'Content-Type':'application/json'}),body:JSON.stringify(body)}); if(!r.ok) throw new Error('fs set '+r.status); }
+async function fsDirectDelete(key){ const r=await fetch(fsBase()+'/kv/'+encodeURIComponent(key)+'?'+fsKeyQ(),{method:'DELETE',headers:await fsAuthHdr()}); if(!r.ok&&r.status!==404) throw new Error('fs del '+r.status); }
+async function fsDirectBatch(keys){ const docs=keys.map(k=>'projects/'+cfg.fsProjectId+'/databases/(default)/documents/kv/'+k); /* [FIX 2026-07-20] no encodeURIComponent: batchGet resource names must be raw, else colon keys (barista:, order:) never match */ const r=await fetch(fsBase()+':batchGet?'+fsKeyQ(),{method:'POST',headers:await fsAuthHdr({'Content-Type':'application/json'}),body:JSON.stringify({documents:docs})}); if(!r.ok) throw new Error('fs batch '+r.status); const arr=await r.json(); const out={}; (arr||[]).forEach(e=>{ if(e.found){ const k=decodeURIComponent(e.found.name.split('/').pop()); out[k]=fsExtract(e.found); } }); keys.forEach(k=>{ if(out[k]===undefined) out[k]=null; }); return out; }
+async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collectionId:'kv'}],where:{compositeFilter:{op:'AND',filters:[{fieldFilter:{field:{fieldPath:'key'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:prefix}}},{fieldFilter:{field:{fieldPath:'key'},op:'LESS_THAN',value:{stringValue:prefix+'\uf8ff'}}}]}}}}; const r=await fetch(fsBase()+':runQuery?'+fsKeyQ(),{method:'POST',headers:await fsAuthHdr({'Content-Type':'application/json'}),body:JSON.stringify(q)}); if(!r.ok) throw new Error('fs list '+r.status); const arr=await r.json(); const keys=[]; (arr||[]).forEach(e=>{ if(e.document&&e.document.fields&&e.document.fields.key) keys.push(e.document.fields.key.stringValue); }); return keys; }
 // Probe once at startup: only switch to the fast path if this project actually has the ordering
 // data (a non-empty 'locations'). A missing doc means we're pointed at the wrong Firestore project,
 // so we stay on Apps Script (which has the real data) rather than silently showing empty/defaults.
@@ -669,7 +738,7 @@ window.OrderCore = {
   cacheGet, cachePut, cacheClearPrefix, clearCache, hasArtifactStorage, isConnected, withRetry, probeFsDirect,
   kvGet, kvGetFresh, kvSet, kvDelete, kvListPrefix, kvGetBatch, kvSetChunked, kvGetChunkedBatch, kvSetLongText, kvGetLongText,
   loadOrder, saveOrder, loadAllOrdersForDate, stockKey, loadStockTake, saveStockTake, listStockTakeDatesForLocation, listOrderDates,
-  setKey, getKey,
+  setKey, getKey, itemCost,
 };
 })();
 
@@ -1338,6 +1407,11 @@ function useAsync(fn, deps){
 /* ===================== TODAY'S SUMMARY ===================== */
 function TodaySummary({ctx}){
   const [date,setDate]=useState(C.summaryDefaultISO());
+  /* Which category tables are open. Unset = default: open if it has orders today, collapsed if it
+     is all zeros - a wall of empty rows was eating the screen. Reset when the date changes, so a
+     category the user opened on one day does not stay forced open on the next. */
+  const [openCats,setOpenCats]=useState({});
+  useEffect(()=>{ setOpenCats({}); }, [date, ctx.department]);
   const [orders,run]=useAsync(()=>C.loadAllOrdersForDate(date, ctx.locations), [date, ctx.department, ctx.locations.length]);
   const deliveryPerson = ctx.deliveryOverrides[date] || ctx.weeklyDeliveryInfo[C.dayKeyForDate(date)] || "";
   const data = orders.data || {};
@@ -1467,12 +1541,22 @@ function TodaySummary({ctx}){
         const catTotal=visible.reduce((s,v)=>s+(Number(v.total)||0),0);
         const cunits=new Set(visible.filter(v=>(Number(v.total)||0)>0).map(v=>v.item.unit).filter(Boolean));
         const catMixed=cunits.size>1; const catUnit=catMixed?"mixed":([...cunits][0]||"");
-        return (<div key={cat.id} style={{marginBottom:18}}>
-        <div className="masthead" style={{paddingBottom:8,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{width:10,height:10,borderRadius:3,background:cat.color||"var(--color-primary)"}}></span>
-          <span className="u-label" style={{color:"var(--color-ink)"}}>{cat.label}</span>
-        </div>
-        <Card style={{padding:0,overflow:"hidden"}}>
+        const isEmpty=catTotal===0;
+        const expanded=(cat.id in openCats)? openCats[cat.id] : !isEmpty;
+        return (<div key={cat.id} style={{marginBottom:expanded?18:10}}>
+        {/* minHeight 40: this is tapped on the kitchen tablet, and the empty ones are the norm */}
+        <button type="button" onClick={()=>setOpenCats(o=>({...o,[cat.id]:!expanded}))}
+          aria-expanded={expanded}
+          className="masthead" style={{width:"100%",minHeight:40,paddingBottom:8,marginBottom:expanded?10:0,display:"flex",alignItems:"center",gap:8,
+            background:"none",border:"none",borderBottom:expanded?undefined:"1px solid var(--color-hairline)",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+          <span style={{width:10,height:10,borderRadius:3,background:cat.color||"var(--color-primary)",flexShrink:0}}></span>
+          <span className="u-label" style={{color:isEmpty&&!expanded?"var(--color-ink-muted-48)":"var(--color-ink)"}}>{cat.label}</span>
+          {!expanded && <span style={{fontSize:11,color:"var(--color-ink-muted-48)",marginLeft:4}}>
+            {isEmpty? "nothing ordered today \u00b7 "+visible.length+" item"+(visible.length===1?"":"s") : (Math.round(catTotal*1000)/1000)+(catUnit&&!catMixed?" "+catUnit:"")+" ordered"}
+          </span>}
+          <span style={{marginLeft:"auto",fontSize:14,color:"var(--color-ink-muted-48)",transform:expanded?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>⌄</span>
+        </button>
+        {expanded && <Card style={{padding:0,overflow:"hidden"}}>
           <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:120+ctx.locations.length*74+80}}>
             <thead><tr>
               <th style={{...th,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1}}>Item</th>
@@ -1490,7 +1574,7 @@ function TodaySummary({ctx}){
               <td style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800}}>{Math.round(catTotal*1000)/1000}<span style={{fontSize:10,fontWeight:500,color:catMixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={catMixed?"This category mixes units — total may be misleading":undefined}>{catUnit}</span></td>
             </tr></tfoot>
           </table></HScroll>
-        </Card>
+        </Card>}
       </div>); })}
       {cats.length===0 && <Card><Empty>No items to show.</Empty></Card>}
     </div>}
@@ -1508,7 +1592,12 @@ function SubmitOrder({ctx}){
   const groups=itemsByCat(ctx);
   const setCell=(id,field,val)=>setDraft(d=>({...d,[id]:{...(d[id]||{remaining:"",needed:""}),[field]:val}}));
   const parFor=(it)=>{ const p=it.parLevels&&it.parLevels[loc]&&it.parLevels[loc][dayKey]; return p!=null?Number(p):null; };
-  const onRemaining=(it,val)=>{ setCell(it.id,"remaining",val); const par=parFor(it); if(par!=null){ let calc=Math.max(0,par-(Number(val)||0)); if(it.minOrderQty!=null && calc>0 && calc<it.minOrderQty) calc=it.minOrderQty; setCell(it.id,"needed",String(calc)); } };
+  const onRemaining=(it,val)=>{ setCell(it.id,"remaining",val); const par=parFor(it); if(par!=null){
+    /* daily(perishable) 품목은 남은 수량으로 파를 깎지 않는다 (2026-08-26 주인):
+       데니시·아몬드 크루아상류는 어차피 다음날 못 쓰고 버린다 — Remaining 은 wastage 집계용
+       기록일 뿐이고, 주문은 항상 파레벨 그대로 나가야 한다. */
+    let calc=it.perishable?par:Math.max(0,par-(Number(val)||0));
+    if(it.minOrderQty!=null && calc>0 && calc<it.minOrderQty) calc=it.minOrderQty; setCell(it.id,"needed",String(calc)); } };
   const totalNeeded=Object.values(draft).reduce((a,d)=>a+(Number(d.needed)||0),0);
   const save=async ()=>{
     if(!by.trim()){ toast("Enter your name (Ordered by) first",true); return; }
@@ -1536,7 +1625,7 @@ function SubmitOrder({ctx}){
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:480}}>
           <thead><tr><th style={th}>Item</th><th style={{...th,textAlign:"center",borderLeft:vline}}>Par ({C.DAY_LABELS[dayKey]})</th><th style={{...th,textAlign:"center",borderLeft:vline}}>Remaining</th><th style={{...th,textAlign:"center",borderLeft:vline}}>Needed</th></tr></thead>
           <tbody>{list.map(it=>{ const par=parFor(it); const d=draft[it.id]||{remaining:"",needed:""}; const on=(Number(d.needed)||0)>0; return <tr key={it.id} className="row-live" style={{background:on?"rgba(200,26,34,.05)":"transparent"}}>
-            <td style={td}><div style={{fontWeight:600,fontSize:15.5,letterSpacing:"-0.2px",color:"var(--color-ink)",fontFamily:"var(--font-display)"}}>{familyNameNodes(it.name,dup)}</div><div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:1}}>{it.unit}</div></td>
+            <td style={td}><div style={{fontWeight:600,fontSize:15.5,letterSpacing:"-0.2px",color:"var(--color-ink)",fontFamily:"var(--font-display)",display:"flex",alignItems:"center",gap:6}}>{familyNameNodes(it.name,dup)}{it.perishable?<span title="Daily item — Remaining is logged as waste only; the order stays at full par" style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px",fontFamily:"var(--font-body)"}}>DAILY</span>:null}</div><div style={{fontSize:12,color:"var(--color-ink-muted-48)",marginTop:1}}>{it.unit}</div></td>
             <td style={{...td,textAlign:"center",color:"var(--color-ink-muted-48)",borderLeft:vline}}>{par!=null?par:"—"}</td>
             <td style={{...td,borderLeft:vline}}><input inputMode="decimal" value={d.remaining} onChange={e=>onRemaining(it,e.target.value)} style={{...inp,width:74,textAlign:"center",padding:"8px 6px"}} /></td>
             <td style={{...td,borderLeft:vline}}><input inputMode="decimal" value={d.needed} onChange={e=>setCell(it.id,"needed",e.target.value)} style={{...inp,width:74,textAlign:"center",padding:"8px 6px",fontWeight:700,borderColor:(Number(d.needed)||0)>0?"var(--color-primary)":"var(--color-hairline-alpha)"}} /></td>
@@ -1581,7 +1670,7 @@ function PeriodReport({ctx}){
   // Location filter is applied here, not in the fetch — the fetch already pulls every location,
   // so switching locations is instant and costs no extra reads.
   const val=(t)=> loc==="all" ? (t.__t||0) : (t[loc]||0);
-  const costOf=(it)=>Number(it.cost)||0;
+  const costOf=(it)=>C.itemCost(it);   // 2026-08-26 RCC 연결 우선(rccId), 없으면 수동 cost
   // metric drives BOTH the bar length and the sort, so "Value" answers the old Usage Report question
   // ("what is eating the money") while "Qty" answers the old Period one ("what moves the most").
   const size=(it)=> metric==="value" ? val(totals[it.id]||{})*costOf(it) : val(totals[it.id]||{});
@@ -1771,7 +1860,7 @@ function TrendsReport({ctx}){
   const gone=id=>!itemById(id);   // ordered once, since deleted from Settings → Items
   const nameOf=id=>{ const it=itemById(id); return it?it.name:"Removed item"; };
   const RemovedTag=()=><span style={{fontSize:9.5,fontWeight:700,color:"var(--color-ink-muted-48)",border:"1px solid var(--color-hairline-alpha)",borderRadius:4,padding:"1px 4px",marginLeft:6}}>removed</span>;
-  const costOf=it=>Number(it&&it.cost)||0;
+  const costOf=it=>C.itemCost(it);   // 2026-08-26 RCC 연결 우선(rccId), 없으면 수동 cost
   const weigh=(id,arr)=> metric==="value" ? arr.map(v=>v*costOf(itemById(id))) : arr;
   const fmt=v=> metric==="value" ? money(v) : Math.round(v);
 
@@ -2022,9 +2111,34 @@ function ItemsCard({ctx}){
           <Field label="Category"><select value={edit.cat} onChange={e=>setEdit({...edit,cat:e.target.value})} style={inp}>{ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Field label="Cost (optional)"><input inputMode="decimal" value={edit.cost??""} onChange={e=>setEdit({...edit,cost:e.target.value===""?"":Number(e.target.value)})} style={inp} /></Field>
+          <Field label={edit.rccId?"Cost (auto from RCC)":"Cost (optional)"}><input inputMode="decimal" disabled={!!edit.rccId} value={edit.rccId?C.itemCost(edit).toFixed(2):(edit.cost??"")} onChange={e=>setEdit({...edit,cost:e.target.value===""?"":Number(e.target.value)})} style={{...inp,...(edit.rccId?{opacity:.65,background:"var(--color-canvas-parchment)"}:{})}} /></Field>
           <Field label="Min order qty (optional)"><input inputMode="decimal" value={edit.minOrderQty??""} onChange={e=>setEdit({...edit,minOrderQty:e.target.value===""?null:Number(e.target.value)})} style={inp} /></Field>
         </div>
+        {/* RCC 재료 연결 (2026-08-26 주인 요청 "IOS 아이템들 RCC 에서 가격 불러오게, 매칭해서").
+            ⚠ 이름 자동매칭은 안 쓴다 — 실측 81품목 중 정확일치 3개뿐 + 7월 substring 오매칭 전례(SOFT 교훈 1).
+            사람이 한 번 고르면(datalist 정확일치) 그 뒤로 가격은 RCC 를 영원히 따라간다.
+            packs per unit = 발주 단위 1개가 RCC 구매포장 몇 개인가 (예: bottle=2L팩 1개 → 1). */}
+        <Field label="RCC ingredient link (price follows RCC)">
+          {edit.rccId ? (()=>{ const g=(ctx.rccPrices||[]).find(x=>x.i===edit.rccId); const mode=edit.rccMode||"pack"; return <div style={{display:"grid",gap:8,background:"var(--color-canvas-parchment)",borderRadius:10,padding:"9px 12px"}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{flex:"1 1 160px",fontSize:13}}><b>{g?g.n:edit.rccId}</b>{g?<span style={{color:"var(--color-ink-muted-48)"}}> — ${g.p}{g.q?` / ${g.q}${g.u||""}`:""}</span>:<span style={{color:"#b45309"}}> (가격표에 없음)</span>}</span>
+              <button onClick={()=>setEdit({...edit,rccId:null,rccQtyPerUnit:null,rccMode:null})} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:12}}>unlink</button>
+            </div>
+            {/* 기준 선택 — '낱개' = 구매수량으로 나눔(60개들이 $91.65 → 개당 $1.5275), '팩' = 포장 통째 */}
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <select value={mode} onChange={e=>setEdit({...edit,rccMode:e.target.value})} style={{...inp,width:"auto",padding:"6px 10px"}}>
+                <option value="unit">{g&&g.q?`per ${g.u||"unit"} ($${(g.p/(g.q||1)).toFixed(4)})`:"per unit"}</option>
+                <option value="pack">{`per pack ($${g?g.p:"?"})`}</option>
+              </select>
+              <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>× per {edit.unit||"unit"}</span>
+              <input inputMode="decimal" value={edit.rccQtyPerUnit??1} onChange={e=>setEdit({...edit,rccQtyPerUnit:e.target.value===""?1:Number(e.target.value)})} style={{...inp,width:64,textAlign:"center"}} />
+              <span style={{fontSize:13,fontWeight:700}}>= ${C.itemCost(edit).toFixed(4)} / {edit.unit||"unit"}</span>
+            </div>
+          </div>; })() : <React.Fragment>
+            <input list="rcc-price-options" placeholder={(ctx.rccPrices&&ctx.rccPrices.length)?("Search "+ctx.rccPrices.length+" RCC ingredients…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} onChange={e=>{ const g=(ctx.rccPrices||[]).find(x=>x.n===e.target.value); if(g){ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(Number(g.q)>1?"unit":"pack")}); e.target.value=""; } }} style={inp} />
+            <datalist id="rcc-price-options">{(ctx.rccPrices||[]).map(g=><option key={g.i} value={g.n}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}</option>)}</datalist>
+          </React.Fragment>}
+        </Field>
         <label style={{display:"flex",gap:9,alignItems:"flex-start",cursor:"pointer",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"10px 12px"}}>
           <input type="checkbox" checked={!!edit.perishable} onChange={e=>setEdit({...edit,perishable:e.target.checked})} style={{cursor:"pointer",width:16,height:16,marginTop:1}} />
           <span><span style={{fontSize:13,fontWeight:700,color:"var(--color-ink)"}}>Daily use item (dispose)</span><br /><span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>Binned if unsold — danish, almond croissant. Leftovers counted at ordering are logged as waste in Trends. Leave off for anything that keeps.</span></span>
@@ -2483,6 +2597,13 @@ function Gate({locations, onUnlock}){
       {!b ? <div>
         <div style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-body-muted)",marginBottom:10}}>Select your branch</div>
         <div style={{display:"grid",gap:8}}>{locations.map(x=><button key={x.id} onClick={()=>pick(x.id)} className="vbtn-card" style={{width:"100%",textAlign:"left",borderRadius:12,padding:"14px 16px",background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.08)",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:600}}>{x.name}</span><span style={{color:"var(--color-body-muted)"}}>{x.passcode?<Ico name="lock" size={15} style={{verticalAlign:"middle"}} />:"›"}</span></button>)}</div>
+      </div> : !b.passcode ? <div style={{textAlign:"center",color:"var(--color-body-muted)",padding:"18px 0"}}>
+        {/* 2026-08-25 — passcode 없는 지점은 pick() 이 즉시 onUnlock 하지만, 그 뒤 데이터 로딩이
+            느리면 화면이 이 분기 자리에서 **비밀번호 입력칸을 보여준 채** 머물렀다(주인 실측:
+            "없던 비밀번호 화면이 생겼다"). 실제로는 입력할 필요가 없는 칸이었다 — passcode 없는
+            지점은 입력칸 대신 진행 표시를 보여준다. 구글 로그인이 이미 접근을 걸러 준다. */}
+        <div style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:600,fontSize:18,marginBottom:10}}>{b.name}</div>
+        Opening…
       </div> : <div className={shake?"anim-shake":""}>
         <button onClick={()=>{setSel("");setErr("");}} style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:12,marginBottom:12}}>‹ Back</button>
         <div style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:600,fontSize:18,marginBottom:14}}>{b.name}</div>
@@ -2594,6 +2715,14 @@ function App(){
   useEffect(()=>{ C.cfg.backendUrl=LS.get("hideout_ord_backendUrl","")||C.DEFAULT_BACKEND_URL;
     C.cfg.fsProjectId=LS.get("hideout_ord_fsProject","")||C.cfg.fsProjectId;
     C.cfg.fsApiKey=LS.get("hideout_ord_fsKey","")||C.cfg.fsApiKey;
+    /* 2026-08-25 이사 마이그레이션 — 기기에 저장된 옛 프로젝트(hb20)가 코드 기본값을 덮어써서,
+       새 코드를 배포해도 그 기기는 **잠긴 퇴역 프로젝트**를 두드리다 403→느린 폴백으로 떨어졌다
+       (주인 기기에서 실측). 옛 값이면 강제로 새 값으로 바꾸고 저장까지 갱신한다. */
+    if(C.cfg.fsProjectId==='hideout-firestore-hb20'){
+      C.cfg.fsProjectId='hideout-recipe-cost';
+      C.cfg.fsApiKey='AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s';
+      try{ LS.set("hideout_ord_fsProject", C.cfg.fsProjectId); LS.set("hideout_ord_fsKey", C.cfg.fsApiKey); }catch(e){}
+    }
     (async()=>{
     try{ await C.probeFsDirect(); }catch(e){}
     try{ const raw=await C.kvGet("locations"); const locs=raw?JSON.parse(raw):C.DEFAULT_LOCATIONS; setLocations(locs); setSync({ok:true,err:""}); }
@@ -2608,7 +2737,10 @@ function App(){
     try{
       // parSuggest: read-only advice written by the sales analysis (Square 30d x RCC recipes).
       // The app never writes it - it only shows it beside the par the team types in.
-      const keys=["locations","suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes","parSuggest",catKey];
+      /* rcc_prices: 백엔드가 1시간마다 RCC 재료 559개의 구매가를 한 장으로 구워 둔다(rcc-price-map.gs).
+         품목에 rccId 가 연결돼 있으면 이 표의 가격이 수동 cost 대신 쓰인다 — RCC 에서 가격이 바뀌면
+         Period/Trends 의 Est. value 가 자동으로 따라온다 (주인 요청 2026-08-26). */
+      const keys=["locations","suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes","parSuggest","rcc_prices",catKey];
       const [vals,itemVals]=await Promise.all([C.kvGetBatch(keys), C.kvGetChunkedBatch([itemKey])]);
       const locs=vals.locations?JSON.parse(vals.locations):C.DEFAULT_LOCATIONS;
       const parse=(v,d)=>{ try{ return v?JSON.parse(v):d; }catch(e){ return d; } };
@@ -2625,7 +2757,10 @@ function App(){
         deliveryOverrides:parse(vals.deliveryOverrides,{}),
         qcNotes:parse(vals.qcNotes,[]),
         parSuggest:parse(vals.parSuggest,null),
+        rccPrices:parse(vals.rcc_prices,[]),   // [{i,n,p,q,u}] — 없으면 빈 배열(연결 UI 가 안내문을 띄운다)
       };
+      // 단가 조회용 맵 — costOf 들이 전역에서 쓴다 (품목 rccId → {p:구매가,q:수량,u:단위,n:이름})
+      C.cfg.rccPriceMap={}; c.rccPrices.forEach(g=>{ C.cfg.rccPriceMap[g.i]=g; });
       // seed defaults if empty (matches original)
       // seed defaults if empty (matches original) — [FIX 2026-07-23] only seed items when the
       // dept actually HAS defaults. Barista's default list is empty ([]), so the old code fired

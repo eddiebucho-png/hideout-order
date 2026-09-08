@@ -451,12 +451,30 @@ Kind regards,
 const ALLERGEN_OPTIONS = ['Eggs','Gelatine','Nuts','Alcohol','Soy','Seeds','Dairy','Traces of almonds','Corn','HALAL','Gluten Free'];
 const SAVED_CONNECTIONS_BACKEND_KEY = 'savedConnections';
 
-/* ---- cache ---- */
+/* ---- cache ----
+   Two tiers. Memory (60 s) is the original and decides what counts as FRESH. Underneath it,
+   localStorage keeps the last-good value of every kv read across page opens. A page open that used
+   to cost four ~2.7 s Apps Script round trips now paints from the stored copy at once and refreshes
+   behind the paint (see loadCore / the mount effect). Only read-side keys go in; writes still go to
+   the backend first and then update both tiers via cachePut. */
 const CACHE_TTL_MS = 60000;
+const LS_CACHE_KEY = 'hideout_ord_kvcache_v1';
+const LS_CACHE_MAX = 900*1024;                 // stay well under the ~5 MB origin quota
+let _lsCache = null;
+function lsCacheLoad(){ if(_lsCache) return _lsCache; try{ _lsCache=JSON.parse(localStorage.getItem(LS_CACHE_KEY)||'{}')||{}; }catch(e){ _lsCache={}; } return _lsCache; }
+let _lsSaveTimer = null;
+function lsCacheSave(){ clearTimeout(_lsSaveTimer); _lsSaveTimer=setTimeout(()=>{ try{
+  let str=JSON.stringify(_lsCache||{});
+  // over budget: drop the oldest entries until it fits (item chunks are the big ones)
+  if(str.length>LS_CACHE_MAX){ const ks=Object.keys(_lsCache).sort((a,b)=>(_lsCache[a].ts||0)-(_lsCache[b].ts||0)); while(ks.length && str.length>LS_CACHE_MAX){ delete _lsCache[ks.shift()]; str=JSON.stringify(_lsCache); } }
+  localStorage.setItem(LS_CACHE_KEY,str); }catch(e){} }, 150); }
 function cacheGet(key){ const e=cfg.cache[key]; if(e && (Date.now()-e.ts)<CACHE_TTL_MS) return e.value; return undefined; }
-function cachePut(key,value){ cfg.cache[key]={value,ts:Date.now()}; }
-function cacheClearPrefix(prefix){ Object.keys(cfg.cache).forEach(k=>{ if(k.indexOf(prefix)===0) delete cfg.cache[k]; }); }
-function clearCache(){ cfg.cache={}; }
+/* Any-age stored value, for painting before the network answers. Callers that use this MUST also
+   trigger a real read, or the app would happily show last week's items for ever. */
+function cacheGetStale(key){ const m=cfg.cache[key]; if(m) return m.value; const l=lsCacheLoad()[key]; return l?l.value:undefined; }
+function cachePut(key,value){ cfg.cache[key]={value,ts:Date.now()}; if(key.indexOf('kv:')===0){ lsCacheLoad()[key]={value,ts:Date.now()}; lsCacheSave(); } }
+function cacheClearPrefix(prefix){ Object.keys(cfg.cache).forEach(k=>{ if(k.indexOf(prefix)===0) delete cfg.cache[k]; }); const l=lsCacheLoad(); Object.keys(l).forEach(k=>{ if(k.indexOf(prefix)===0) delete l[k]; }); lsCacheSave(); }
+function clearCache(){ cfg.cache={}; _lsCache={}; try{ localStorage.removeItem(LS_CACHE_KEY); }catch(e){} }
 
 function hasArtifactStorage(){ return typeof window!=='undefined' && !!window.storage && typeof window.storage.get==='function' && typeof window.storage.set==='function'; }
 function isConnected(){ return !!cfg.backendUrl || hasArtifactStorage(); }
@@ -538,7 +556,12 @@ async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collection
 // Probe once at startup: only switch to the fast path if this project actually has the ordering
 // data (a non-empty 'locations'). A missing doc means we're pointed at the wrong Firestore project,
 // so we stay on Apps Script (which has the real data) rather than silently showing empty/defaults.
-async function probeFsDirect(){ if(!cfg.fsProjectId||!cfg.fsApiKey){ cfg.fsDirect=false; return false; } try{ const v=await fsDirectGet('locations'); cfg.fsDirect = (v!=null && v!==''); }catch(e){ cfg.fsDirect=false; } return cfg.fsDirect; }
+async function probeFsDirect(){ if(!cfg.fsProjectId||!cfg.fsApiKey){ cfg.fsDirect=false; return false; }
+  /* The direct path has answered 403 since the 2026-08-25 rules lockdown. A failed probe is
+     remembered for a day so the app stops paying for it on every open; a later success clears it. */
+  try{ const bad=Number(localStorage.getItem('hideout_ord_fsDirectFailedAt')||0); if(bad && Date.now()-bad<86400000){ cfg.fsDirect=false; return false; } }catch(e){}
+  try{ const v=await fsDirectGet('locations'); cfg.fsDirect = (v!=null && v!==''); try{ if(cfg.fsDirect) localStorage.removeItem('hideout_ord_fsDirectFailedAt'); else localStorage.setItem('hideout_ord_fsDirectFailedAt',String(Date.now())); }catch(e){} }
+  catch(e){ cfg.fsDirect=false; try{ localStorage.setItem('hideout_ord_fsDirectFailedAt',String(Date.now())); }catch(e2){} } return cfg.fsDirect; }
 
 /* ---- KV primitives (GET-only against Apps Script, see original notes) ---- */
 async function kvGet(key){
@@ -644,11 +667,13 @@ async function kvSetChunked(baseKey, arr, force){
   try{ for(let i=chunks.length;i<chunks.length+80;i++){ const k=`${baseKey}_chunk_${i}`; const v=await kvGetFresh(k); if(v==null) break; await kvDelete(k); } }catch(e){ /* best-effort sweep; next save retries */ }
 }
 async function kvGetChunkedBatch(baseKeys){
-  const flatValues=await kvGetBatch(baseKeys);
+  /* `items` has never been a flat key in practice (it is always chunked), so the old flow spent a
+     full round trip discovering that and another fetching `_chunk_count`. Ask for both at once. */
+  const flatValues=await kvGetBatch(baseKeys.concat(baseKeys.map(k=>`${k}_chunk_count`)));
   const result={}, needsChunkFallback=[];
   baseKeys.forEach(k=>{ if(flatValues[k]){ try{ result[k]=JSON.parse(flatValues[k]); }catch(e){ result[k]=null; } } else { result[k]=null; needsChunkFallback.push(k); } });
   if(!needsChunkFallback.length) return result;
-  const countValues=await kvGetBatch(needsChunkFallback.map(k=>`${k}_chunk_count`));
+  const countValues={}; needsChunkFallback.forEach(k=>{ countValues[`${k}_chunk_count`]=flatValues[`${k}_chunk_count`]; });
   const chunkKeysToFetch=[], counts={};
   needsChunkFallback.forEach(k=>{ const c=countValues[`${k}_chunk_count`]; counts[k]=c?parseInt(c,10)||0:0; for(let i=0;i<counts[k];i++) chunkKeysToFetch.push(`${k}_chunk_${i}`); });
   if(chunkKeysToFetch.length){
@@ -735,7 +760,7 @@ window.OrderCore = {
   localISO, tomorrowISO, dayKeyForDate, DAY_KEYS, DAY_LABELS, summaryDefaultISO, SUMMARY_ROLLOVER_HOUR,
   DEFAULT_LOCATIONS, DEFAULT_CATEGORIES, DEFAULT_ITEMS, DEFAULT_CATEGORIES_BARISTA, DEFAULT_ITEMS_BARISTA, DEFAULT_BACKEND_URL,
   defaultCategoriesForDept, defaultItemsForDept, DEFAULT_SUPPLIER_TEMPLATE, ALLERGEN_OPTIONS, SAVED_CONNECTIONS_BACKEND_KEY,
-  cacheGet, cachePut, cacheClearPrefix, clearCache, hasArtifactStorage, isConnected, withRetry, probeFsDirect,
+  cacheGet, cacheGetStale, cachePut, cacheClearPrefix, clearCache, hasArtifactStorage, isConnected, withRetry, probeFsDirect,
   kvGet, kvGetFresh, kvSet, kvDelete, kvListPrefix, kvGetBatch, kvSetChunked, kvGetChunkedBatch, kvSetLongText, kvGetLongText,
   loadOrder, saveOrder, loadAllOrdersForDate, stockKey, loadStockTake, saveStockTake, listStockTakeDatesForLocation, listOrderDates,
   setKey, getKey, itemCost,
@@ -2724,14 +2749,63 @@ function App(){
       try{ LS.set("hideout_ord_fsProject", C.cfg.fsProjectId); LS.set("hideout_ord_fsKey", C.cfg.fsApiKey); }catch(e){}
     }
     (async()=>{
-    try{ await C.probeFsDirect(); }catch(e){}
+    /* Paint the branch gate from the stored list right away; the network confirms behind it.
+       Before this, the gate sat on "Loading…" for one full ~2.7 s round trip (plus the Firestore
+       probe) before a single button appeared. */
+    const stale=C.cacheGetStale("kv:locations");
+    if(stale){ try{ setLocations(JSON.parse(stale)); }catch(e){} setPhase("gate"); if(department) ensureCore(department); }
+    C.probeFsDirect().catch(()=>{});          // not awaited: it must never delay the gate
     try{ const raw=await C.kvGet("locations"); const locs=raw?JSON.parse(raw):C.DEFAULT_LOCATIONS; setLocations(locs); setSync({ok:true,err:""}); }
-    catch(e){ setLocations(C.DEFAULT_LOCATIONS); setSync({ok:false,err:e.message}); }
+    catch(e){ if(!stale) setLocations(C.DEFAULT_LOCATIONS); setSync({ok:false,err:e.message}); }
     if(department) ensureCore(department); // prefetch core data while the user types their passcode
     setPhase("gate");
   })(); },[]);
 
+  /* Assemble the core object from the stored (any-age) copy of the kv reads, or return null if the
+     device has never loaded this department. Mirrors loadCoreNet's key list; if that list grows,
+     the new key simply comes through as undefined here and falls to its default until the refresh. */
+  const coreFromStale=(dept)=>{
+    C.cfg.department=dept;
+    const catKey=C.deptPrefix()+"categories", itemKey=C.deptPrefix()+"items";
+    const g=k=>C.cacheGetStale('kv:'+k);
+    const parse=(v,d)=>{ try{ return v?JSON.parse(v):d; }catch(e){ return d; } };
+    const locsRaw=g("locations"), catsRaw=g(catKey);
+    // items are chunked: stitch kv:items_chunk_0..n-1 exactly as kvGetChunkedBatch does
+    let items=null; const flat=g(itemKey);
+    if(flat){ items=parse(flat,null); }
+    else { const n=parseInt(g(itemKey+"_chunk_count")||"0",10)||0; if(n>0){ items=[]; for(let i=0;i<n;i++){ const raw=g(itemKey+"_chunk_"+i); if(raw==null) { items=null; break; } items=items.concat(parse(raw,[])); } } }
+    if(!locsRaw || !catsRaw || !items) return null;          // not enough to paint honestly
+    return {
+      locations:parse(locsRaw, C.DEFAULT_LOCATIONS),
+      categories:parse(catsRaw, C.defaultCategoriesForDept()),
+      items,
+      suppliers:parse(g("suppliers"),[]),
+      senderName:g("senderName")||"", fromDisplayName:g("fromDisplayName")||"",
+      stockTakeLinked:g("stockTakeLinked")==="true",
+      dailySummaryRecipient:g("dailySummaryRecipient")||"", dailySummarySendTime:g("dailySummarySendTime")||"18:00",
+      dailySummaryChefEnabled:g("dailySummaryChefEnabled")!=="false", dailySummaryBaristaEnabled:g("dailySummaryBaristaEnabled")!=="false",
+      weeklyDeliveryInfo:Object.assign({mon:"",tue:"",wed:"",thu:"",fri:"",sat:"",sun:""},parse(g("weeklyDeliveryInfo"),{})),
+      deliveryOverrides:parse(g("deliveryOverrides"),{}),
+      qcNotes:parse(g("qcNotes"),[]),
+      parSuggest:parse(g("parSuggest"),null),
+      rccPrices:parse(g("rcc_prices"),[]),
+      __stale:true
+    };
+  };
+  /* Paint first, fetch second. Resolves as soon as something is on screen, so the branch gate hands
+     over to the app immediately on any device that has opened this department before. The network
+     refresh runs behind it and repaints via setCore inside loadCoreNet. Errors in the background
+     refresh surface through setSync exactly as before, never as a blank screen. */
   const loadCore=async (dept)=>{
+    const stale=coreFromStale(dept);
+    if(stale){
+      setLocations(stale.locations); setCore(stale); setSync({ok:true,err:""});
+      loadCoreNet(dept).catch(()=>{});
+      return stale;
+    }
+    return loadCoreNet(dept);
+  };
+  const loadCoreNet=async (dept)=>{
     C.cfg.department=dept;
     const catKey=C.deptPrefix()+"categories", itemKey=C.deptPrefix()+"items";
     try{

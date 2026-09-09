@@ -2682,9 +2682,9 @@ function AiTrainingCard({ctx}){
 function Settings({ctx}){
   const [unlocked,setUnlocked]=useState(false); const [pw,setPw]=useState(""); const [err,setErr]=useState("");
   const [sub,setSub]=useState("items");
-  const OPEN=["profile","items","parlevels","categories"];
-  const NAV=[["Day to day",[["items","Items",(ctx.items||[]).length],["parlevels","Par levels",0],["categories","Categories",(ctx.categories||[]).length]]],["Stores & people",[["locations","Branches & passcodes",(ctx.locations||[]).length],["users","Users",0],["profile","My profile",0]]],["Automation",[["suppliers","Suppliers (auto-email)",(ctx.suppliers||[]).length],["delivery","Delivery roster",0],["dailysummary","Daily summary email",0],["aitraining","AI training",(ctx.qcNotes||[]).length]]],["System",[["connection","Connection",0]]]];
-  const TITLE={items:["Items","Everything the team can order — name, unit, category, cost link to RCC, daily/dispose flag, group label."],parlevels:["Par levels","How much each branch should hold per weekday. Submit Order fills Needed from these."],categories:["Categories","The groups Submit Order, Today and Stock Take are organised by. Colour shows as the marker."],locations:["Branches & passcodes","Order and name of the branches. ◀ ▶ sets the column order on Today and Submit Order."],users:["Users","Who can sign in and what they can see."],profile:["My profile","Your photo and name on the staff board."],suppliers:["Suppliers (auto-email)","Who gets the order emails, when, and the template."],delivery:["Delivery roster","Who is on delivery each weekday, plus one-off overrides."],dailysummary:["Daily summary email","The end-of-day summary — recipient, time, sender."],aitraining:["AI training","Q&A the assistant uses to answer staff."],connection:["Connection","Backend URL and the direct-Firestore speed setting."]};
+  const OPEN=["profile","board","items","parlevels","categories"];
+  const NAV=[["Day to day",[["items","Items",(ctx.items||[]).length],["parlevels","Par levels",0],["categories","Categories",(ctx.categories||[]).length]]],["Stores & people",[["locations","Branches & passcodes",(ctx.locations||[]).length],["users","Users",0],["board","Staff board & my profile",0]]],["Automation",[["suppliers","Suppliers (auto-email)",(ctx.suppliers||[]).length],["delivery","Delivery roster",0],["dailysummary","Daily summary email",0],["aitraining","AI training",(ctx.qcNotes||[]).length]]],["System",[["connection","Connection",0]]]];
+  const TITLE={items:["Items","Everything the team can order — name, unit, category, cost link to RCC, daily/dispose flag, group label."],parlevels:["Par levels","How much each branch should hold per weekday. Submit Order fills Needed from these."],categories:["Categories","The groups Submit Order, Today and Stock Take are organised by. Colour shows as the marker."],locations:["Branches & passcodes","Order and name of the branches. ◀ ▶ sets the column order on Today and Submit Order."],users:["Users","Who can sign in and what they can see."],profile:["My profile","Your photo and name on the staff board."],board:["Staff board & my profile","Postcards between the stores — open the board, and set the photo and name your posts show."],suppliers:["Suppliers (auto-email)","Who gets the order emails, when, and the template."],delivery:["Delivery roster","Who is on delivery each weekday, plus one-off overrides."],dailysummary:["Daily summary email","The end-of-day summary — recipient, time, sender."],aitraining:["AI training","Q&A the assistant uses to answer staff."],connection:["Connection","Backend URL and the direct-Firestore speed setting."]};
   const gated = !OPEN.includes(sub) && !unlocked;
   const tryUnlock=()=>{ if(pw===SETTINGS_PASSWORD||pw===MASTER){ setUnlocked(true); setErr(""); } else setErr("Incorrect"); };
   return <div className="app-pad">
@@ -2701,6 +2701,7 @@ function Settings({ctx}){
           <button type="button" className="btn2 p" style={{width:"100%"}} onClick={tryUnlock}>Unlock</button>
         </div> : <>
           {sub==="profile" && <ProfileCard />}
+          {sub==="board" && (window.OrderBoardTab ? <window.OrderBoardTab /> : <ProfileCard />)}
           {sub==="items" && <ItemsCard ctx={ctx} />}
           {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
           {sub==="categories" && <CategoriesCard ctx={ctx} />}
@@ -2907,20 +2908,17 @@ const T = window.OrderTabs;
 const { Settings, AiWidget, ProfileCard } = window.OrderSettings;
 const LOGO = window.HIDEOUT_LOGO || "";
 
-const TABS = [["daily","Today"],["order","Submit Order"],["stock","Stock Take"],["board","Staff board"],["period","Period Report"],["trends","Trends"],["settings","Settings"]];
+const TABS = [["daily","Today"],["order","Submit Order"],["stock","Stock Take"],["period","Period Report"],["trends","Trends"],["settings","Settings"]];
 const TT = { daily:["Today at The Hideout","What’s ordered, where it goes, and who’s on delivery"], order:["Submit Order","Count what’s left — par levels fill the rest"], period:["Period Report","Order totals across a date range"], stock:["Stock Take","Count on-hand stock by branch"], trends:["Trends","Where orders, spend and waste are heading"], board:["Staff board","Postcards from the team — and your own name & photo"], settings:["Settings","Items, par levels, branches & connection"] };
 /* Staff board tab (2026-09-09 owner: "staff board 는 어떤 탭이야? 아예 하나 신설해서 설정에 연결해서 자기정보
    입력할 수 있게") — the postcards widget used to hide behind a header button. This tab opens it and carries
    the person's own profile (photo + display name, saved to allowlist/{email}) so new staff set themselves up here. */
 function BoardTab(){
   const open=()=>{ try{ if(window.HideoutPostcards&&window.HideoutPostcards.open){ window.HideoutPostcards.open(); return true; } }catch(e){} return false; };
-  const ready=!!(window.HideoutPostcards&&window.HideoutPostcards.open);
-  return <div className="app-pad">
-    <div className="lbl"><span className="sh c"></span><span className="tag">Staff board</span><span className="cnt">postcards, photos and notes between the three stores</span></div>
-    <div className="screen" style={{padding:"18px 18px 20px", display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:20}} >
+  return <div className="screen" style={{padding:"18px 18px 20px", display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:20}} >
       <div>
         <div className="lab">The board</div>
-        <p className="desc" style={{marginBottom:14}}>Pin a postcard, drop a photo, react to what the other stores posted. It opens as a layer over the app — close it and you are back here.</p>
+        <p className="desc" style={{marginBottom:14}}>Pin a postcard, drop a photo, react to what the other stores posted. It opens as a layer over the app — close it and you are back here. Also under ☰ More → Open staff board.</p>
         <button type="button" className="btn2 p" style={{minHeight:56, fontSize:16}} onClick={()=>{ if(!open()) toast("The board is still loading — try again in a second",true); }}>Open the staff board →</button>
         <p className="desc" style={{marginTop:14}}>Your posts show your photo and display name from the right. Set them once — they are shared with RCC too.</p>
       </div>
@@ -2928,9 +2926,9 @@ function BoardTab(){
         <div className="lab">My profile</div>
         <ProfileCard />
       </div>
-    </div>
-  </div>;
+    </div>;
 }
+window.OrderBoardTab=BoardTab;
 
 /* ---- branch + department gate ---- */
 function Gate({locations, onUnlock}){
@@ -3222,6 +3220,7 @@ function App(){
             <div className="k">Go to</div>
             {TABS.filter(([k])=>!["daily","order","stock"].includes(k)).map(([k,l])=><button key={k} type="button" onClick={()=>{ setTab(k); setMore(false); }}>{l}</button>)}
             <div className="k">Tools</div>
+            <button type="button" onClick={()=>{ setMore(false); try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }}>Open staff board</button>
             <button type="button" onClick={()=>{ setMore(false); refresh(); }}>Refresh data</button>
             <button type="button" onClick={()=>{ setMore(false); setSheet("apps"); }}>Switch app → RCC</button>
             <div className="k">Device</div>
@@ -3275,7 +3274,6 @@ function App(){
       {tab==="stock" && <T.StockTake ctx={ctx} />}
       {tab==="trends" && <T.TrendsReport ctx={ctx} />}
       {tab==="settings" && <Settings ctx={ctx} />}
-      {tab==="board" && <BoardTab />}
     </div>
     <ToastHost />
   </div>;

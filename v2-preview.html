@@ -3469,6 +3469,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
    Identity + data in the SHARED RCC Firebase project (hideout-recipe-cost). Photos → Storage URL (never base64 in a doc). */
 (function(){
   "use strict";
+  return; /* 2026-09-09: this inline copy is retired. postcards.js (canonical, loaded async with a per-minute
+     cache tag in <head>) used to load first so this guard fired; async loading made the inline copy win the race and
+     mount the OLD widget. Kept in the file for history only. */
   if(window.__HIDEOUT_POSTCARDS__) return; window.__HIDEOUT_POSTCARDS__=true;
 
   var FB={apiKey:"AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s",authDomain:"hideout-recipe-cost.firebaseapp.com",projectId:"hideout-recipe-cost",storageBucket:"hideout-recipe-cost.firebasestorage.app",messagingSenderId:"717961739938",appId:"1:717961739938:web:752af54de485d7f7c921fb"};

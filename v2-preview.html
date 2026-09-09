@@ -3125,7 +3125,7 @@ function BoardTab(){
 window.OrderBoardTab=BoardTab;
 
 /* ---- branch + department gate ---- */
-function Gate({locations, onUnlock}){
+function Gate({locations, onUnlock, loading}){
   const [sel,setSel]=useState(""); const [code,setCode]=useState(""); const [err,setErr]=useState(""); const [shake,setShake]=useState(false);
   const b=locations.find(x=>x.id===sel);
   const pick=(id)=>{ const bb=locations.find(x=>x.id===id); setSel(id); setCode(""); setErr(""); if(bb && !bb.passcode) onUnlock(id); };
@@ -3135,7 +3135,7 @@ function Gate({locations, onUnlock}){
       <div style={{textAlign:"center",marginBottom:22}}>{LOGO?<img src={LOGO} alt="The Hideout" style={{height:48,filter:"brightness(0) invert(1)",opacity:.95}} />:<div style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:700,fontSize:24}}>The Hideout</div>}<div style={{color:"var(--color-body-muted)",fontSize:12,marginTop:8,letterSpacing:".08em",textTransform:"uppercase"}}>Ordering & Inventory</div></div>
       {!b ? <div>
         <div style={{fontSize:12,textTransform:"uppercase",letterSpacing:".08em",color:"var(--color-body-muted)",marginBottom:10}}>Select your branch</div>
-        <div style={{display:"grid",gap:8}}>{locations.map(x=><button key={x.id} onClick={()=>pick(x.id)} className="vbtn-card" style={{width:"100%",textAlign:"left",borderRadius:12,padding:"14px 16px",background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.08)",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:600}}>{x.name}</span><span style={{color:"var(--color-body-muted)"}}>{x.passcode?<Ico name="lock" size={15} style={{verticalAlign:"middle"}} />:"›"}</span></button>)}</div>
+        <div style={{display:"grid",gap:8}}>{(loading && !locations.length) ? [0,1,2,3,4,5].map(i=><div key={"sk"+i} aria-hidden="true" style={{height:50,background:"var(--color-surface-tile-2)",opacity:.5,animation:"breathe 1.2s ease-in-out infinite",animationDelay:(i*.08)+"s"}} />) : locations.map(x=><button key={x.id} onClick={()=>pick(x.id)} className="vbtn-card" style={{width:"100%",textAlign:"left",borderRadius:12,padding:"14px 16px",background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.08)",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:600}}>{x.name}</span><span style={{color:"var(--color-body-muted)"}}>{x.passcode?<Ico name="lock" size={15} style={{verticalAlign:"middle"}} />:"›"}</span></button>)}</div>
       </div> : !b.passcode ? <div style={{textAlign:"center",color:"var(--color-body-muted)",padding:"18px 0"}}>
         {/* 2026-08-25 — passcode 없는 지점은 pick() 이 즉시 onUnlock 하지만, 그 뒤 데이터 로딩이
             느리면 화면이 이 분기 자리에서 **비밀번호 입력칸을 보여준 채** 머물렀다(주인 실측:
@@ -3246,6 +3246,11 @@ function App(){
   const [tick,setTick]=useState(0);
   const corePromise=useRef(null);
   const ensureCore=(d)=>{ if(!corePromise.current) corePromise.current=loadCore(d); return corePromise.current; };
+  // background warm-up: same keys loadCoreNet() asks for, both departments, straight into the kv cache (errors are ignored — loadCore has its own fallbacks)
+  const warmCaches=()=>{ try{
+    C.kvGetBatch(["suppliers","senderName","fromDisplayName","stockTakeLinked","dailySummaryRecipient","dailySummarySendTime","dailySummaryChefEnabled","dailySummaryBaristaEnabled","weeklyDeliveryInfo","deliveryOverrides","qcNotes","parSuggest","rcc_prices","categories","barista:categories"]).catch(()=>{});
+    C.kvGetChunkedBatch(["items","barista:items"]).catch(()=>{});
+  }catch(e){} };
 
   const botMounted=useRef(false);
   // AUTH GATE (2026-07-24): mount the AI chatbot only after the passcode gate is cleared (phase==="app"); never re-mount.
@@ -3271,12 +3276,14 @@ function App(){
        Before this, the gate sat on "Loading…" for one full ~2.7 s round trip (plus the Firestore
        probe) before a single button appeared. */
     const stale=C.cacheGetStale("kv:locations");
-    if(stale){ try{ setLocations(JSON.parse(stale)); }catch(e){} setPhase("gate"); if(department) ensureCore(department); }
-    C.probeFsDirect().catch(()=>{});          // not awaited: it must never delay the gate
+    if(stale){ try{ setLocations(JSON.parse(stale)); }catch(e){} }
+    setPhase("gate");   // 2026-09-10: on screen immediately — the Gate shows a skeleton until the list arrives
+    /* Let the Firestore probe settle for up to 900 ms first so the warm-up rides the fast path when it is available;
+       after that, download everything both departments need while the venue is being chosen. */
+    const probe=C.probeFsDirect().catch(()=>{});
+    Promise.race([probe, new Promise(r=>setTimeout(r,900))]).then(()=>{ warmCaches(); if(department) ensureCore(department); });
     try{ const raw=await C.kvGet("locations"); const locs=raw?JSON.parse(raw):C.DEFAULT_LOCATIONS; setLocations(locs); setSync({ok:true,err:""}); }
     catch(e){ if(!stale) setLocations(C.DEFAULT_LOCATIONS); setSync({ok:false,err:e.message}); }
-    if(department) ensureCore(department); // prefetch core data while the user types their passcode
-    setPhase("gate");
   })(); },[]);
 
   /* Assemble the core object from the stored (any-age) copy of the kv reads, or return null if the
@@ -3379,7 +3386,7 @@ function App(){
   const persist=async (key, value, stateKey, stateVal)=>{ try{ await C.kvSet(key, value); setCore(c=>({...c,[stateKey]:stateVal})); setSync({ok:true,err:""}); }catch(e){ toast("Save failed: "+e.message,true); setSync({ok:false,err:e.message}); } };
 
   if(phase==="loading") return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-surface-black)",color:"#fff"}}>Loading…</div>;
-  if(phase==="gate") return <Gate locations={locations} onUnlock={onUnlock} />;
+  if(phase==="gate") return <Gate locations={locations} loading={locations.length===0} onUnlock={onUnlock} />;
   if(phase==="dept") return <DeptPick onPick={onPickDept} />;
   if(!core) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-canvas-parchment)"}}>Loading data…</div>;
 

@@ -887,10 +887,11 @@ window.OrderCore = {
 
 </script>
 <script>
+/* --- inlined hideout-bot.js (shared assistant + recipe generation) --- */
 /* Hideout Assistant — ONE shared chatbot for both apps (Recipe Cost / catering-cost + Ordering).
    Inline this same file in each app's single-HTML build (keeps local-refs = 0).
    Usage:  HideoutBot.mount({ source:"rcc" | "ordering", backendUrl, token, logo, greeting, suggestions });
-   - Answers via the shared AI backend (?action=aiAssist) when backendUrl is set,
+   - Answers via the shared AI backend (POST action=aiAssist, JSON body: question + trimmed history + live clientCtx) when backendUrl is set,
      else falls back to window.claude.complete (preview). Context is built from whichever
      app's data is present, so the AI sees ALL of that app's info — including RCC's
      Today routine + Prep board so the Ordering app can talk about kitchen status too.
@@ -901,13 +902,14 @@ window.OrderCore = {
      exposes window.HideoutRCC.logQuestion it is ALSO written to state.botLog and synced to
      Firestore so Claude Cowork can read and learn from the conversation history. */
 (function(){
-  if(window.HideoutBot) return;
+  var BOT_VERSION="2026-09-09.2";
+  if(window.HideoutBot){ try{ if(window.HideoutBot.version!==BOT_VERSION) console.error("HideoutBot version collision", window.HideoutBot.version, BOT_VERSION); }catch(e){} return; }
   var TOKEN_DEFAULT="hideout-9f2a7c-orders", LOG_KEY="hideout_bot_log", LOG_MAX=400;
   // Recipe Cost lives in its own Firestore project; the bot auto-reads it so Ordering can answer recipe questions too.
   var RCC_FS="https://firestore.googleapis.com/v1/projects/hideout-recipe-cost/databases/(default)/documents/hideout_app/recipe_cost?key=AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s";
-  var RCC_CACHE=null, RCC_TRIED=false;
+  var RCC_CACHE=null, RCC_TRIED=false, RCC_RETRY_AFTER=0;
   function fsDec(v){ if(v==null) return null; if("stringValue" in v) return v.stringValue; if("integerValue" in v) return Number(v.integerValue); if("doubleValue" in v) return v.doubleValue; if("booleanValue" in v) return v.booleanValue; if("nullValue" in v) return null; if("timestampValue" in v) return v.timestampValue; if("mapValue" in v){ var o={}, f=(v.mapValue.fields)||{}; Object.keys(f).forEach(function(k){ o[k]=fsDec(f[k]); }); return o; } if("arrayValue" in v){ return ((v.arrayValue.values)||[]).map(fsDec); } return null; }
-  async function ensureRcc(){ if(RCC_CACHE||hasRcc()||RCC_TRIED) return; RCC_TRIED=true; try{ var r=await fetch(RCC_FS,{cache:"no-store"}); if(!r.ok) return; var j=await r.json(); var st=(j.fields&&j.fields.state)?fsDec(j.fields.state):null; if(typeof st==="string"){ try{ st=JSON.parse(st); }catch(e){} } RCC_CACHE=st||null; }catch(e){} }
+  async function ensureRcc(){ if(RCC_CACHE||hasRcc()||RCC_TRIED) return; if(Date.now()<RCC_RETRY_AFTER) return; try{ var r=await fetch(RCC_FS,{cache:"no-store"}); if(!r.ok) throw new Error("HTTP "+r.status); var j=await r.json(); var st=(j.fields&&j.fields.state)?fsDec(j.fields.state):null; if(typeof st==="string"){ try{ st=JSON.parse(st); }catch(e){} } RCC_CACHE=st||null; RCC_TRIED=true; }catch(e){ RCC_RETRY_AFTER=Date.now()+30000; } }
 
   function rccState(){ try{ var w=JSON.parse(localStorage.getItem("hideout_rcc_v2")||"{}"); return w.state||w||{}; }catch(e){ return {}; } }
   var DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -986,6 +988,7 @@ window.OrderCore = {
   function hasRcc(){ try{ var s=rccState(); return (s.recipes&&s.recipes.length)||(s.ingredients&&s.ingredients.length); }catch(e){ return false; } }
   function canSaveRecipe(){ return !!(window.HideoutRCC && window.HideoutRCC.addRecipe); }
   function canRemember(){ return !!(window.HideoutRCC && window.HideoutRCC.remember); }
+  function canPostNotice(){ return !!(window.HideoutRCC && window.HideoutRCC.addNotice); }
   function rccData(){ return hasRcc()?rccState():(RCC_CACHE||{}); }
   function rccCategories(){ var s=rccData(), set={}, out=[]; (s.recipes||[]).forEach(function(r){ if(r.category&&!r.archived) set[r.category]=1; }); var dc=s.dishCats||{}; [].concat(dc.kitchen||[],dc.bakery||[]).forEach(function(c){ if(c) set[c]=1; }); ["Drinks","Brunch","Bagel","Sandwich","Wraps & Salad","Pastry","Breakfast"].forEach(function(c){ set[c]=1; }); Object.keys(set).forEach(function(c){ out.push(c); }); return out; }
   function ingredientNames(){ try{ return (window.HideoutRCC.ingredients()||[]).map(function(i){ return i.name; }); }catch(e){ return []; } }
@@ -1007,34 +1010,96 @@ window.OrderCore = {
     if(canSaveRecipe()) parts.push(recipeCreateHint());
     if(canRemember()) parts.push(rememberHint());
     parts.push(calendarAddHint());
+    if(canPostNotice()) parts.push(noticeHint());
     return parts.join("\n\n---\n\n");
   }
 
+  // ---- transport (GPT review 2026-09-09) ----
+  // POST text/plain (no CORS preflight; doPost merges the JSON body into params) so the history and the
+  // live client context travel in the body instead of the URL. 15 s timeout, one retry on network/timeout.
+  var HIST_TURNS=8, HIST_CHARS=1800, Q_CHARS=2000, CTX_CHARS=20000, TIMEOUT_MS=15000;
+  function compactHistory(hist){
+    var h=(hist||[]).filter(function(m){ return m && m.text && !m.failed && (m.role==="user"||m.role==="assistant"); });
+    h=h.slice(-HIST_TURNS);
+    while(h.length && h[0].role!=="user") h.shift();              // always start on a user turn
+    return h.map(function(m){ return { role:m.role, content:String(m.text).slice(0,HIST_CHARS) }; });
+  }
+  /* Compact LIVE context the server cannot know: current branch, prep board, learned notes, the notice board,
+     what the app's calendar shows, and which confirm-card protocols this host supports. Recipes/ingredients are
+     NOT repeated here - the server already holds the RCC snapshot. */
+  function buildClientCtx(opts, q){
+    var L=[]; var s=rccData(); var ql=(q||"").toLowerCase();
+    try{
+      var d=new Date(), wd=DAYS[d.getDay()];
+      var curBr=""; try{ curBr=(window.__HIDEOUT_CAL&&window.__HIDEOUT_CAL.branch)||""; }catch(e){}
+      if(opts.source==="ordering"){ var cfg=resolveCfg(opts); L.push("APP: Ordering (IOS). Department: "+(cfg.department||"?")+"."+(curBr?(" Current branch: "+curBr+"."):"")); }
+      else L.push("APP: Recipe Cost (RCC)."+(curBr?(" The user's current branch: "+curBr+" - answer for THIS branch unless another is named."):""));
+      if(s.branches&&s.branches.length) L.push("BRANCHES: "+s.branches.map(function(b){return b.name;}).join(", ")+".");
+      var routine=s.dailyRoutine&&s.dailyRoutine[wd]; if(routine&&String(routine).trim()) L.push("TODAY'S ROUTINE ("+wd+"): "+String(routine).trim().slice(0,1200));
+      var recs=(s.recipes||[]).filter(function(r){return !r.archived;});
+      var prep=recs.map(function(r){ var st=prepStatusOf(r); return st?{name:r.name,st:st}:null; }).filter(Boolean);
+      if(prep.length){ var pick=function(k){ return prep.filter(function(p){return p.st===k;}).map(function(p){return p.name;}); };
+        L.push("LIVE PREP BOARD ("+prep.length+"): Do first: "+(pick("urgent").join(", ")||"none")+"; To do: "+(pick("todo").join(", ")||"none")+"; Done: "+(pick("done").join(", ")||"none")+"."); }
+      var mem=(s.botMemory||[]).slice(-40).map(function(n){ return String(typeof n==="string"?n:(n&&n.text)||"").slice(0,200); }).filter(Boolean);
+      if(mem.length) L.push("LEARNED NOTES (staff taught the assistant these - authoritative; do not re-record them):\n"+mem.map(function(t){return "- "+t;}).join("\n"));
+      // recipe detail only for dishes named in the question (the snapshot has the rest)
+      var hits=recs.filter(function(r){ var nl=String(r.name||"").toLowerCase(); if(!nl) return false; if(ql.indexOf(nl)>=0) return true; return nl.split(/[^a-z0-9]+/).filter(function(x){return x.length>=5;}).some(function(x){ return ql.indexOf(x)>=0; }); }).slice(0,4);
+      if(hits.length){ var im={}; (s.ingredients||[]).forEach(function(i){ im[i.id]=i; });
+        L.push("RECIPES NAMED IN THE QUESTION (full detail):\n"+hits.map(function(r){ var its=(r.items||[]).map(function(it){ var g=im[it.ingredientId]; return (g?g.name:(it.rawName||"?"))+(it.qty?" "+it.qty+(it.rawUnit||(g&&g.useUnit)||""):""); }).join(", "); return "- "+r.name+(r.category?" ("+r.category+")":"")+(r.sellPrice?" sell $"+r.sellPrice:"")+(r.allergens&&r.allergens.length?" allergens: "+r.allergens.join("/"):"")+"\n  ingredients: "+(its||"-")+"\n  method: "+((r.procedure||"").trim().slice(0,1500)||"(not recorded)"); }).join("\n")); }
+      try{ var wc=window.__HIDEOUT_CAL; if(wc&&wc.events&&wc.events.length){ L.push("CALENDAR AS SHOWN IN THE APP ("+(wc.branch||"this branch")+"):\n"+wc.events.slice(0,25).map(function(e){ return "- "+(e.date?e.date+" ":"")+(e.allday?"(all day)":(e.start||""))+" "+(e.summary||"")+(e.location?(" @"+e.location):""); }).join("\n")); } }catch(e){}
+      var caps=[]; if(canSaveRecipe()) caps.push("recipe-json (recipe builder card)"); if(canRemember()) caps.push("remember-json (memory)"); caps.push("calendar-json (calendar confirm card)"); if(canPostNotice()) caps.push("notice-json (staff notice board confirm card)");
+      L.push("THIS APP CAN SHOW CONFIRM CARDS FOR: "+caps.join("; ")+". Never claim something was saved/posted/added - the card does that after the user confirms.");
+      if(canPostNotice()) L.push(noticeHint().trim());
+      if(canRemember()) L.push(rememberHint().trim());
+      L.push(calendarAddHint().trim());
+    }catch(e){}
+    return L.join("\n\n").slice(0,CTX_CHARS);
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+  async function postJson(url, payload, ms){
+    var ctl=(typeof AbortController!=="undefined")?new AbortController():null; var timer=ctl?setTimeout(function(){ ctl.abort(); }, ms):null;
+    try{
+      var res=await fetch(url,{ method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload), cache:"no-store", signal:ctl?ctl.signal:undefined });
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      return await res.json();
+    } finally { if(timer) clearTimeout(timer); }
+  }
+  function friendlyError(e){
+    var m=String(e&&e.message||e||"");
+    if(!navigator.onLine) return "You look offline - check the internet connection and try again.";
+    if(/abort/i.test(m)) return "The assistant took too long to answer (I tried twice). Tap Retry or ask again in a moment.";
+    if(/HTTP 5|unavailable|upstream|overloaded/i.test(m)) return "The assistant is temporarily unavailable. Tap Retry in a moment.";
+    if(/Unauthorized/i.test(m)) return "The assistant is not authorised on this device - check the backend token in Settings.";
+    return "Something went wrong while answering. Tap Retry.";
+  }
+  // Returns { answer, action, timing, usage, stopReason }.
   async function callAI(opts, systemPrompt, hist, q){
     var burl=(typeof opts.backendUrl==="function")?opts.backendUrl():opts.backendUrl;
     var tok=(typeof opts.token==="function")?opts.token():opts.token;
     if(burl){
-      var tk=encodeURIComponent(tok||TOKEN_DEFAULT);
-      // Upload this app's own context (recipes/costs or ordering) so the backend can merge it
-      // with its server-side knowledge — both bots see BOTH apps' data (front & back).
-      // SPEED (zero-upload): the backend blob already holds ordering data, the live RCC
-      // snapshot, the 3-week calendar AND the recipe/remember/calendar protocol hints —
-      // so the client never uploads context. Every question = one single GET.
-      var extra="&merge=1";
-      var url=burl+(burl.indexOf("?")>-1?"&":"?")+"action=aiAssist"
-        +"&token="+tk
-        +"&question="+encodeURIComponent(q)
-        +"&history="+encodeURIComponent(JSON.stringify(hist.map(function(m){return {role:m.role==="user"?"user":"assistant",content:m.text};})))
-        +extra;
-      var res=await fetch(url,{cache:"no-store"}); var j=await res.json();
-      if(j&&j.error) throw new Error(j.error);
-      return (j&&j.answer)||"(no response)";
+      var payload={ token:(tok||TOKEN_DEFAULT), action:"aiAssist", question:String(q).slice(0,Q_CHARS),
+        history:JSON.stringify(compactHistory(hist)),           // string: old backends JSON.parse it; new ones accept both
+        clientCtx:buildClientCtx(opts, q), source:opts.source||"", merge:"1", v:BOT_VERSION };
+      var lastErr=null, j=null;
+      for(var attempt=0; attempt<2 && !j; attempt++){
+        try{ j=await postJson(burl, payload, TIMEOUT_MS); }
+        catch(e){ lastErr=e; if(attempt===0) await sleep(350); }
+      }
+      if(!j){
+        // very old backend without POST support / odd proxy: last resort GET with a tiny history
+        try{ var res=await fetch(burl+(burl.indexOf("?")>-1?"&":"?")+"action=aiAssist&token="+encodeURIComponent(tok||TOKEN_DEFAULT)+"&question="+encodeURIComponent(String(q).slice(0,Q_CHARS))+"&history="+encodeURIComponent(JSON.stringify(compactHistory(hist).slice(-2)))+"&merge=1",{cache:"no-store"}); j=await res.json(); }
+        catch(e2){ throw lastErr||e2; }
+      }
+      if(j&&j.error&&!j.answer) throw new Error(j.message||j.error);
+      try{ if(j&&j.timing) console.debug("[HideoutBot] timing", j.timing, j.usage||"", j.requestId||""); }catch(e){}
+      var ans=(j&&j.answer)||""; if(j&&j.stopReason==="max_tokens"&&ans) ans+="\n\n(Answer was cut short - say \"continue\" for the rest.)";
+      return { answer:ans||"(no response)", action:(j&&j.action)||null, timing:(j&&j.timing)||null, usage:(j&&j.usage)||null, stopReason:(j&&j.stopReason)||"" };
     }
     if(window.claude&&window.claude.complete){
-      var prompt=systemPrompt+"\n\nConversation:\n"+hist.map(function(m){return (m.role==="user"?"User":"Assistant")+": "+m.text;}).join("\n")+"\nUser: "+q+"\nAssistant:";
-      return await window.claude.complete(prompt);
+      var prompt=(systemPrompt||buildContext(opts, q))+"\n\nConversation:\n"+hist.map(function(m){return (m.role==="user"?"User":"Assistant")+": "+m.text;}).join("\n")+"\nUser: "+q+"\nAssistant:";
+      return { answer:await window.claude.complete(prompt), action:null, timing:null, usage:null, stopReason:"" };
     }
-    return "AI backend not connected. On the tablet, set the shared AI backend URL; in preview, window.claude is used.";
+    return { answer:"AI backend not connected. On the tablet, set the shared AI backend URL; in preview, window.claude is used.", action:null, timing:null, usage:null, stopReason:"" };
   }
 
   // ---- memory (for Claude Cowork learning) ----
@@ -1048,6 +1113,43 @@ window.OrderCore = {
     var today=new Date(); var ds=today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
     var curBr=""; try{ curBr=(window.__HIDEOUT_CAL&&window.__HIDEOUT_CAL.branch)||""; }catch(e){}
     return "\n\n--- CALENDAR EVENT CREATION ---\nWhen the user asks to ADD / book / schedule / put something ON the calendar, do BOTH:\n1) One short line confirming what you understood.\n2) A fenced code block starting with ```calendar-json containing ONLY valid JSON of this exact shape:\n```calendar-json\n{\"title\":\"Event title\",\"date\":\"YYYY-MM-DD\",\"start\":\"HH:mm\",\"end\":\"HH:mm\",\"allDay\":false,\"location\":\"\",\"notes\":\"\",\"store\":\"adelaide\"}\n```\nRules: store must be one of adelaide (340 Adelaide St), city (100 Edward St), valley (515 St Paul Tce)."+(curBr?(" The user's current branch is \""+curBr+"\" \u2014 default to it."):" Default to adelaide if the branch is not stated.")+" Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. If no end time given, leave end as start+1 hour. If no time at all, set allDay true. NEVER invent details the user did not give \u2014 ask instead. Emit the block ONLY for calendar-add requests; the app will show a confirm card before anything is created.";
+  }
+  /* The notice board on Today is the one thing every staff member reads at the start of a shift, so
+     the assistant gets a way to write to it. Same contract as calendar-add: emit a fenced block, the
+     app shows a confirm card, nothing is saved until the user taps it. The live board is included so
+     the model can answer "what's up there?" and refuse to post the same thing twice. */
+  function noticeHint(){
+    var s=rccData(), d=new Date();
+    var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    /* HideoutRCC.notices() also carries the auto-generated meeting notices, which are derived and
+       never stored - reading s.notices alone would tell the model the board is empty. */
+    var all=[]; try{ all=(window.HideoutRCC&&window.HideoutRCC.notices)?window.HideoutRCC.notices():(s.notices||[]); }catch(e){ all=(s.notices||[]); }
+    var live=all.filter(function(n){ return n && !n.archived && (!n.until || String(n.until)>=ds); });
+    var cur=live.length
+      ? ("\nCURRENTLY ON THE BOARD: "+live.slice(0,20).map(function(n){
+          return "\u2022 \""+String(n.title||"")+"\""+(n.until?(" (until "+n.until+")"):"")+(n.tone==="urgent"?" [urgent]":"")+(n.branch?(" ["+n.branch+"]"):"")+(String(n.body||"").trim()?(" \u2014 "+String(n.body).replace(/\s+/g," ").slice(0,120)):"");
+        }).join("\n")+"\nIf they ask what is on the board, answer from this list. Do not post a duplicate \u2014 say it is already up and offer to replace or update it instead.")
+      : "\nThe board is empty right now.";
+    var brs=(s.branches||[]).map(function(b){return b.name;}).join(", ");
+    return "\n\n--- STAFF NOTICE BOARD ---\n"
+      +"The Today page carries a notice board the whole team reads. When the user wants to TELL the staff something \u2014 a handover note, an update, a reminder, a roster or supplier change, or a checklist for the team \u2014 do BOTH:\n"
+      +"1) One short line confirming what you understood.\n"
+      +"2) A fenced code block starting with ```notice-json containing ONLY valid JSON of this exact shape:\n"
+      +"```notice-json\n{\"title\":\"Short headline\",\"body\":\"Full message\",\"from\":\""+ds+"\",\"until\":\"\",\"pin\":false,\"tone\":\"info\",\"branch\":\"\"}\n```\n"
+      +"Rules: title is the single line staff see on the board \u2014 keep it under about 60 characters and make it say the thing, not \"Update\". "
+      +"body is the full message and takes simple markdown: # heading, - bullet, **bold**, and a \u2610 at the start of a line for a tick-box \u2014 use \u2610 lines whenever they ask for a CHECKLIST. "
+      +"Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. from defaults to today. Leave until \"\" unless they said when it stops mattering; set it when the message is only for a date or a week. "
+      +"tone is \"urgent\" only if they say it is urgent. pin true only if they ask to pin it. "
+      +"branch must be exactly one of: "+(brs||"(none on file)")+" \u2014 leave \"\" when it is for all stores. "
+      +"NEVER invent content they did not give \u2014 ask instead. Emit the block ONLY when they want something put in front of the team; the app shows a confirm card before anything is posted."
+      +cur;
+  }
+  function extractNotice(text){
+    if(!text) return null;
+    var m=text.match(/```\s*notice-json\s*([\s\S]*?)```/i); if(!m) return null;
+    var n; try{ n=JSON.parse(m[1].trim()); }catch(e){ return null; }
+    if(!n || !(String(n.title||"").trim() || String(n.body||"").trim())) return null;
+    return { intro:text.slice(0,m.index).trim(), notice:n };
   }
   function extractCalEvent(text){
     if(!text) return null;
@@ -1083,78 +1185,102 @@ window.OrderCore = {
     if(document.getElementById("hb-css")) return;
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
-"#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
-"#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
-"#hb-fab:active{transform:scale(.96)}",
-"#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
-"@keyframes hb-pulse{0%{box-shadow:0 0 0 0 rgba(200,26,34,.5)}55%{box-shadow:0 0 0 12px rgba(200,26,34,0)}100%{box-shadow:0 0 0 0 rgba(200,26,34,0)}}",
-"#hb-fab .hb-mark{width:62px;height:62px;flex:0 0 62px;display:flex;align-items:center;justify-content:center}",
-"#hb-fab .hb-mark img{width:38px;height:38px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}",
-"#hb-fab .hb-mono{width:34px;height:34px;border-radius:50%;background:#c81a22;color:#fff;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;font-family:'SF Pro Display','Inter',system-ui}",
-"#hb-fab .hb-lab{white-space:nowrap;font-size:14.5px;font-weight:600;letter-spacing:-.01em;opacity:0;max-width:0;transition:opacity .2s,max-width .28s,padding .28s;padding:0;overflow:hidden}",
-"#hb-fab.hb-wide{width:auto;padding-right:22px}",
-"#hb-fab.hb-wide .hb-lab{opacity:1;max-width:170px;padding-left:2px}",
-"@media (prefers-reduced-motion:reduce){#hb-fab .hb-ring{animation:none}#hb-fab{transition:none}}",
-"#hb-panel{position:fixed;right:20px;bottom:96px;z-index:99999;width:min(392px,calc(100vw - 28px));height:min(600px,78vh);background:#fbf5ec;border-radius:22px;box-shadow:0 30px 70px rgba(20,12,4,.36),0 2px 10px rgba(20,12,4,.18);display:none;flex-direction:column;overflow:hidden;font-family:'SF Pro Text','Inter',system-ui,sans-serif;transform-origin:bottom right;animation:hb-in .26s cubic-bezier(.2,.7,.2,1)}",
-"@keyframes hb-in{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}",
-"#hb-panel .hb-head{position:relative;padding:16px 18px 15px;background:#241d16;color:#fbf5ec;display:flex;align-items:center;gap:12px}",
-"#hb-panel .hb-head::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,rgba(200,26,34,.55),transparent)}",
-"#hb-panel .hb-badge{width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:rgba(251,245,236,.08);border:1px solid rgba(251,245,236,.14);display:flex;align-items:center;justify-content:center}",
+/* Bauhaus v2 chrome (2026-09-09, owner: "챗봇도 디자인 적용") — same tokens as the IOS/RCC v2 screens:
+   Jost, paper #f3f1ec, ink #141312, yellow #f2c100 = active, blue #1e4fb0 = info, red #ec3013 = urgent.
+   Radius 0, 3px rules, hard offset shadows. Scoped to #hb-fab / #hb-panel so host apps are untouched. */
+"@import url('https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap');",
+"#hb-fab,#hb-panel{--hb-paper:#f3f1ec;--hb-ink:#141312;--hb-yellow:#f2c100;--hb-blue:#1e4fb0;--hb-red:#ec3013;--hb-red-t:#b82412;--hb-muted:rgba(20,19,18,.72);--hb-line:rgba(20,19,18,.28);--hb-font:'Jost',Archivo,system-ui,sans-serif;font-family:var(--hb-font)}",
+"#hb-fab *,#hb-panel *{font-family:var(--hb-font)!important;border-radius:0!important;box-sizing:border-box}",
+"@keyframes hb-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}",
+"@keyframes hb-slide{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}",
+"@keyframes hb-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:none;opacity:1}}",
+"@keyframes hb-wipe{from{transform:scaleX(0)}to{transform:scaleX(1)}}",
+"#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;cursor:pointer;background:var(--hb-ink);color:var(--hb-paper);height:60px;padding:0;border:3px solid var(--hb-ink);box-shadow:5px 5px 0 var(--hb-yellow);overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:60px;animation:hb-pop .5s .3s cubic-bezier(.2,.8,.2,1) both}",
+"#hb-fab:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--hb-yellow)}",
+"#hb-fab:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--hb-yellow)}",
+"#hb-fab .hb-ring{display:none}",
+"#hb-fab .hb-mark{width:54px;height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:center}",
+"#hb-fab .hb-mark img{width:34px;height:34px;object-fit:contain;filter:brightness(0) invert(1)}",
+"#hb-fab .hb-mono{width:32px;height:32px;background:var(--hb-yellow);color:var(--hb-ink);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center}",
+"#hb-fab .hb-lab{white-space:nowrap;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:0;max-width:0;transition:opacity .2s,max-width .28s,padding .28s;padding:0;overflow:hidden}",
+"#hb-fab.hb-wide{width:auto;padding-right:18px}",
+"#hb-fab.hb-wide .hb-lab{opacity:1;max-width:190px;padding-left:2px}",
+"#hb-panel{position:fixed;right:20px;bottom:96px;z-index:99999;width:min(400px,calc(100vw - 28px));height:min(620px,78vh);background:var(--hb-paper);color:var(--hb-ink);border:3px solid var(--hb-ink);box-shadow:10px 10px 0 var(--hb-ink);display:none;flex-direction:column;overflow:hidden;transform-origin:bottom right;animation:hb-rise .26s cubic-bezier(.2,.7,.2,1)}",
+"#hb-panel .hb-head{position:relative;padding:12px 14px;background:var(--hb-ink);color:var(--hb-paper);display:flex;align-items:center;gap:12px;border-bottom:6px solid var(--hb-yellow)}",
+"#hb-panel .hb-badge{width:44px;height:44px;flex:0 0 44px;background:var(--hb-yellow);border:2px solid var(--hb-yellow);display:flex;align-items:center;justify-content:center;animation:hb-pop .5s .1s both}",
 "#hb-panel .hb-badge img{width:30px;height:30px;object-fit:contain}",
-"#hb-panel .hb-badge .hb-mono{width:30px;height:30px;border-radius:50%;background:#c81a22;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}",
-"#hb-panel .hb-ttl{font-family:'SF Pro Display','Inter',system-ui;font-weight:600;font-size:16px;letter-spacing:-.02em;line-height:1.1}",
-"#hb-panel .hb-sub{font-size:11.5px;color:rgba(251,245,236,.62);margin-top:2px;letter-spacing:.01em}",
-"#hb-panel .hb-x{margin-left:auto;background:rgba(251,245,236,.1);border:none;color:#fbf5ec;width:30px;height:30px;border-radius:50%;font-size:17px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s}",
-"#hb-panel .hb-x:hover{background:rgba(251,245,236,.2)}",
-"#hb-msgs{flex:1;overflow-y:auto;padding:16px 15px 6px;display:flex;flex-direction:column;gap:11px;scroll-behavior:smooth}",
-"#hb-msgs .hb-b{flex:0 0 auto;max-width:87%;padding:10px 13px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}",
-"#hb-msgs .hb-u{align-self:flex-end;background:#c81a22;color:#fff;border-radius:16px 16px 5px 16px;box-shadow:0 1px 2px rgba(200,26,34,.25)}",
-"#hb-msgs .hb-a{align-self:flex-start;background:#fff;color:#2a2018;border:1px solid rgba(70,45,20,.1);border-radius:16px 16px 16px 5px}",
-"#hb-msgs .hb-chips{align-self:flex-start;display:flex;flex-wrap:wrap;gap:7px;margin-top:1px;max-width:100%}",
-"#hb-msgs .hb-chip{border:1px solid rgba(70,45,20,.18);background:#fff;color:#5f4a33;border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;transition:transform .12s,border-color .15s,color .15s}",
-"#hb-msgs .hb-chip:hover{border-color:#c81a22;color:#c81a22}",
-"#hb-msgs .hb-chip:active{transform:scale(.95)}",
-"#hb-msgs .hb-dots{display:inline-flex;gap:4px;align-items:center;padding:4px 2px}",
-"#hb-msgs .hb-dots i{width:6px;height:6px;border-radius:50%;background:#c2ac90;animation:hb-bounce 1.2s infinite}",
-"#hb-msgs .hb-dots i:nth-child(2){animation-delay:.15s}#hb-msgs .hb-dots i:nth-child(3){animation-delay:.3s}",
-"@keyframes hb-bounce{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}",
-"#hb-card{align-self:stretch;flex:0 0 auto;background:#fff;border:1px solid rgba(70,45,20,.14);border-radius:16px;overflow:hidden;box-shadow:0 6px 18px rgba(20,12,4,.08)}",
-"#hb-card .hb-f{width:100%;box-sizing:border-box;border:1px solid rgba(70,45,20,.18);background:#fff;border-radius:9px;padding:9px 10px;font-size:16px;color:#2a2018;outline:none;font-family:inherit}",
-"#hb-card .hb-f:focus{border-color:#c81a22;box-shadow:0 0 0 3px rgba(200,26,34,.1)}",
-"#hb-card .hb-lbl{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#a2917a;text-transform:uppercase;margin:13px 0 6px}",
-"#hb-card .hb-cc{border:1px solid rgba(70,45,20,.2);background:#fff;color:#5f4a33;border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;transition:transform .12s,background .15s,border-color .15s,color .15s}",
-"#hb-card .hb-cc.on{background:#c81a22;border-color:#c81a22;color:#fff}",
-"#hb-card .hb-cc:active{transform:scale(.94)}",
-"#hb-card .hb-rm{border:none;background:none;color:#c0a98d;font-size:19px;cursor:pointer;line-height:1;padding:0 3px;flex:0 0 auto}",
-"#hb-card .hb-rm:hover{color:#c81a22}",
-"#hb-card .hb-mk{width:15px;text-align:center;font-weight:700;flex:0 0 15px}",
-"#hb-panel .hb-foot{padding:11px 12px 13px;border-top:1px solid rgba(70,45,20,.1);background:#fbf5ec;display:flex;gap:9px;align-items:center}",
-"#hb-panel .hb-in{flex:1;border:1px solid rgba(70,45,20,.16);background:#fff;border-radius:999px;padding:11px 15px;font-size:16px;outline:none;color:#2a2018;transition:border-color .15s,box-shadow .15s}",
-"#hb-panel .hb-in:focus{border-color:#c81a22;box-shadow:0 0 0 3px rgba(200,26,34,.12)}",
-"#hb-panel .hb-send{border:none;border-radius:50%;width:42px;height:42px;flex:0 0 42px;background:#c81a22;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s,background .15s}",
-"#hb-panel .hb-send:hover{background:#a9141b}#hb-panel .hb-send:active{transform:scale(.92)}",
-"#hb-panel .hb-tabs{display:flex;gap:0;background:#241d16;padding:0 12px}",
-"#hb-panel .hb-tabs button{flex:0 0 auto;background:none;border:none;color:rgba(251,245,236,.6);font-size:13px;font-weight:600;padding:9px 12px 10px;cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;font-family:inherit}",
-"#hb-panel .hb-tabs button.on{color:#fbf5ec;border-bottom-color:#c81a22}",
-"#hb-panel .hb-tabs .hb-n{background:#c81a22;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;padding:0 4px;border-radius:8px;display:none;align-items:center;justify-content:center}",
+"#hb-panel .hb-badge .hb-mono{width:30px;height:30px;background:var(--hb-ink);color:var(--hb-yellow);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}",
+"#hb-panel .hb-ttl{font-weight:700;font-size:17px;letter-spacing:.02em;line-height:1.05;text-transform:uppercase;display:flex;align-items:center;gap:8px;animation:hb-slide .45s .05s both}",
+"#hb-panel .hb-sub{font-size:12px;color:rgba(243,241,236,.72);margin-top:3px;letter-spacing:.02em}",
+"#hb-panel .hb-x{margin-left:auto;background:transparent;border:2px solid rgba(243,241,236,.35);color:var(--hb-paper);width:44px;height:44px;font-size:22px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;flex:0 0 44px}",
+"#hb-panel .hb-x:hover{background:var(--hb-paper);color:var(--hb-ink)}",
+"#hb-panel .hb-tabs{display:flex;gap:0;background:var(--hb-ink);padding:0 14px;border-bottom:3px solid var(--hb-ink)}",
+"#hb-panel .hb-tabs button{flex:0 0 auto;background:none;border:0;color:rgba(243,241,236,.62);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:10px 12px 11px;min-height:44px;cursor:pointer;border-bottom:4px solid transparent;display:flex;align-items:center;gap:6px}",
+"#hb-panel .hb-tabs button.on{color:var(--hb-yellow);border-bottom-color:var(--hb-yellow)}",
+"#hb-panel .hb-tabs .hb-n{background:var(--hb-red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;padding:0 4px;display:none;align-items:center;justify-content:center}",
 "#hb-panel .hb-tabs .hb-n.show{display:inline-flex}",
-"#hb-ins{flex:1;overflow-y:auto;padding:14px 15px;display:none;flex-direction:column;gap:12px}",
-"#hb-ins .hb-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#fff;border:1px solid rgba(70,45,20,.12);border-radius:13px;padding:10px 12px}",
-"#hb-ins .hb-tog{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#5f4a33;cursor:pointer;font-weight:600}",
-"#hb-ins .hb-sw{width:34px;height:20px;border-radius:999px;background:#d9cdb8;position:relative;transition:background .18s;flex:0 0 auto}",
-"#hb-ins .hb-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .18s;box-shadow:0 1px 2px rgba(0,0,0,.25)}",
-"#hb-ins .hb-tog.on .hb-sw{background:#3f9e63}#hb-ins .hb-tog.on .hb-sw::after{left:16px}",
-"#hb-ins .hb-run{margin-left:auto;border:1px solid rgba(70,45,20,.2);background:#fff;color:#6b5335;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}",
-"#hb-ins .hb-run:active{transform:scale(.95)}",
-"#hb-ins .hb-sec{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#a2917a;text-transform:uppercase;margin:2px 2px -2px}",
-"#hb-ins .hb-find{display:flex;gap:9px;background:#fff;border:1px solid rgba(70,45,20,.1);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45;color:#2a2018}",
-"#hb-ins .hb-sev{width:9px;height:9px;border-radius:50%;flex:0 0 9px;margin-top:5px}",
-"#hb-ins .hb-know{background:#fff;border:1px solid rgba(70,45,20,.1);border-radius:12px;padding:11px 13px}",
-"#hb-ins .hb-know .q{font-weight:600;font-size:13px;color:#241d16;line-height:1.4}",
-"#hb-ins .hb-know .a{font-size:12.5px;color:#4a3d2e;line-height:1.5;margin-top:5px}",
-"#hb-ins .hb-empty{color:#a2917a;font-size:12.5px;text-align:center;padding:14px}",
-"#hb-panel .hb-live{width:7px;height:7px;border-radius:50%;background:#3f9e63;margin-left:2px;box-shadow:0 0 0 0 rgba(63,158,99,.6);animation:hb-live 2.4s infinite}",
-"@keyframes hb-live{0%{box-shadow:0 0 0 0 rgba(63,158,99,.55)}70%{box-shadow:0 0 0 6px rgba(63,158,99,0)}100%{box-shadow:0 0 0 0 rgba(63,158,99,0)}}"
+"#hb-msgs{flex:1;overflow-y:auto;padding:16px 14px 6px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;background-image:linear-gradient(rgba(20,19,18,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(20,19,18,.06) 1px,transparent 1px);background-size:22px 22px}",
+"#hb-msgs .hb-b{flex:0 0 auto;max-width:88%;padding:10px 13px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-break:break-word;animation:hb-rise .3s cubic-bezier(.2,.8,.2,1) both}",
+"#hb-msgs .hb-u{align-self:flex-end;background:var(--hb-ink);color:var(--hb-paper);border:2px solid var(--hb-ink);box-shadow:4px 4px 0 var(--hb-yellow)}",
+"#hb-msgs .hb-a{align-self:flex-start;background:#fff;color:var(--hb-ink);border:2px solid var(--hb-ink)}",
+"#hb-msgs .hb-a.hb-err{border-color:var(--hb-red);box-shadow:4px 4px 0 var(--hb-red)}",
+"#hb-msgs .hb-chips{align-self:flex-start;display:flex;flex-wrap:wrap;gap:7px;margin-top:1px;max-width:100%}",
+"#hb-msgs .hb-chip{border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:9px 12px;min-height:40px;font-size:13px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:transform .12s,background .15s;animation:hb-rise .3s both}",
+"#hb-msgs .hb-chip:nth-child(2){animation-delay:.05s}#hb-msgs .hb-chip:nth-child(3){animation-delay:.1s}#hb-msgs .hb-chip:nth-child(4){animation-delay:.15s}",
+"#hb-msgs .hb-chip:hover{background:var(--hb-yellow)}",
+"#hb-msgs .hb-chip:active{transform:translate(1px,1px)}",
+"#hb-msgs .hb-dots{display:inline-flex;gap:5px;align-items:center;padding:4px 2px}",
+"#hb-msgs .hb-dots i{width:8px;height:8px;background:var(--hb-ink);animation:hb-bounce 1.2s infinite}",
+"#hb-msgs .hb-dots i:nth-child(1){border-radius:50%!important;background:var(--hb-blue)}#hb-msgs .hb-dots i:nth-child(2){animation-delay:.15s;background:var(--hb-red)}#hb-msgs .hb-dots i:nth-child(3){animation-delay:.3s;width:0;height:0;background:none;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--hb-yellow)}",
+"@keyframes hb-bounce{0%,60%,100%{opacity:.4;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}",
+"#hb-card{align-self:stretch;flex:0 0 auto;background:#fff;border:3px solid var(--hb-ink);box-shadow:6px 6px 0 var(--hb-ink);overflow:hidden;animation:hb-rise .3s both;margin-right:6px}",
+"#hb-card .hb-ch{padding:10px 14px;background:var(--hb-ink);color:var(--hb-paper);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;border-bottom:4px solid var(--hb-yellow)}",
+"#hb-card .hb-cb{padding:12px 14px;font-size:15px;line-height:1.55;color:var(--hb-ink)}",
+"#hb-card .hb-meta{color:var(--hb-muted);font-size:12.5px;font-weight:500}",
+"#hb-card .hb-f{width:100%;box-sizing:border-box;border:2px solid var(--hb-ink);background:#fff;padding:9px 10px;font-size:16px;color:var(--hb-ink);outline:none;min-height:44px}",
+"#hb-card .hb-f:focus{box-shadow:3px 3px 0 var(--hb-yellow)}",
+"#hb-card select.hb-f{appearance:auto}",
+"#hb-card .hb-lbl{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--hb-muted);text-transform:uppercase;margin:13px 0 6px}",
+"#hb-card .hb-cc{border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:8px 12px;min-height:40px;font-size:13px;font-weight:700;cursor:pointer;transition:transform .12s,background .15s}",
+"#hb-card .hb-cc.on{background:var(--hb-ink);color:var(--hb-yellow)}",
+"#hb-card .hb-cc:hover:not(.on){background:var(--hb-yellow)}",
+"#hb-card .hb-cc:active{transform:translate(1px,1px)}",
+"#hb-card .hb-btn{border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:11px 16px;min-height:44px;font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:transform .12s,background .15s}",
+"#hb-card .hb-btn.hb-primary{flex:1;background:var(--hb-yellow);box-shadow:3px 3px 0 var(--hb-ink)}",
+"#hb-card .hb-btn.hb-primary:hover{background:var(--hb-ink);color:var(--hb-yellow)}",
+"#hb-card .hb-btn:disabled{opacity:.5;cursor:default}",
+"#hb-card .hb-dash{margin-top:7px;border:2px dashed var(--hb-line);background:#fff;color:var(--hb-ink);padding:9px 0;width:100%;min-height:44px;font-size:13px;font-weight:700;cursor:pointer}",
+"#hb-card .hb-dash:hover{border-color:var(--hb-ink);background:var(--hb-yellow)}",
+"#hb-card .hb-rm{border:none;background:none;color:var(--hb-muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;flex:0 0 auto;min-width:32px;min-height:44px}",
+"#hb-card .hb-rm:hover{color:var(--hb-red-t)}",
+"#hb-card .hb-mk{width:15px;text-align:center;font-weight:700;flex:0 0 15px}",
+"#hb-card .hb-note{font-size:12.5px;color:var(--hb-muted);margin-top:11px;line-height:1.45}",
+"#hb-card .hb-cur{color:var(--hb-muted);font-size:15px;font-weight:700}",
+"#hb-panel .hb-foot{padding:10px 12px 12px;border-top:3px solid var(--hb-ink);background:var(--hb-paper);display:flex;gap:8px;align-items:center}",
+"#hb-panel .hb-in{flex:1;min-width:0;border:2px solid var(--hb-ink);background:#fff;padding:10px 13px;min-height:44px;font-size:16px;outline:none;color:var(--hb-ink);transition:box-shadow .15s}",
+"#hb-panel .hb-in:focus{box-shadow:3px 3px 0 var(--hb-yellow)}",
+"#hb-panel .hb-send{border:2px solid var(--hb-ink);width:44px;height:44px;flex:0 0 44px;background:var(--hb-yellow);color:var(--hb-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s,background .15s,color .15s}",
+"#hb-panel .hb-send:hover{background:var(--hb-ink);color:var(--hb-yellow)}#hb-panel .hb-send:active{transform:translate(1px,1px)}",
+"#hb-panel .hb-send:disabled{opacity:.5;cursor:default}",
+"#hb-ins{flex:1;overflow-y:auto;padding:14px;display:none;flex-direction:column;gap:12px}",
+"#hb-ins .hb-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#fff;border:2px solid var(--hb-ink);padding:10px 12px}",
+"#hb-ins .hb-tog{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--hb-ink);cursor:pointer;font-weight:700;min-height:32px}",
+"#hb-ins .hb-sw{width:38px;height:22px;background:#fff;border:2px solid var(--hb-ink);position:relative;transition:background .18s;flex:0 0 auto}",
+"#hb-ins .hb-sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;background:var(--hb-ink);transition:left .18s}",
+"#hb-ins .hb-tog.on .hb-sw{background:var(--hb-yellow)}#hb-ins .hb-tog.on .hb-sw::after{left:18px}",
+"#hb-ins .hb-run{margin-left:auto;border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:8px 12px;min-height:40px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;white-space:nowrap}",
+"#hb-ins .hb-run:hover{background:var(--hb-yellow)}",
+"#hb-ins .hb-sec{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--hb-ink);text-transform:uppercase;margin:6px 0 -4px;padding-bottom:6px;border-bottom:3px solid var(--hb-ink)}",
+"#hb-ins .hb-find{display:flex;gap:10px;background:#fff;border:2px solid var(--hb-ink);padding:10px 12px;font-size:14px;line-height:1.45;color:var(--hb-ink)}",
+"#hb-ins .hb-sev{width:10px;height:10px;flex:0 0 10px;margin-top:6px}",
+"#hb-ins .hb-know{background:#fff;border:2px solid var(--hb-ink);padding:11px 13px}",
+"#hb-ins .hb-know .q{font-weight:700;font-size:14px;color:var(--hb-ink);line-height:1.4}",
+"#hb-ins .hb-know .a{font-size:13.5px;color:var(--hb-muted);line-height:1.5;margin-top:5px}",
+"#hb-ins .hb-empty{color:var(--hb-muted);font-size:13px;text-align:left;padding:10px 2px}",
+"#hb-panel .hb-live{width:9px;height:9px;border-radius:50%!important;background:var(--hb-blue);margin-left:2px;box-shadow:0 0 0 0 rgba(30,79,176,.6);animation:hb-live 2.4s infinite}",
+"@keyframes hb-live{0%{box-shadow:0 0 0 0 rgba(30,79,176,.55)}70%{box-shadow:0 0 0 6px rgba(30,79,176,0)}100%{box-shadow:0 0 0 0 rgba(30,79,176,0)}}",
+"@media (max-width:640px){#hb-panel{right:0;left:0;bottom:0;width:100%;height:min(82vh,680px);border-left:0;border-right:0;border-bottom:0;box-shadow:none;padding-bottom:env(safe-area-inset-bottom,0px)}#hb-panel .hb-foot{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}}",
+"@media (prefers-reduced-motion:reduce){#hb-fab,#hb-panel,#hb-fab *,#hb-panel *{animation:none!important;transition:none!important}}"
     ].join("");
     document.head.appendChild(st);
   }
@@ -1188,20 +1314,20 @@ window.OrderCore = {
       var wrap=document.createElement("div"); wrap.id="hb-card";
       var cats=rccCategories(), names=ingredientNames(), listId="hb-il-"+Math.random().toString(36).slice(2,7), UNITS=["g","kg","ml","L","each"];
       var chosen={cat:seed.category||""};
-      var H="<div style='padding:12px 14px;background:#241d16;color:#fff;font-family:\"SF Pro Display\",Inter,system-ui;font-weight:600;font-size:14.5px;letter-spacing:-.01em'>Build a recipe</div>";
+      var H="<div class='hb-ch'>Build a recipe</div>";
       var dl="<datalist id='"+listId+"'>"+names.map(function(n){return "<option value=\""+esc(n)+"\"></option>";}).join("")+"</datalist>";
-      var B="<div style='padding:4px 14px 14px'>"+dl;
+      var B="<div style='padding:4px 14px 14px;background:#fff'>"+dl;
       B+="<div class='hb-lbl'>Name</div><input class='hb-f' data-name placeholder='e.g. Iced Caramel Latte' value=\""+esc(seed.name||"")+"\"/>";
       B+="<div class='hb-lbl'>Category</div><div data-cats style='display:flex;flex-wrap:wrap;gap:6px'>"
         +cats.map(function(c){ return "<button type='button' class='hb-cc"+(c===chosen.cat?" on":"")+"' data-cat=\""+esc(c)+"\">"+esc(c)+"</button>"; }).join("")
         +"<button type='button' class='hb-cc' data-catcustom>+ Custom</button></div>"
         +"<input class='hb-f' data-catinput placeholder='Custom category' style='display:none;margin-top:6px'/>";
       B+="<div class='hb-lbl'>Ingredients</div><div data-rows style='display:flex;flex-direction:column;gap:6px'></div>"
-        +"<button type='button' data-addrow style='margin-top:7px;border:1px dashed rgba(70,45,20,.3);background:#fff;color:#6b5335;border-radius:9px;padding:8px 0;width:100%;font-size:12.5px;font-weight:500;cursor:pointer'>+ Add ingredient</button>";
+        +"<button type='button' data-addrow class='hb-dash'>+ Add ingredient</button>";
       B+="<div class='hb-lbl'>Method</div><textarea class='hb-f' data-proc rows='4' placeholder='1. …&#10;2. …' style='resize:vertical;line-height:1.5'>"+esc(seed.procedure||"")+"</textarea>";
-      B+="<div class='hb-lbl'>Sell price (optional)</div><div style='display:flex;align-items:center;gap:7px'><span style='color:#a2917a;font-size:15px'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.sellPrice?esc(seed.sellPrice):"")+"\" style='width:120px'/></div>";
-      B+="<div data-note style='font-size:11.5px;color:#8a7a63;margin-top:11px;line-height:1.45'></div>";
-      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' style='flex:1;border:none;border-radius:999px;padding:11px 0;background:#c81a22;color:#fff;font-weight:600;font-size:13.5px;cursor:pointer'>Save to Recipes</button><button type='button' data-act='cancel' style='border:1px solid rgba(70,45,20,.22);border-radius:999px;padding:11px 16px;background:#fff;color:#6b5335;font-size:13.5px;cursor:pointer'>Cancel</button></div>";
+      B+="<div class='hb-lbl'>Sell price (optional)</div><div style='display:flex;align-items:center;gap:7px'><span class='hb-cur'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.sellPrice?esc(seed.sellPrice):"")+"\" style='width:120px'/></div>";
+      B+="<div data-note class='hb-note'></div>";
+      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' class='hb-btn hb-primary'>Save to Recipes</button><button type='button' data-act='cancel' class='hb-btn'>Cancel</button></div>";
       B+="</div>";
       wrap.innerHTML=H+B; msgs.appendChild(wrap); scroll();
 
@@ -1209,14 +1335,14 @@ window.OrderCore = {
       function refreshNote(){ var miss=0; [].forEach.call(rowsEl.querySelectorAll("[data-nm]"),function(el){ if(!el.value.trim()) return; var mt=null; try{ mt=window.HideoutRCC.matchIngredient(el.value); }catch(e){} if(!mt) miss++; }); noteEl.textContent = miss? (miss+" new ingredient"+(miss>1?"s":"")+" will be created (price $0 \u2014 set later in Ingredients).") : ""; }
       function addRow(nm,qty,un){
         var row=document.createElement("div"); row.style.cssText="display:flex;gap:6px;align-items:center";
-        row.innerHTML="<span class='hb-mk' data-mk style='color:#c0a98d'>+</span>"
+        row.innerHTML="<span class='hb-mk' data-mk style='color:rgba(20,19,18,.45)'>+</span>"
           +"<input list='"+listId+"' data-nm class='hb-f' placeholder='Ingredient' style='flex:1;min-width:0' value=\""+esc(nm||"")+"\"/>"
           +"<input data-qty class='hb-f' type='number' inputmode='decimal' placeholder='Qty' style='width:60px;text-align:right' value=\""+(qty!=null&&qty!==""?esc(qty):"")+"\"/>"
           +"<select data-un class='hb-f' style='width:66px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(un||"g")?" selected":"")+">"+u+"</option>";}).join("")+"</select>"
           +"<button type='button' class='hb-rm' data-rm aria-label='Remove'>\u00d7</button>";
         rowsEl.appendChild(row);
         var nmEl=row.querySelector("[data-nm]"), mk=row.querySelector("[data-mk]");
-        function upd(){ var mt=null; try{ mt=nmEl.value.trim()?window.HideoutRCC.matchIngredient(nmEl.value):null; }catch(e){} if(mt){ mk.textContent="\u2713"; mk.style.color="#3f9e63"; } else { mk.textContent="+"; mk.style.color="#c0a98d"; } refreshNote(); }
+        function upd(){ var mt=null; try{ mt=nmEl.value.trim()?window.HideoutRCC.matchIngredient(nmEl.value):null; }catch(e){} if(mt){ mk.textContent="\u2713"; mk.style.color="#1e4fb0"; } else { mk.textContent="+"; mk.style.color="rgba(20,19,18,.45)"; } refreshNote(); }
         nmEl.addEventListener("input",upd); upd();
         row.querySelector("[data-rm]").onclick=function(){ row.remove(); if(!rowsEl.children.length) addRow(); refreshNote(); };
       }
@@ -1256,18 +1382,18 @@ window.OrderCore = {
       var wrap=document.createElement("div"); wrap.id="hb-card";
       var cats=rccCategories(), UNITS=["g","kg","ml","L","each"];
       var chosen={cat:seed.category||""};
-      var H="<div style='padding:12px 14px;background:#241d16;color:#fff;font-family:\"SF Pro Display\",Inter,system-ui;font-weight:600;font-size:14.5px;letter-spacing:-.01em'>Add an ingredient</div>";
-      var B="<div style='padding:4px 14px 14px'>";
+      var H="<div class='hb-ch'>Add an ingredient</div>";
+      var B="<div style='padding:4px 14px 14px;background:#fff'>";
       B+="<div class='hb-lbl'>Name</div><input class='hb-f' data-name placeholder='e.g. Full Cream Milk 2L' value=\""+esc(seed.name||"")+"\"/>";
       B+="<div class='hb-lbl'>Category</div><div data-cats style='display:flex;flex-wrap:wrap;gap:6px'>"
         +cats.map(function(c){ return "<button type='button' class='hb-cc"+(c===chosen.cat?" on":"")+"' data-cat=\""+esc(c)+"\">"+esc(c)+"</button>"; }).join("")
         +"<button type='button' class='hb-cc' data-catcustom>+ Custom</button></div>"
         +"<input class='hb-f' data-catinput placeholder='Custom category' style='display:none;margin-top:6px'/>";
-      B+="<div class='hb-lbl'>Purchase price</div><div style='display:flex;align-items:center;gap:7px'><span style='color:#a2917a;font-size:15px'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.purchasePrice!=null&&seed.purchasePrice!==""?esc(seed.purchasePrice):"")+"\" style='width:120px'/></div>";
+      B+="<div class='hb-lbl'>Purchase price</div><div style='display:flex;align-items:center;gap:7px'><span class='hb-cur'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.purchasePrice!=null&&seed.purchasePrice!==""?esc(seed.purchasePrice):"")+"\" style='width:120px'/></div>";
       B+="<div class='hb-lbl'>Purchase pack (qty + unit)</div><div style='display:flex;gap:6px;align-items:center'><input class='hb-f' data-pqty type='number' inputmode='decimal' placeholder='Qty' value=\""+(seed.purchaseQty!=null&&seed.purchaseQty!==""?esc(seed.purchaseQty):"")+"\" style='width:80px;text-align:right'/><select data-punit class='hb-f' style='width:80px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(seed.purchaseUnit||"each")?" selected":"")+">"+u+"</option>";}).join("")+"</select></div>";
       B+="<div class='hb-lbl'>Use unit (in recipes)</div><select data-uunit class='hb-f' style='width:120px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(seed.useUnit||"g")?" selected":"")+">"+u+"</option>";}).join("")+"</select>";
-      B+="<div data-note style='font-size:11.5px;color:#8a7a63;margin-top:11px;line-height:1.45'>Allergens are auto-detected from the name — fine-tune later in the Ingredients tab.</div>";
-      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' style='flex:1;border:none;border-radius:999px;padding:11px 0;background:#c81a22;color:#fff;font-weight:600;font-size:13.5px;cursor:pointer'>Save to Ingredients</button><button type='button' data-act='cancel' style='border:1px solid rgba(70,45,20,.22);border-radius:999px;padding:11px 16px;background:#fff;color:#6b5335;font-size:13.5px;cursor:pointer'>Cancel</button></div>";
+      B+="<div data-note class='hb-note'>Allergens are auto-detected from the name — fine-tune later in the Ingredients tab.</div>";
+      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' class='hb-btn hb-primary'>Save to Ingredients</button><button type='button' data-act='cancel' class='hb-btn'>Cancel</button></div>";
       B+="</div>";
       wrap.innerHTML=H+B; msgs.appendChild(wrap); scroll();
       var noteEl=wrap.querySelector("[data-note]");
@@ -1290,7 +1416,7 @@ window.OrderCore = {
     // ---- two-agent engine: Auditor (finds data errors) + Learner (self-Q&A → memory) ----
     var AG_KEY="hideout_agents";
     function agLoad(){ try{ return JSON.parse(localStorage.getItem(AG_KEY)||"{}"); }catch(e){ return {}; } }
-    var agents=agLoad(); if(agents.on===undefined) agents.on=(opts.agents!==false); agents.audit=agents.audit||[]; agents.knowledge=agents.knowledge||[]; agents.viewedTs=agents.viewedTs||0;
+    var agents=agLoad(); if(agents.on===undefined) agents.on=(opts.agents===true);   // GPT review 2026-09-09: background agents are opt-in agents.audit=agents.audit||[]; agents.knowledge=agents.knowledge||[]; agents.viewedTs=agents.viewedTs||0;
     function agSave(){ try{ localStorage.setItem(AG_KEY, JSON.stringify(agents)); }catch(e){} }
     function aiAvail(){ if(window.claude&&window.claude.complete) return true; var b=(typeof opts.backendUrl==="function")?opts.backendUrl():opts.backendUrl; return !!b; }
     function unseenCount(){ return agents.audit.filter(function(f){ return f.ts>agents.viewedTs; }).length + agents.knowledge.filter(function(k){ return k.ts>agents.viewedTs; }).length; }
@@ -1298,7 +1424,7 @@ window.OrderCore = {
 
     async function runAuditor(){
       var prompt="TASK: Act as a data-quality auditor for The Hideout apps. Using ONLY the data above, list up to 5 of the most important concrete problems you can see — e.g. a menu dish missing a sell price, an ingredient missing purchase price or quantity, a likely-missing allergen, a recipe item whose unit doesn't match its ingredient, a menu dish whose margin is below its target, an ingredient a recipe references but that is archived/missing, or an obvious duplicate. Output ONE per line EXACTLY as: sev|item name|the issue  (sev = high, med or low). If you genuinely find nothing worth flagging, reply with just: NONE.";
-      var r=await callAI(opts, buildContext(opts), [], prompt);
+      var r=(await callAI(opts, buildContext(opts), [], prompt)).answer;
       if(/^\s*none\s*$/i.test(r||"")) { agents.lastAudit=Date.now(); agSave(); return 0; }
       var lines=(r||"").split("\n").map(function(x){return x.trim();}).filter(function(x){return x&&x.indexOf("|")>-1;});
       var parsed=lines.map(function(l){ var p=l.replace(/^[-*\d.\s]+/,"").split("|"); var sev=(p[0]||"med").toLowerCase().replace(/[^a-z]/g,""); if(["high","med","low"].indexOf(sev)<0) sev="med"; return { sev:sev, item:(p[1]||"").trim(), issue:(p.slice(2).join("|")||p[1]||l).trim(), ts:Date.now() }; }).filter(function(f){ return f.issue; });
@@ -1311,7 +1437,7 @@ window.OrderCore = {
     async function runLearner(){
       var recent=agents.knowledge.slice(0,8).map(function(k){ return k.q; }).join(" | ");
       var prompt="TASK: You are training yourself on The Hideout's data so you can answer staff instantly later. Ask ONE genuinely useful, specific question a chef or manager might ask about THIS data (menu, costs, margins, prep, allergens, branches or ordering)"+(recent?", NOT similar to any of these already covered: "+recent:"")+", then answer it accurately using ONLY the data above. Reply EXACTLY in this format and nothing else:\nQ: <the question>\nA: <a 2-4 sentence answer>";
-      var r=await callAI(opts, buildContext(opts), [], prompt);
+      var r=(await callAI(opts, buildContext(opts), [], prompt)).answer;
       var m=(r||"").match(/Q:\s*([\s\S]*?)\n+A:\s*([\s\S]*)/i); if(!m) return 0;
       var entry={ q:m[1].trim(), a:m[2].trim(), ts:Date.now() }; if(!entry.q||!entry.a) return 0;
       agents.knowledge=[entry].concat(agents.knowledge).slice(0,60); agents.lastLearn=Date.now(); agSave();
@@ -1336,12 +1462,12 @@ window.OrderCore = {
     }
     function timeAgo(ts){ if(!ts) return "never"; var s=Math.round((Date.now()-ts)/1000); if(s<60) return "just now"; var m=Math.round(s/60); if(m<60) return m+"m ago"; var h=Math.round(m/60); return h+"h ago"; }
     function renderInsights(){
-      var sevCol={high:"#c81a22",med:"#d98a2b",low:"#b6a488"};
+      var sevCol={high:"#ec3013",med:"#f2c100",low:"#1e4fb0"};
       var h="";
       h+="<div class='hb-bar'><label class='hb-tog"+(agents.on?" on":"")+"' data-tog><span class='hb-sw'></span>"+(agents.on?"Auto-check weekly: on":"Auto-check weekly: off")+"</label><button class='hb-run' data-run>Run now</button></div>";
       var mem=[]; try{ var ms=(hasRcc()?rccState():(RCC_CACHE||{})); mem=(ms.botMemory||[]).slice(-20).reverse(); }catch(e){}
       h+="<div class='hb-sec'>Memory \u2014 taught facts"+(mem.length?" ("+mem.length+")":"")+"</div>";
-      if(mem.length){ mem.forEach(function(n){ var txt=typeof n==="string"?n:((n&&n.text)||""); h+="<div class='hb-find'><span class='hb-sev' style='background:#3f9e63'></span><div>"+esc(txt)+"</div></div>"; }); }
+      if(mem.length){ mem.forEach(function(n){ var txt=typeof n==="string"?n:((n&&n.text)||""); h+="<div class='hb-find'><span class='hb-sev' style='background:#1e4fb0;border-radius:50%!important'></span><div>"+esc(txt)+"</div></div>"; }); }
       else h+="<div class='hb-empty'>Tell me a fact in chat (e.g. \u201cTony makes all bakery items\u201d) and I'll remember it here.</div>";
       h+="<div class='hb-sec'>Data checks"+(agents.audit.length?" ("+agents.audit.length+")":"")+" \u00b7 "+timeAgo(agents.lastAudit)+"</div>";
       if(agents.audit.length){ agents.audit.slice(0,20).forEach(function(f){ h+="<div class='hb-find'><span class='hb-sev' style='background:"+(sevCol[f.sev]||sevCol.med)+"'></span><div><b>"+esc(f.item||"Issue")+"</b> \u2014 "+esc(f.issue)+"</div></div>"; }); }
@@ -1367,8 +1493,8 @@ window.OrderCore = {
     function calCard(ev){
       var wrap=document.createElement("div"); wrap.id="hb-card";
       var line2=(ev.allDay?"All day":((ev.start||"")+(ev.end?("\u2013"+ev.end):"")));
-      wrap.innerHTML="<div style='padding:12px 14px;background:#241d16;color:#fff;font-weight:600;font-size:14.5px'>Add to calendar?</div>"
-        +"<div style='padding:12px 14px;font-size:13.5px;line-height:1.6;color:#2a2018'><b>"+esc(ev.title)+"</b><br/>"+esc(ev.date)+" \u00b7 "+esc(line2)+(ev.location?("<br/>@ "+esc(ev.location)):"")+(ev.notes?("<br/>"+esc(ev.notes)):"")+"<br/><span style='color:#a2917a;font-size:12px'>Branch: "+esc(ev.store||"adelaide")+"</span></div>"
+      wrap.innerHTML="<div class='hb-ch'>Add to calendar?</div>"
+        +"<div class='hb-cb'><b>"+esc(ev.title)+"</b><br/>"+esc(ev.date)+" \u00b7 "+esc(line2)+(ev.location?("<br/>@ "+esc(ev.location)):"")+(ev.notes?("<br/>"+esc(ev.notes)):"")+"<br/><span class='hb-meta'>Branch: "+esc(ev.store||"adelaide")+"</span></div>"
         +"<div style='display:flex;gap:8px;padding:0 14px 14px'><button class='hb-cc on' data-ok>\u2713 Add event</button><button class='hb-cc' data-no>Cancel</button></div>";
       msgs.appendChild(wrap); scroll();
       wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); bubble("assistant","Cancelled \u2014 nothing was added."); };
@@ -1383,39 +1509,80 @@ window.OrderCore = {
         }catch(e){ b.disabled=false; b.textContent="\u2713 Add event"; bubble("assistant","Could not reach the calendar backend: "+(e&&e.message||e)); }
       };
     }
+    function noticeCard(n){
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      var meta=[(n.from||"from today"), (n.until?("until "+n.until):"no end date"), (n.branch||"all stores")];
+      if(n.tone==="urgent") meta.push("URGENT"); if(n.pin) meta.push("pinned");
+      var body=esc(String(n.body||"")).replace(/\n/g,"<br/>");
+      wrap.innerHTML="<div class='hb-ch'>Post to the team notice board?</div>"
+        +"<div class='hb-cb'><b>"+esc(n.title||"Notice")+"</b>"+(body?("<br/>"+body):"")
+        +"<br/><span class='hb-meta'>"+esc(meta.join(" \u00b7 "))+"</span></div>"
+        +"<div style='display:flex;gap:8px;padding:0 14px 14px'><button class='hb-cc on' data-ok>\u2713 Post it</button><button class='hb-cc' data-no>Cancel</button></div>";
+      msgs.appendChild(wrap); scroll();
+      wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); bubble("assistant","Cancelled \u2014 nothing was posted."); };
+      wrap.querySelector("[data-ok]").onclick=function(){
+        var b=wrap.querySelector("[data-ok]"); b.disabled=true; b.textContent="Posting\u2026";
+        try{
+          window.HideoutRCC.addNotice(n); wrap.remove();
+          bubble("assistant","\u2713 Posted: "+(n.title||"Notice")+"\nIt is on the Today page now. Edit or take it down in Settings \u2192 Daily content \u2192 Staff notices.");
+          logQA(opts.source,"[notice post]","posted: "+(n.title||""));
+        }catch(e){ b.disabled=false; b.textContent="\u2713 Post it"; bubble("assistant","Could not post it: "+(e&&e.message||e)); }
+      };
+    }
+    function deliveryCard(a){
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      wrap.innerHTML="<div class='hb-ch'>Delivery change (one day)</div>"
+        +"<div class='hb-cb'><b>"+esc(a.person||"?")+"</b> runs the delivery on <b>"+esc(a.date||"?")+"</b>.<br/><span class='hb-meta'>Nothing is saved yet. Apply it in Settings \u2192 Delivery (one-off exceptions), or tap Apply if this app can save it.</span></div>"
+        +"<div style='display:flex;gap:8px;padding:0 14px 14px'>"+(opts.onDeliveryOverride?"<button class='hb-cc on' data-ok>\u2713 Apply</button>":"")+"<button class='hb-cc' data-no>Close</button></div>";
+      msgs.appendChild(wrap); scroll();
+      wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); };
+      var ok=wrap.querySelector("[data-ok]"); if(ok) ok.onclick=async function(){ ok.disabled=true; ok.textContent="Applying\u2026"; try{ await opts.onDeliveryOverride(a.date, a.person); wrap.remove(); bubble("assistant","\u2713 "+a.person+" is on delivery for "+a.date+"."); logQA(opts.source,"[delivery override]",a.date+" "+a.person); }catch(e){ ok.disabled=false; ok.textContent="\u2713 Apply"; bubble("assistant","Could not save it: "+(e&&e.message||e)); } };
+    }
+    function retryChip(q){ var w=document.createElement("div"); w.className="hb-chips"; var c=document.createElement("button"); c.className="hb-chip"; c.textContent="\u21BB Retry"; c.onclick=function(){ w.remove(); input.value=q; ask(); }; w.appendChild(c); msgs.appendChild(w); scroll(); }
     async function ask(){
       var q=input.value.trim(); if(!q||busy) return; input.value=""; var ch=msgs.querySelector(".hb-chips"); if(ch) ch.remove();
-      bubble("user",q); hist.push({role:"user",text:q}); busy=true;
-      var intent=canSaveRecipe() && wantsRecipe(q);
-      var ingIntent=canSaveRecipe() && !intent && wantsIngredient(q);
-      // Apps without recipe management (e.g. Ordering) can't save recipes/ingredients — redirect instead of dangling a builder it can't fulfil.
-      if(!canSaveRecipe() && (wantsRecipe(q)||wantsIngredient(q))){ var rb=bubble("bot","Recipe & ingredient building lives in the Recipe Cost app — open hideout-recipe-cost.web.app to create and save them. Here I can still answer questions about recipes, costs, prep and orders."); hist.push({role:"assistant",text:rb.textContent}); logQA(opts.source,q,"[redirect to RCC for build]"); busy=false; return; }
-      var t=typing();
+      var turn={role:"user",text:q}; bubble("user",q); hist.push(turn); busy=true; send.disabled=true; var t=null; var t0=Date.now();
       try{
+        var intent=canSaveRecipe() && wantsRecipe(q);
+        var ingIntent=canSaveRecipe() && !intent && wantsIngredient(q);
+        // Apps without recipe management (e.g. Ordering) can't save recipes/ingredients - redirect instead of dangling a builder it can't fulfil.
+        if(!canSaveRecipe() && (wantsRecipe(q)||wantsIngredient(q))){ var rb=bubble("bot","Recipe & ingredient building lives in the Recipe Cost app \u2014 open hideout-recipe-cost.web.app to create and save them. Here I can still answer questions about recipes, costs, prep and orders."); hist.push({role:"assistant",text:rb.textContent}); logQA(opts.source,q,"[redirect to RCC for build]"); return; }
+        t=typing();
         await ensureRcc();
-        var r=await callAI(opts, buildContext(opts, q), hist.slice(0,-1), q);
-        hist.push({role:"assistant",text:r||""});
+        var out=await callAI(opts, null, hist.slice(0,-1), q);
+        var r=out.answer||"";
+        hist.push({role:"assistant",text:r});
         var remembered=0;
         if(canRemember()){ var rem=extractRemember(r); if(rem){ rem.facts.forEach(function(f){ try{ window.HideoutRCC.remember(f); remembered++; }catch(e){} }); r=rem.rest||r; } }
         var parsed=canSaveRecipe()?extractRecipe(r):null;
         var ingParsed=canSaveRecipe()?extractIngredient(r):null;
         var calp=extractCalEvent(r);
+        var notp=canPostNotice()?extractNotice(r):null;
         t.className="hb-b hb-a";
-        if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
+        if(out.action&&out.action.type==="delivery_override"){ t.textContent=r||"Here's the delivery change \u2014 confirm to apply:"; deliveryCard(out.action); logQA(opts.source, q, "[delivery draft] "+(out.action.date||"")+" "+(out.action.person||"")); }
+        else if(notp){ t.textContent=notp.intro||"Here's the notice \u2014 confirm to put it on the board:"; noticeCard(notp.notice); logQA(opts.source, q, "[notice draft] "+(notp.notice.title||"")); }
+        else if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
         else if(ingParsed){ t.textContent=ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"; ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
         else if(parsed){ t.textContent=parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"; recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
         else if(ingIntent){ t.textContent="Let's add it \u2014 set the price and unit, then Save:"; ingredientBuilder(null); logQA(opts.source, q, "[ingredient builder opened]"); }
         else if(intent || (canSaveRecipe() && looksLikeRecipeAsk(r))){ t.textContent="Let's build it \u2014 pick a category, set the quantities, then Save:"; recipeBuilder(null); logQA(opts.source, q, "[recipe builder opened]"); }
         else { t.textContent=(r||"(no response)")+(remembered?"\n\n\u2713 Saved to memory \u2014 I'll remember that.":""); logQA(opts.source, q, r||""); }
         if(remembered && curView==="insights") renderInsights();
+        try{ console.debug("[HideoutBot] answered in "+(Date.now()-t0)+" ms"); }catch(e){}
       }
-      catch(e){ t.className="hb-b hb-a"; t.textContent="Error: "+(e&&e.message||e); }
-      busy=false;
+      catch(e){
+        turn.failed=true;                                        // an unanswered question must not linger in the API history
+        try{ console.error("[HideoutBot]", e); }catch(x){}
+        var msg=friendlyError(e);
+        if(t){ t.className="hb-b hb-a hb-err"; t.textContent=msg; } else bubble("assistant",msg);
+        retryChip(q);
+      }
+      finally{ busy=false; send.disabled=false; }
     }
     send.onclick=ask; input.addEventListener("keydown",function(e){ if(e.key==="Enter") ask(); });
   }
 
-  window.HideoutBot={ mount:mount, buildContext:buildContext, getLog:function(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY)||"[]"); }catch(e){ return []; } } };
+  window.HideoutBot={ version:BOT_VERSION, mount:mount, buildContext:buildContext, getLog:function(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY)||"[]"); }catch(e){ return []; } } };
 })();
 </script>
 <script type="text/babel" data-presets="react">

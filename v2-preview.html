@@ -3282,6 +3282,7 @@ function App(){
        after that, download everything both departments need while the venue is being chosen. */
     const probe=C.probeFsDirect().catch(()=>{});
     Promise.race([probe, new Promise(r=>setTimeout(r,900))]).then(()=>{ warmCaches(); if(department) ensureCore(department); });
+    await Promise.race([probe, new Promise(r=>setTimeout(r,900))]);   // measured 2026-09-10: list at 4.9 s via Apps Script vs ~2.5 s when the read waits for the Firestore probe
     try{ const raw=await C.kvGet("locations"); const locs=raw?JSON.parse(raw):C.DEFAULT_LOCATIONS; setLocations(locs); setSync({ok:true,err:""}); }
     catch(e){ if(!stale) setLocations(C.DEFAULT_LOCATIONS); setSync({ok:false,err:e.message}); }
   })(); },[]);

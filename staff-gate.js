@@ -68,7 +68,8 @@
     if(authBusy===email) return;       /* dedupe concurrent resolutions for same user */
     authBusy=email;
     /* Definitive allowlist membership check (doc must EXIST). */
-    db.collection("allowlist").doc(email).get().then(function(snap){
+    /* 2026-09-09: never let this read hang the gate (phone: "로그인 후 무한로딩") — 8 s then the soft-fail path below. */
+    Promise.race([ db.collection("allowlist").doc(email).get(), new Promise(function(_,rej){ setTimeout(function(){ rej({code:"gate/allowlist-timeout"}); },8000); }) ]).then(function(snap){
       authBusy="";
       if(snap&&snap.exists){
         var d=snap.data()||{};

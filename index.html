@@ -286,18 +286,19 @@
 
 </style>
 <style>
-  /* ---- Hideout PACKAGING design language (bean red · paper · Archivo · sharp) ---- */
-  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap');
+  /* ---- Hideout v2 (2026-09-09) · Bauhaus system shared with RCC — Jost, black rules, radius 0, paper/ink ---- */
+  @import url('https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap');
   :root{
-    --font-display:"Archivo", system-ui, -apple-system, sans-serif;
-    --font-text:"Archivo", system-ui, -apple-system, sans-serif;
-    --color-primary:#ec3013; --color-primary-focus:#dd2b0f; --color-primary-on-dark:#ff9783;
-    --color-canvas:#f3f2f2; --color-canvas-parchment:#eae9e9; --color-surface-pearl:#f8f4f4;
-    --color-surface-tile-1:#201e1d; --color-surface-tile-2:#2d2b2b; --color-surface-tile-3:#171615; --color-surface-black:#201e1d;
-    --color-ink:#201e1d; --color-body:#201e1d; --color-body-muted:#d7d3d3;
-    --color-ink-muted-80:#444141; --color-ink-muted-48:#7d7979;
-    --color-divider-soft:#eae9e9; --color-hairline:#cfcbcb; --color-hairline-alpha:rgba(32,30,29,.18);
-    /* Modernist: zero radius everywhere */
+    --font-display:"Jost", system-ui, -apple-system, sans-serif;
+    --font-text:"Jost", system-ui, -apple-system, sans-serif;
+    --color-primary:#ec3013; --color-primary-focus:#b82412; --color-primary-on-dark:#ff9783;
+    --color-danger-text:#b82412; --color-warning:#f2c100; --color-info:#1e4fb0; --color-ok:#1e7a46;
+    --color-canvas:#f3f1ec; --color-canvas-parchment:#eae8e2; --color-surface-pearl:#ffffff;
+    --color-surface-tile-1:#141312; --color-surface-tile-2:#242220; --color-surface-tile-3:#141312; --color-surface-black:#141312;
+    --color-ink:#141312; --color-body:#141312; --color-body-muted:#d7d3d3;
+    --color-ink-muted-80:rgba(20,19,18,.72); --color-ink-muted-48:rgba(20,19,18,.72);
+    --color-divider-soft:rgba(20,19,18,.28); --color-hairline:rgba(20,19,18,.28); --color-hairline-alpha:rgba(20,19,18,.28);
+    --rule:3px solid #141312; --shadow-hard:6px 6px 0 #141312;
     --radius-none:0px; --radius-xs:0px; --radius-sm:0px; --radius-md:0px; --radius-lg:0px; --radius-pill:0px; --radius-full:0px;
   }
   *{ box-sizing:border-box; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
@@ -308,38 +309,153 @@
       linear-gradient(rgba(236,48,19,.10) 1px,transparent 1px),
       linear-gradient(90deg,rgba(236,48,19,.10) 1px,transparent 1px);
     background-size:620px 620px,24px 24px,24px 24px;
-    background-position:center top; background-attachment:fixed; color:var(--color-ink); font-family:var(--font-text); letter-spacing:0; }
+    background-position:center top; background-attachment:fixed; color:var(--color-ink); font-family:var(--font-text); font-size:16px; font-weight:500; letter-spacing:0; }
   h1,h2,h3{ font-family:var(--font-display); }
-  body *{ font-family:var(--font-text)!important; }
-  [style*="border-radius: 999"]:not(img),[style*="border-radius:999"]:not(img),[style*="border-radius: 9999"]:not(img),[style*="border-radius:9999"]:not(img){ border-radius:0!important; }
-  [class*="rounded"]:not(img){ border-radius:0!important; }
-  @media (max-width:640px){ .notes-row{ grid-template-columns:1fr!important; } .notes-row>div:first-child{ border-right:none!important; border-bottom:1px solid #ece6da!important; min-width:0!important; } }
-  a{ color:var(--color-primary); text-decoration:none; } a:hover{ text-decoration:underline; }
-  .card{ background:var(--color-canvas); border:1.5px solid var(--color-hairline-alpha); border-radius:0; box-shadow:none; }
-  .card,.vbtn-card,button,input,select,textarea,.pill,[class*="radius"]{ border-radius:0!important; }
-  h1,h2,h3,h4{ letter-spacing:-0.02em; }
+  #root, #root *{ font-family:var(--font-text)!important; }
+  #root [style*="border-radius"]:not(img):not(.sh):not(.dot){ border-radius:0!important; }
+  #root [class*="rounded"]:not(img){ border-radius:0!important; }
+  .sh.c,.dot{ border-radius:50%!important; }
+  @media (max-width:640px){ .notes-row{ grid-template-columns:1fr!important; } .notes-row>div:first-child{ border-right:none!important; border-bottom:1px solid var(--color-hairline)!important; min-width:0!important; } }
+  a{ color:var(--color-info); text-decoration:none; } a:hover{ text-decoration:underline; }
+  .card{ background:#fff; border:2px solid var(--color-ink); border-radius:0; box-shadow:none; animation:popUp .45s cubic-bezier(.2,.8,.2,1) both; }
+  .tab-in .card:nth-child(2){ animation-delay:.06s } .tab-in .card:nth-child(3){ animation-delay:.12s } .tab-in .card:nth-child(4){ animation-delay:.18s }
+  .masthead{ animation:slideIn .4s cubic-bezier(.2,.8,.2,1) both; } .row-live{ animation:slideIn .35s both; }
+  .hdr2 .iconb.sw{ animation:popIn .5s .2s cubic-bezier(.2,.8,.2,1) both; } .hdr2 .locb{ animation:slideIn .45s .1s both; } .hdr2 .tabs button{ animation:popUp .35s both; } .hdr2 .tabs button:nth-child(2){animation-delay:.04s} .hdr2 .tabs button:nth-child(3){animation-delay:.08s} .hdr2 .tabs button:nth-child(4){animation-delay:.12s} .hdr2 .tabs button:nth-child(5){animation-delay:.16s} .hdr2 .tabs button:nth-child(6){animation-delay:.2s} .hdr2 .tabs button:nth-child(7){animation-delay:.24s}
+  .titleband{ border-bottom-color:var(--color-warning); } .titleband>div{ position:relative; } .titleband>div::after{ content:""; position:absolute; left:16px; right:16px; bottom:-6px; height:6px; background:var(--color-warning); transform-origin:left; animation:wipe .6s cubic-bezier(.2,.8,.2,1) both; }
+  .savebar{ animation:popUp .35s .1s both; } .savebar .big{ animation:popIn .45s .25s both; display:inline-block; }
+  .orow input.q:focus{ animation:popIn .2s; } .done-pop{ animation:popIn .3s; }
+  @media (hover:hover){ .orow:hover .nm{ text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; text-decoration-color:var(--color-warning); } }
+  #root .card,#root .vbtn-card,#root button,#root input,#root select,#root textarea,#root .pill,#root [class*="radius"]{ border-radius:0!important; }
+  h1,h2,h3,h4{ letter-spacing:-0.01em; }
   input,select,textarea,button{ font-family:var(--font-text); }
-  input:focus,select:focus,textarea:focus{ border-color:var(--color-primary-focus)!important; box-shadow:0 0 0 1px var(--color-primary-focus); }
-  ::-webkit-scrollbar{height:8px;width:8px} ::-webkit-scrollbar-thumb{background:#d9cdbb;border-radius:8px} ::-webkit-scrollbar-track{background:transparent}
-  .vbtn-card{ transition:transform .12s ease; } .vbtn-card:active{ transform:scale(.96); }
-  .modal-pop{ animation:pop .18s cubic-bezier(.2,.7,.2,1); } @keyframes pop{ from{ opacity:0; transform:translateY(8px) scale(.98);} to{ opacity:1; transform:none;} }
+  #root input:not([type=checkbox]):not([type=color]):not([type=radio]),#root select,#root textarea{ font-size:16px!important; min-height:44px; }
+  #root input[type=checkbox],#root input[type=radio]{ width:22px; height:22px; accent-color:var(--color-ink); }
+  input:focus,select:focus,textarea:focus{ border-color:var(--color-ink)!important; box-shadow:4px 4px 0 var(--color-warning); outline:none; }
+  :is(button,a,summary,[tabindex]):focus-visible{ outline:3px solid var(--color-info); outline-offset:2px; }
+  #root button{ min-height:44px; }
+  ::-webkit-scrollbar{height:8px;width:8px} ::-webkit-scrollbar-thumb{background:#c9c4bb;border-radius:0} ::-webkit-scrollbar-track{background:transparent}
+  .vbtn-card{ transition:transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .16s; } .vbtn-card:active{ transform:scale(.97); }
+  .modal-pop{ animation:pop .22s cubic-bezier(.2,.8,.2,1); } @keyframes pop{ from{ opacity:0; transform:translateY(12px);} to{ opacity:1; transform:none;} }
   .anim-shake{ animation:shake .42s; } @keyframes shake{ 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-7px)} 40%,80%{transform:translateX(7px)} }
-  .tab-in{ animation:tabIn .28s cubic-bezier(.2,.75,.2,1) both; } @keyframes tabIn{ from{ opacity:0; transform:translateY(8px);} to{ opacity:1; transform:none;} }
-  @keyframes popUp{ from{ opacity:0; transform:translateY(14px) scale(.98);} to{ opacity:1; transform:none;} }
-  .stagger>*{ animation:popUp .5s cubic-bezier(.2,.75,.2,1) both; }
+  .tab-in{ animation:tabIn .4s cubic-bezier(.2,.8,.2,1) both; } @keyframes tabIn{ from{ opacity:0; transform:translateY(16px);} to{ opacity:1; transform:none;} }
+  @keyframes popUp{ from{ opacity:0; transform:translateY(14px);} to{ opacity:1; transform:none;} }
+  @keyframes slideIn{ from{ opacity:0; transform:translateX(-18px);} to{ opacity:1; transform:none;} }
+  @keyframes wipe{ from{ transform:scaleX(0);} to{ transform:scaleX(1);} }
+  @keyframes popIn{ 0%{ transform:scale(.6); opacity:0;} 70%{ transform:scale(1.08);} 100%{ transform:none; opacity:1;} }
+  @keyframes dropIn{ 0%{transform:translateY(-40px);opacity:0} 60%{transform:translateY(6px);opacity:1} 80%{transform:translateY(-3px)} 100%{transform:none} }
+  @keyframes spinIn{ from{transform:rotate(-180deg) scale(.4);opacity:0} to{transform:none;opacity:1} }
+  @keyframes breathe{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.18)} }
+  .stagger>*{ animation:popUp .45s cubic-bezier(.2,.8,.2,1) both; }
   .stagger>*:nth-child(1){animation-delay:.02s}.stagger>*:nth-child(2){animation-delay:.06s}.stagger>*:nth-child(3){animation-delay:.1s}.stagger>*:nth-child(4){animation-delay:.14s}.stagger>*:nth-child(5){animation-delay:.18s}.stagger>*:nth-child(6){animation-delay:.22s}.stagger>*:nth-child(7){animation-delay:.26s}.stagger>*:nth-child(8){animation-delay:.3s}.stagger>*:nth-child(n+9){animation-delay:.34s}
-  .lift{ transition:transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .18s; }
-  @media (hover:hover){ .lift:hover{ transform:translateY(-3px); box-shadow:0 12px 30px rgba(40,25,10,.1); } }
+  .lift{ transition:transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s; }
+  @media (hover:hover){ .lift:hover{ transform:translate(-3px,-3px); box-shadow:var(--shadow-hard); } }
   .barfill{ animation:barGrow .7s cubic-bezier(.2,.8,.2,1) both; transform-origin:left; } @keyframes barGrow{ from{ transform:scaleX(0);} to{ transform:scaleX(1);} }
   .row-live{ transition:background .2s; }
-  .hb-notecard{ transition:transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .18s ease; }
-  @media (hover:hover){ .hb-notecard:hover{ transform:scale(1.012); box-shadow:0 26px 56px -26px rgba(46,42,38,0.55); } }
-  @media (prefers-reduced-motion:reduce){ .hb-notecard{ transition:none; } .hb-notecard:hover{ transform:none; } }
-  .masthead{ border-bottom:2px solid var(--color-ink); }
-  .u-label{ font-size:11px; text-transform:uppercase; letter-spacing:.18em; font-weight:700; color:var(--color-ink-muted-48); }
+  .hb-notecard{ transition:transform .18s cubic-bezier(.2,.8,.2,1); }
+  .masthead{ border-bottom:3px solid var(--color-ink); }
+  .u-label{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--color-ink-muted-80); }
   .sticky{ position:sticky; } .top-0{ top:0; }
   .fixed{position:fixed} .inset-0{top:0;right:0;bottom:0;left:0}
-  select{ -webkit-appearance:none; appearance:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%238a7d6d' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat:no-repeat; background-position:right 10px center; padding-right:28px!important; }
+  select{ -webkit-appearance:none; appearance:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23141312' stroke-width='2' fill='none' stroke-linecap='round'/></svg>"); background-repeat:no-repeat; background-position:right 10px center; padding-right:28px!important; }
+  /* ── v2 components (shared vocabulary with RCC .rv2) ── */
+  .sh{ display:inline-block; width:12px; height:12px; flex:none; vertical-align:middle; }
+  .sh.c{ background:var(--color-info); } .sh.s{ background:var(--color-primary); }
+  .sh.t{ width:0; height:0; background:none; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:12px solid var(--color-warning); }
+  .tag{ display:inline-block; background:var(--color-ink); color:#f3f1ec; padding:6px 10px 5px; font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; animation:slideIn .45s cubic-bezier(.2,.8,.2,1) both; }
+  .lbl{ display:flex; align-items:center; gap:12px; margin:0 0 14px; font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+  .lbl .cnt{ color:var(--color-ink-muted-80); letter-spacing:0; text-transform:none; font-weight:500; font-size:14px; }
+  .lbl .sh.c{ animation:popIn .5s .2s both, breathe 3.2s 1.2s ease-in-out infinite; } .lbl .sh.s{ animation:spinIn .6s .2s both; } .lbl .sh.t{ animation:dropIn .6s .2s both; }
+  .screen{ background:#fff; border:3px solid var(--color-ink); animation:popUp .45s cubic-bezier(.2,.8,.2,1) both; }
+  .bar2{ display:flex; gap:10px; align-items:center; padding:12px 14px; border-bottom:3px solid var(--color-ink); overflow-x:auto; }
+  .bar2>*{ animation:slideIn .4s cubic-bezier(.2,.8,.2,1) both; } .bar2>*:nth-child(2){animation-delay:.06s} .bar2>*:nth-child(3){animation-delay:.12s} .bar2>*:nth-child(4){animation-delay:.18s}
+  .seg2{ display:inline-flex; flex:none; } .seg2 button{ padding:10px 14px; min-height:44px; border:3px solid var(--color-ink); border-left-width:0; font:inherit; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:#fff; color:var(--color-ink); cursor:pointer; transition:background .15s,color .15s; white-space:nowrap; }
+  .seg2 button:first-child{ border-left-width:3px; } .seg2 button[aria-pressed="true"]{ background:var(--color-ink); color:#f3f1ec; animation:popIn .3s cubic-bezier(.2,.8,.2,1); } .seg2 button:hover:not([aria-pressed="true"]){ background:var(--color-warning); }
+  .seg2.dark button{ background:var(--color-ink); color:#f3f1ec; border-color:#f3f1ec; } .seg2.dark button[aria-pressed="true"]{ background:var(--color-warning); color:var(--color-ink); border-color:var(--color-warning); }
+  .btn2{ font:inherit; font-weight:700; font-size:14px; text-transform:uppercase; letter-spacing:.04em; padding:11px 16px; min-height:44px; border:3px solid var(--color-ink); background:#fff; color:var(--color-ink); white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s,background .18s,color .18s; }
+  .btn2:hover{ transform:translate(-3px,-3px); box-shadow:5px 5px 0 var(--color-ink); } .btn2:active{ transform:none; box-shadow:none; }
+  .btn2.p{ background:var(--color-primary); border-color:var(--color-primary); color:#fff; } .btn2.y{ background:var(--color-warning); border-color:var(--color-warning); color:var(--color-ink); } .btn2.dark{ background:var(--color-ink); color:#f3f1ec; }
+  .btn2.onink{ color:#f3f1ec; border-color:#f3f1ec; background:transparent; } .btn2.onink:hover{ box-shadow:5px 5px 0 var(--color-warning); }
+  .btn2:disabled{ opacity:.5; cursor:not-allowed; transform:none; box-shadow:none; }
+  .chips2{ display:flex; gap:8px; padding:12px 14px; border-bottom:3px solid var(--color-ink); overflow-x:auto; scrollbar-width:none; }
+  .chip2{ display:inline-flex; align-items:center; gap:8px; padding:9px 12px; min-height:44px; border:2px solid var(--color-ink); font:inherit; font-size:14px; font-weight:700; background:#fff; color:var(--color-ink); cursor:pointer; white-space:nowrap; transition:background .15s,transform .15s; animation:popIn .35s both; }
+  .chip2:hover{ transform:translateY(-2px); } .chip2[aria-pressed="true"]{ background:var(--color-warning); } .chip2 .n{ font-weight:500; color:var(--color-ink-muted-80); } .chip2 .n.hot{ color:var(--color-danger-text); font-weight:700; }
+  .badge2{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:0 8px; min-height:26px; border:1.5px solid var(--color-ink); white-space:nowrap; }
+  .badge2.warn{ border:2px solid var(--color-warning); background:var(--color-warning); } .badge2.bad{ border:2px solid var(--color-danger-text); background:var(--color-danger-text); color:#fff; } .badge2.ok{ border-color:var(--color-ok); color:var(--color-ok); } .badge2.dim{ border-color:var(--color-hairline); color:var(--color-ink-muted-80); }
+  .grp2{ display:flex; align-items:baseline; gap:12px; padding:18px 14px 8px; font-size:14px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; animation:slideIn .4s both; scroll-margin-top:120px; }
+  .grp2 .n{ color:var(--color-ink-muted-80); font-weight:500; letter-spacing:0; } .grp2::after{ content:""; flex:1; height:3px; background:var(--color-ink); transform-origin:left; animation:wipe .6s cubic-bezier(.2,.8,.2,1) both; }
+  /* count rows (Submit Order / Stock Take) */
+  .orow{ display:grid; grid-template-columns:minmax(0,1fr) 64px 92px 92px; gap:10px; align-items:center; padding:8px 14px; border-bottom:1px solid var(--color-hairline); min-height:64px; animation:slideIn .35s cubic-bezier(.2,.8,.2,1) both; transition:background .15s; }
+  .orow.two{ grid-template-columns:minmax(0,1fr) 110px; }
+  .orow:hover{ background:rgba(242,193,0,.14); } .orow.on{ background:rgba(242,193,0,.22); } .orow.cur{ background:rgba(30,79,176,.10); box-shadow:inset 4px 0 0 var(--color-info); }
+  .orow .nm{ font-weight:700; font-size:16px; line-height:1.2; } .orow .un{ color:var(--color-ink-muted-80); font-size:14px; font-weight:500; }
+  .orow .par{ text-align:right; color:var(--color-ink-muted-80); font-variant-numeric:tabular-nums; font-size:15px; }
+  .orow .par b{ display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; color:var(--color-ink-muted-80); }
+  .orow input.q{ width:100%; height:48px; border:2px solid var(--color-ink); background:#fff; text-align:center; font-size:20px!important; font-weight:700; padding:0 6px; font-variant-numeric:tabular-nums; }
+  .orow input.q.need{ border-color:var(--color-primary); } .orow input.q.need.has{ background:var(--color-primary); color:#fff; } .orow input.q.has{ background:var(--color-ink); color:#f3f1ec; }
+  .orow input.q:focus{ box-shadow:4px 4px 0 var(--color-warning); }
+  .orow .lab{ display:block; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--color-ink-muted-80); text-align:center; margin-bottom:3px; }
+  .ohead{ display:grid; grid-template-columns:minmax(0,1fr) 64px 92px 92px; gap:10px; padding:8px 14px; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--color-ink-muted-80); border-bottom:3px solid var(--color-ink); text-align:center; } .ohead>*:first-child{ text-align:left; } .ohead.two{ grid-template-columns:minmax(0,1fr) 110px; }
+  .savebar{ position:fixed; left:0; right:0; bottom:0; z-index:60; background:var(--color-ink); color:#f3f1ec; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -4px 0 var(--color-warning); }
+  .savebar .big{ font-size:24px; font-weight:700; letter-spacing:-.01em; line-height:1; } .savebar .sub{ font-size:13px; color:rgba(243,241,236,.75); font-weight:500; }
+  .savebar.err{ background:var(--color-danger-text); }
+  @media (max-width:640px){ .savebar{ bottom:calc(64px + env(safe-area-inset-bottom,0px)); } #hb-fab,#pc-fab{ bottom:calc(92px + env(safe-area-inset-bottom,0px))!important; } }
+  @media (max-width:480px){ .orow{ grid-template-columns:minmax(0,1fr) 92px 92px; grid-template-areas:"nm rem need" "par rem need"; row-gap:2px; } .orow>div:first-child{ grid-area:nm; } .orow .par{ grid-area:par; text-align:left; display:flex; gap:6px; align-items:baseline; } .orow .par b{ display:inline; } .orow input.q:nth-of-type(1){ grid-area:rem; } .orow input.q.need{ grid-area:need; } .orow.two{ grid-template-columns:minmax(0,1fr) 110px; grid-template-areas:none; } .ohead{ grid-template-columns:minmax(0,1fr) 92px 92px; } .ohead>*:nth-child(2){ display:none; } }
+  /* header / nav */
+  .hdr2{ background:var(--color-ink); color:#f3f1ec; }
+  .hdr2 .row1{ display:flex; align-items:center; gap:10px; padding:8px 12px; min-height:60px; max-width:1100px; margin:0 auto; }
+  .hdr2 .iconb{ width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center; background:transparent; border:2px solid rgba(243,241,236,.35); color:#f3f1ec; cursor:pointer; font-size:16px; font-weight:700; transition:background .15s,color .15s,transform .15s; flex:none; }
+  .hdr2 .iconb:hover{ background:#f3f1ec; color:var(--color-ink); } .hdr2 .iconb.sw{ border-radius:50%!important; background:var(--color-info); border-color:var(--color-info); } .hdr2 .iconb.sw:hover{ transform:rotate(180deg); }
+  .hdr2 .locb{ display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:6px 12px; border:2px solid rgba(243,241,236,.35); color:#f3f1ec; background:transparent; cursor:pointer; font:inherit; font-weight:700; font-size:14px; max-width:60vw; }
+  .hdr2 .locb small{ font-weight:500; color:rgba(243,241,236,.7); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  .hdr2 .tabs{ display:flex; gap:0; overflow-x:auto; scrollbar-width:none; max-width:1100px; margin:0 auto; padding:0 12px 10px; }
+  .hdr2 .tabs button{ flex:none; border:2px solid rgba(243,241,236,.35); border-left-width:0; background:transparent; color:#f3f1ec; font:inherit; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.04em; padding:9px 14px; min-height:42px; cursor:pointer; transition:background .15s,color .15s; }
+  .hdr2 .tabs button:first-child{ border-left-width:2px; } .hdr2 .tabs button[aria-pressed="true"]{ background:var(--color-warning); color:var(--color-ink); border-color:var(--color-warning); } .hdr2 .tabs button:hover:not([aria-pressed="true"]){ background:rgba(243,241,236,.12); }
+  .titleband{ background:var(--color-ink); color:#f3f1ec; border-bottom:6px solid var(--color-warning); }
+  .titleband h1{ margin:0; font-size:clamp(28px,5vw,44px); font-weight:700; text-transform:uppercase; letter-spacing:.01em; line-height:.95; animation:slideIn .5s cubic-bezier(.2,.8,.2,1) both; }
+  .titleband p{ margin:6px 0 0; color:rgba(243,241,236,.75); font-size:15px; font-weight:500; animation:popUp .5s .15s both; }
+  .sheet{ position:fixed; inset:0; z-index:130; background:rgba(20,19,18,.55); display:flex; align-items:flex-end; justify-content:center; animation:pop .2s both; }
+  .sheet .box{ background:#f3f1ec; color:var(--color-ink); border:3px solid var(--color-ink); width:100%; max-width:520px; padding:18px 18px 22px; box-shadow:0 -8px 0 var(--color-warning); animation:popUp .3s cubic-bezier(.2,.8,.2,1) both; max-height:85vh; overflow:auto; }
+  @media (min-width:641px){ .sheet{ align-items:center; } .sheet .box{ box-shadow:var(--shadow-hard); } }
+  .sheet .k{ font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--color-ink-muted-80); margin:14px 0 8px; }
+  .sheet .opt{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; text-align:left; padding:12px 14px; min-height:52px; border:2px solid var(--color-ink); background:#fff; font:inherit; font-weight:700; font-size:16px; color:var(--color-ink); cursor:pointer; margin-bottom:8px; transition:transform .15s,box-shadow .15s,background .15s; }
+  .sheet .opt:hover{ transform:translate(-2px,-2px); box-shadow:4px 4px 0 var(--color-ink); } .sheet .opt[aria-pressed="true"]{ background:var(--color-warning); } .sheet .opt small{ font-weight:500; color:var(--color-ink-muted-80); font-size:13px; }
+  .bnav{ display:none; }
+  @media (max-width:640px){
+    .hdr2 .tabs{ display:none; }
+    .bnav{ display:grid; grid-template-columns:repeat(4,1fr); position:fixed; left:0; right:0; bottom:0; z-index:80; background:var(--color-ink); border-top:3px solid var(--color-warning); padding-bottom:env(safe-area-inset-bottom,0px); }
+    .bnav button{ background:transparent; border:0; color:rgba(243,241,236,.7); font:inherit; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.04em; min-height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; cursor:pointer; }
+    .bnav button[aria-pressed="true"]{ color:var(--color-warning); } .bnav button .sh{ width:10px; height:10px; }
+    .app-pad{ padding-bottom:150px!important; }
+  }
+  .menu2{ position:absolute; right:0; top:calc(100% + 6px); background:#fff; color:var(--color-ink); border:3px solid var(--color-ink); min-width:230px; z-index:130; box-shadow:var(--shadow-hard); animation:popUp .2s both; }
+  .menu2 button{ display:block; width:100%; text-align:left; padding:12px 14px; min-height:46px; border:0; border-bottom:1px solid var(--color-hairline); background:#fff; font:inherit; font-weight:600; font-size:15px; cursor:pointer; color:var(--color-ink); } .menu2 button:hover{ background:var(--color-warning); } .menu2 button.danger{ color:var(--color-danger-text); }
+  .menu2 .k{ font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--color-ink-muted-80); padding:10px 14px 4px; }
+  .errbox{ border-left:6px solid var(--color-danger-text); background:#fff; padding:12px 14px; margin:0 0 14px; font-weight:500; }
+  .errbox b{ color:var(--color-danger-text); }
+  #root table th{ font-size:12px!important; letter-spacing:.08em!important; color:var(--color-ink-muted-80)!important; border-bottom:3px solid var(--color-ink)!important; padding:12px 10px!important; }
+  #root table td{ font-size:16px!important; padding:11px 10px!important; border-bottom:1px solid var(--color-hairline)!important; }
+  /* settings: left nav + pane (same as RCC Settings v2) */
+  .navcol{ display:grid; grid-template-columns:240px minmax(0,1fr); } .navcol .nav{ border-right:3px solid var(--color-ink); background:#f3f1ec; padding:10px 0; }
+  .nav .g{ font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--color-ink-muted-80); padding:14px 16px 6px; }
+  .nav button{ display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; text-align:left; padding:11px 16px; border:0; background:transparent; font:inherit; font-weight:600; color:var(--color-ink); cursor:pointer; transition:background .15s,padding-left .2s; min-height:44px; }
+  .nav button:hover{ background:rgba(242,193,0,.25); padding-left:20px; } .nav button[aria-current="true"]{ background:var(--color-ink); color:#f3f1ec; }
+  .nav button .cnt2{ font-size:12px; font-weight:700; background:var(--color-warning); color:var(--color-ink); padding:2px 7px; } .nav button[aria-current="true"] .cnt2{ background:#f3f1ec; }
+  .nav button .lock{ font-size:11px; color:var(--color-ink-muted-80); } .nav button[aria-current="true"] .lock{ color:rgba(243,241,236,.7); }
+  .pane{ padding:18px 20px; min-width:0; } .pane h2{ margin:0 0 4px; font-size:24px; font-weight:700; } .pane .desc{ color:var(--color-ink-muted-80); font-weight:400; margin:0 0 16px; max-width:70ch; }
+  .pane .card{ border:0; padding:0; background:transparent; }
+  .lp{ display:grid; grid-template-columns:300px minmax(0,1fr); border:3px solid var(--color-ink); background:#fff; } .lp .list{ border-right:3px solid var(--color-ink); max-height:70vh; overflow:auto; }
+  .lp .list button{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:12px 14px; min-height:52px; border:0; border-bottom:1px solid var(--color-hairline); background:transparent; font:inherit; font-weight:600; cursor:pointer; color:var(--color-ink); transition:background .15s; }
+  .lp .list button:hover{ background:rgba(242,193,0,.22); } .lp .list button[aria-current="true"]{ background:var(--color-warning); } .lp .list small{ display:block; color:var(--color-ink-muted-80); font-weight:500; font-size:13px; margin-top:2px; }
+  .lp .list button.add{ background:var(--color-ink); color:#f3f1ec; } .lp .edit{ padding:16px 18px; min-width:0; }
+  .kv{ display:grid; grid-template-columns:1fr 1fr; gap:10px; } .lab{ font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--color-ink-muted-80); margin:0 0 5px; }
+  .swatch{ width:44px; height:44px; border:2px solid var(--color-ink); padding:0; cursor:pointer; background:#fff; }
+  .lockbox{ border:3px solid var(--color-ink); background:#fff; padding:18px; max-width:380px; }
+  .tbl{ width:100%; border-collapse:collapse; } .tbl th{ text-align:left; } .tbl td.num,.tbl th.num{ text-align:right; }
+  .tbl tbody tr:hover td{ background:rgba(242,193,0,.14); }
+  .board-profile .card{ border:0; padding:0; background:transparent; }
+  @media (max-width:640px){ .screen[style*="grid-template-columns: minmax(0,1fr) minmax(0,1fr)"]{ grid-template-columns:minmax(0,1fr)!important; } .board-profile{ border-left:0!important; padding-left:0!important; border-top:3px solid var(--color-ink); padding-top:16px; } }
+  @media (max-width:900px){ .navcol{ grid-template-columns:minmax(0,1fr); } .navcol .nav{ border-right:0; border-bottom:3px solid var(--color-ink); display:flex; overflow-x:auto; padding:0; } .nav .g{ display:none; } .nav button{ width:auto; flex:none; } .lp{ grid-template-columns:minmax(0,1fr); } .lp .list{ border-right:0; border-bottom:3px solid var(--color-ink); max-height:40vh; } .kv{ grid-template-columns:1fr; } }
+  @media (prefers-reduced-motion:reduce){ *,*::before,*::after{ animation:none!important; transition:none!important; } }
 </style>
 <template id="__bundler_thumbnail">
   <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#241d16;">
@@ -728,7 +844,9 @@ async function kvGetLongText(baseKey){
 }
 
 /* ---- typed accessors ---- */
-async function loadOrder(date, locId){ try{ const raw=await kvGet(`${deptPrefix()}order:${date}:${locId}`); return raw?JSON.parse(raw):{}; }catch(e){ return {}; } }
+/* A network failure used to come back as {} — indistinguishable from "no order yet", so a save on a
+   flaky connection could wipe a real order. Now the read error propagates; only a corrupt value is {}. */
+async function loadOrder(date, locId){ let raw; try{ raw=await kvGet(`${deptPrefix()}order:${date}:${locId}`); }catch(e){ throw new Error("Couldn't load the saved order ("+(e&&e.message||e)+")"); } try{ return raw?JSON.parse(raw):{}; }catch(e){ return {}; } }
 async function saveOrder(date, locId, data){ await kvSet(`${deptPrefix()}order:${date}:${locId}`, JSON.stringify(data)); return true; }
 async function loadAllOrdersForDate(date, locations){
   const keys=locations.map(l=>`${deptPrefix()}order:${date}:${l.id}`);
@@ -737,7 +855,7 @@ async function loadAllOrdersForDate(date, locations){
   return out;
 }
 function stockKey(date, locId, linked){ const prefix=linked?'':deptPrefix(); return `${prefix}stocktake:${date}:${locId}`; }
-async function loadStockTake(date, locId, linked){ try{ const raw=await kvGet(stockKey(date,locId,linked)); return raw?JSON.parse(raw):{counts:{},note:'',recordedBy:'',lossReason:'',enteredAt:''}; }catch(e){ return {counts:{},note:'',recordedBy:'',lossReason:'',enteredAt:''}; } }
+async function loadStockTake(date, locId, linked){ let raw; try{ raw=await kvGet(stockKey(date,locId,linked)); }catch(e){ throw new Error("Couldn't load the saved stock take ("+(e&&e.message||e)+")"); } try{ return raw?JSON.parse(raw):{counts:{},note:'',recordedBy:'',lossReason:'',enteredAt:''}; }catch(e){ return {counts:{},note:'',recordedBy:'',lossReason:'',enteredAt:''}; } }
 async function saveStockTake(date, locId, linked, data){ await kvSet(stockKey(date,locId,linked), JSON.stringify(data)); return true; }
 async function listStockTakeDatesForLocation(locId, linked){
   const prefix=linked?'':deptPrefix();
@@ -769,10 +887,11 @@ window.OrderCore = {
 
 </script>
 <script>
+/* --- inlined hideout-bot.js (shared assistant + recipe generation) --- */
 /* Hideout Assistant — ONE shared chatbot for both apps (Recipe Cost / catering-cost + Ordering).
    Inline this same file in each app's single-HTML build (keeps local-refs = 0).
    Usage:  HideoutBot.mount({ source:"rcc" | "ordering", backendUrl, token, logo, greeting, suggestions });
-   - Answers via the shared AI backend (?action=aiAssist) when backendUrl is set,
+   - Answers via the shared AI backend (POST action=aiAssist, JSON body: question + trimmed history + live clientCtx) when backendUrl is set,
      else falls back to window.claude.complete (preview). Context is built from whichever
      app's data is present, so the AI sees ALL of that app's info — including RCC's
      Today routine + Prep board so the Ordering app can talk about kitchen status too.
@@ -783,13 +902,14 @@ window.OrderCore = {
      exposes window.HideoutRCC.logQuestion it is ALSO written to state.botLog and synced to
      Firestore so Claude Cowork can read and learn from the conversation history. */
 (function(){
-  if(window.HideoutBot) return;
+  var BOT_VERSION="2026-09-09.2";
+  if(window.HideoutBot){ try{ if(window.HideoutBot.version!==BOT_VERSION) console.error("HideoutBot version collision", window.HideoutBot.version, BOT_VERSION); }catch(e){} return; }
   var TOKEN_DEFAULT="hideout-9f2a7c-orders", LOG_KEY="hideout_bot_log", LOG_MAX=400;
   // Recipe Cost lives in its own Firestore project; the bot auto-reads it so Ordering can answer recipe questions too.
   var RCC_FS="https://firestore.googleapis.com/v1/projects/hideout-recipe-cost/databases/(default)/documents/hideout_app/recipe_cost?key=AIzaSyC6-J5PoHy_Y4JGgN0cmi2iVImuEADYK9s";
-  var RCC_CACHE=null, RCC_TRIED=false;
+  var RCC_CACHE=null, RCC_TRIED=false, RCC_RETRY_AFTER=0;
   function fsDec(v){ if(v==null) return null; if("stringValue" in v) return v.stringValue; if("integerValue" in v) return Number(v.integerValue); if("doubleValue" in v) return v.doubleValue; if("booleanValue" in v) return v.booleanValue; if("nullValue" in v) return null; if("timestampValue" in v) return v.timestampValue; if("mapValue" in v){ var o={}, f=(v.mapValue.fields)||{}; Object.keys(f).forEach(function(k){ o[k]=fsDec(f[k]); }); return o; } if("arrayValue" in v){ return ((v.arrayValue.values)||[]).map(fsDec); } return null; }
-  async function ensureRcc(){ if(RCC_CACHE||hasRcc()||RCC_TRIED) return; RCC_TRIED=true; try{ var r=await fetch(RCC_FS,{cache:"no-store"}); if(!r.ok) return; var j=await r.json(); var st=(j.fields&&j.fields.state)?fsDec(j.fields.state):null; if(typeof st==="string"){ try{ st=JSON.parse(st); }catch(e){} } RCC_CACHE=st||null; }catch(e){} }
+  async function ensureRcc(){ if(RCC_CACHE||hasRcc()||RCC_TRIED) return; if(Date.now()<RCC_RETRY_AFTER) return; try{ var r=await fetch(RCC_FS,{cache:"no-store"}); if(!r.ok) throw new Error("HTTP "+r.status); var j=await r.json(); var st=(j.fields&&j.fields.state)?fsDec(j.fields.state):null; if(typeof st==="string"){ try{ st=JSON.parse(st); }catch(e){} } RCC_CACHE=st||null; RCC_TRIED=true; }catch(e){ RCC_RETRY_AFTER=Date.now()+30000; } }
 
   function rccState(){ try{ var w=JSON.parse(localStorage.getItem("hideout_rcc_v2")||"{}"); return w.state||w||{}; }catch(e){ return {}; } }
   var DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -868,6 +988,7 @@ window.OrderCore = {
   function hasRcc(){ try{ var s=rccState(); return (s.recipes&&s.recipes.length)||(s.ingredients&&s.ingredients.length); }catch(e){ return false; } }
   function canSaveRecipe(){ return !!(window.HideoutRCC && window.HideoutRCC.addRecipe); }
   function canRemember(){ return !!(window.HideoutRCC && window.HideoutRCC.remember); }
+  function canPostNotice(){ return !!(window.HideoutRCC && window.HideoutRCC.addNotice); }
   function rccData(){ return hasRcc()?rccState():(RCC_CACHE||{}); }
   function rccCategories(){ var s=rccData(), set={}, out=[]; (s.recipes||[]).forEach(function(r){ if(r.category&&!r.archived) set[r.category]=1; }); var dc=s.dishCats||{}; [].concat(dc.kitchen||[],dc.bakery||[]).forEach(function(c){ if(c) set[c]=1; }); ["Drinks","Brunch","Bagel","Sandwich","Wraps & Salad","Pastry","Breakfast"].forEach(function(c){ set[c]=1; }); Object.keys(set).forEach(function(c){ out.push(c); }); return out; }
   function ingredientNames(){ try{ return (window.HideoutRCC.ingredients()||[]).map(function(i){ return i.name; }); }catch(e){ return []; } }
@@ -889,34 +1010,96 @@ window.OrderCore = {
     if(canSaveRecipe()) parts.push(recipeCreateHint());
     if(canRemember()) parts.push(rememberHint());
     parts.push(calendarAddHint());
+    if(canPostNotice()) parts.push(noticeHint());
     return parts.join("\n\n---\n\n");
   }
 
+  // ---- transport (GPT review 2026-09-09) ----
+  // POST text/plain (no CORS preflight; doPost merges the JSON body into params) so the history and the
+  // live client context travel in the body instead of the URL. 15 s timeout, one retry on network/timeout.
+  var HIST_TURNS=8, HIST_CHARS=1800, Q_CHARS=2000, CTX_CHARS=20000, TIMEOUT_MS=15000;
+  function compactHistory(hist){
+    var h=(hist||[]).filter(function(m){ return m && m.text && !m.failed && (m.role==="user"||m.role==="assistant"); });
+    h=h.slice(-HIST_TURNS);
+    while(h.length && h[0].role!=="user") h.shift();              // always start on a user turn
+    return h.map(function(m){ return { role:m.role, content:String(m.text).slice(0,HIST_CHARS) }; });
+  }
+  /* Compact LIVE context the server cannot know: current branch, prep board, learned notes, the notice board,
+     what the app's calendar shows, and which confirm-card protocols this host supports. Recipes/ingredients are
+     NOT repeated here - the server already holds the RCC snapshot. */
+  function buildClientCtx(opts, q){
+    var L=[]; var s=rccData(); var ql=(q||"").toLowerCase();
+    try{
+      var d=new Date(), wd=DAYS[d.getDay()];
+      var curBr=""; try{ curBr=(window.__HIDEOUT_CAL&&window.__HIDEOUT_CAL.branch)||""; }catch(e){}
+      if(opts.source==="ordering"){ var cfg=resolveCfg(opts); L.push("APP: Ordering (IOS). Department: "+(cfg.department||"?")+"."+(curBr?(" Current branch: "+curBr+"."):"")); }
+      else L.push("APP: Recipe Cost (RCC)."+(curBr?(" The user's current branch: "+curBr+" - answer for THIS branch unless another is named."):""));
+      if(s.branches&&s.branches.length) L.push("BRANCHES: "+s.branches.map(function(b){return b.name;}).join(", ")+".");
+      var routine=s.dailyRoutine&&s.dailyRoutine[wd]; if(routine&&String(routine).trim()) L.push("TODAY'S ROUTINE ("+wd+"): "+String(routine).trim().slice(0,1200));
+      var recs=(s.recipes||[]).filter(function(r){return !r.archived;});
+      var prep=recs.map(function(r){ var st=prepStatusOf(r); return st?{name:r.name,st:st}:null; }).filter(Boolean);
+      if(prep.length){ var pick=function(k){ return prep.filter(function(p){return p.st===k;}).map(function(p){return p.name;}); };
+        L.push("LIVE PREP BOARD ("+prep.length+"): Do first: "+(pick("urgent").join(", ")||"none")+"; To do: "+(pick("todo").join(", ")||"none")+"; Done: "+(pick("done").join(", ")||"none")+"."); }
+      var mem=(s.botMemory||[]).slice(-40).map(function(n){ return String(typeof n==="string"?n:(n&&n.text)||"").slice(0,200); }).filter(Boolean);
+      if(mem.length) L.push("LEARNED NOTES (staff taught the assistant these - authoritative; do not re-record them):\n"+mem.map(function(t){return "- "+t;}).join("\n"));
+      // recipe detail only for dishes named in the question (the snapshot has the rest)
+      var hits=recs.filter(function(r){ var nl=String(r.name||"").toLowerCase(); if(!nl) return false; if(ql.indexOf(nl)>=0) return true; return nl.split(/[^a-z0-9]+/).filter(function(x){return x.length>=5;}).some(function(x){ return ql.indexOf(x)>=0; }); }).slice(0,4);
+      if(hits.length){ var im={}; (s.ingredients||[]).forEach(function(i){ im[i.id]=i; });
+        L.push("RECIPES NAMED IN THE QUESTION (full detail):\n"+hits.map(function(r){ var its=(r.items||[]).map(function(it){ var g=im[it.ingredientId]; return (g?g.name:(it.rawName||"?"))+(it.qty?" "+it.qty+(it.rawUnit||(g&&g.useUnit)||""):""); }).join(", "); return "- "+r.name+(r.category?" ("+r.category+")":"")+(r.sellPrice?" sell $"+r.sellPrice:"")+(r.allergens&&r.allergens.length?" allergens: "+r.allergens.join("/"):"")+"\n  ingredients: "+(its||"-")+"\n  method: "+((r.procedure||"").trim().slice(0,1500)||"(not recorded)"); }).join("\n")); }
+      try{ var wc=window.__HIDEOUT_CAL; if(wc&&wc.events&&wc.events.length){ L.push("CALENDAR AS SHOWN IN THE APP ("+(wc.branch||"this branch")+"):\n"+wc.events.slice(0,25).map(function(e){ return "- "+(e.date?e.date+" ":"")+(e.allday?"(all day)":(e.start||""))+" "+(e.summary||"")+(e.location?(" @"+e.location):""); }).join("\n")); } }catch(e){}
+      var caps=[]; if(canSaveRecipe()) caps.push("recipe-json (recipe builder card)"); if(canRemember()) caps.push("remember-json (memory)"); caps.push("calendar-json (calendar confirm card)"); if(canPostNotice()) caps.push("notice-json (staff notice board confirm card)");
+      L.push("THIS APP CAN SHOW CONFIRM CARDS FOR: "+caps.join("; ")+". Never claim something was saved/posted/added - the card does that after the user confirms.");
+      if(canPostNotice()) L.push(noticeHint().trim());
+      if(canRemember()) L.push(rememberHint().trim());
+      L.push(calendarAddHint().trim());
+    }catch(e){}
+    return L.join("\n\n").slice(0,CTX_CHARS);
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+  async function postJson(url, payload, ms){
+    var ctl=(typeof AbortController!=="undefined")?new AbortController():null; var timer=ctl?setTimeout(function(){ ctl.abort(); }, ms):null;
+    try{
+      var res=await fetch(url,{ method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload), cache:"no-store", signal:ctl?ctl.signal:undefined });
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      return await res.json();
+    } finally { if(timer) clearTimeout(timer); }
+  }
+  function friendlyError(e){
+    var m=String(e&&e.message||e||"");
+    if(!navigator.onLine) return "You look offline - check the internet connection and try again.";
+    if(/abort/i.test(m)) return "The assistant took too long to answer (I tried twice). Tap Retry or ask again in a moment.";
+    if(/HTTP 5|unavailable|upstream|overloaded/i.test(m)) return "The assistant is temporarily unavailable. Tap Retry in a moment.";
+    if(/Unauthorized/i.test(m)) return "The assistant is not authorised on this device - check the backend token in Settings.";
+    return "Something went wrong while answering. Tap Retry.";
+  }
+  // Returns { answer, action, timing, usage, stopReason }.
   async function callAI(opts, systemPrompt, hist, q){
     var burl=(typeof opts.backendUrl==="function")?opts.backendUrl():opts.backendUrl;
     var tok=(typeof opts.token==="function")?opts.token():opts.token;
     if(burl){
-      var tk=encodeURIComponent(tok||TOKEN_DEFAULT);
-      // Upload this app's own context (recipes/costs or ordering) so the backend can merge it
-      // with its server-side knowledge — both bots see BOTH apps' data (front & back).
-      // SPEED (zero-upload): the backend blob already holds ordering data, the live RCC
-      // snapshot, the 3-week calendar AND the recipe/remember/calendar protocol hints —
-      // so the client never uploads context. Every question = one single GET.
-      var extra="&merge=1";
-      var url=burl+(burl.indexOf("?")>-1?"&":"?")+"action=aiAssist"
-        +"&token="+tk
-        +"&question="+encodeURIComponent(q)
-        +"&history="+encodeURIComponent(JSON.stringify(hist.map(function(m){return {role:m.role==="user"?"user":"assistant",content:m.text};})))
-        +extra;
-      var res=await fetch(url,{cache:"no-store"}); var j=await res.json();
-      if(j&&j.error) throw new Error(j.error);
-      return (j&&j.answer)||"(no response)";
+      var payload={ token:(tok||TOKEN_DEFAULT), action:"aiAssist", question:String(q).slice(0,Q_CHARS),
+        history:JSON.stringify(compactHistory(hist)),           // string: old backends JSON.parse it; new ones accept both
+        clientCtx:buildClientCtx(opts, q), source:opts.source||"", merge:"1", v:BOT_VERSION };
+      var lastErr=null, j=null;
+      for(var attempt=0; attempt<2 && !j; attempt++){
+        try{ j=await postJson(burl, payload, TIMEOUT_MS); }
+        catch(e){ lastErr=e; if(attempt===0) await sleep(350); }
+      }
+      if(!j){
+        // very old backend without POST support / odd proxy: last resort GET with a tiny history
+        try{ var res=await fetch(burl+(burl.indexOf("?")>-1?"&":"?")+"action=aiAssist&token="+encodeURIComponent(tok||TOKEN_DEFAULT)+"&question="+encodeURIComponent(String(q).slice(0,Q_CHARS))+"&history="+encodeURIComponent(JSON.stringify(compactHistory(hist).slice(-2)))+"&merge=1",{cache:"no-store"}); j=await res.json(); }
+        catch(e2){ throw lastErr||e2; }
+      }
+      if(j&&j.error&&!j.answer) throw new Error(j.message||j.error);
+      try{ if(j&&j.timing) console.debug("[HideoutBot] timing", j.timing, j.usage||"", j.requestId||""); }catch(e){}
+      var ans=(j&&j.answer)||""; if(j&&j.stopReason==="max_tokens"&&ans) ans+="\n\n(Answer was cut short - say \"continue\" for the rest.)";
+      return { answer:ans||"(no response)", action:(j&&j.action)||null, timing:(j&&j.timing)||null, usage:(j&&j.usage)||null, stopReason:(j&&j.stopReason)||"" };
     }
     if(window.claude&&window.claude.complete){
-      var prompt=systemPrompt+"\n\nConversation:\n"+hist.map(function(m){return (m.role==="user"?"User":"Assistant")+": "+m.text;}).join("\n")+"\nUser: "+q+"\nAssistant:";
-      return await window.claude.complete(prompt);
+      var prompt=(systemPrompt||buildContext(opts, q))+"\n\nConversation:\n"+hist.map(function(m){return (m.role==="user"?"User":"Assistant")+": "+m.text;}).join("\n")+"\nUser: "+q+"\nAssistant:";
+      return { answer:await window.claude.complete(prompt), action:null, timing:null, usage:null, stopReason:"" };
     }
-    return "AI backend not connected. On the tablet, set the shared AI backend URL; in preview, window.claude is used.";
+    return { answer:"AI backend not connected. On the tablet, set the shared AI backend URL; in preview, window.claude is used.", action:null, timing:null, usage:null, stopReason:"" };
   }
 
   // ---- memory (for Claude Cowork learning) ----
@@ -930,6 +1113,43 @@ window.OrderCore = {
     var today=new Date(); var ds=today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
     var curBr=""; try{ curBr=(window.__HIDEOUT_CAL&&window.__HIDEOUT_CAL.branch)||""; }catch(e){}
     return "\n\n--- CALENDAR EVENT CREATION ---\nWhen the user asks to ADD / book / schedule / put something ON the calendar, do BOTH:\n1) One short line confirming what you understood.\n2) A fenced code block starting with ```calendar-json containing ONLY valid JSON of this exact shape:\n```calendar-json\n{\"title\":\"Event title\",\"date\":\"YYYY-MM-DD\",\"start\":\"HH:mm\",\"end\":\"HH:mm\",\"allDay\":false,\"location\":\"\",\"notes\":\"\",\"store\":\"adelaide\"}\n```\nRules: store must be one of adelaide (340 Adelaide St), city (100 Edward St), valley (515 St Paul Tce)."+(curBr?(" The user's current branch is \""+curBr+"\" \u2014 default to it."):" Default to adelaide if the branch is not stated.")+" Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. If no end time given, leave end as start+1 hour. If no time at all, set allDay true. NEVER invent details the user did not give \u2014 ask instead. Emit the block ONLY for calendar-add requests; the app will show a confirm card before anything is created.";
+  }
+  /* The notice board on Today is the one thing every staff member reads at the start of a shift, so
+     the assistant gets a way to write to it. Same contract as calendar-add: emit a fenced block, the
+     app shows a confirm card, nothing is saved until the user taps it. The live board is included so
+     the model can answer "what's up there?" and refuse to post the same thing twice. */
+  function noticeHint(){
+    var s=rccData(), d=new Date();
+    var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    /* HideoutRCC.notices() also carries the auto-generated meeting notices, which are derived and
+       never stored - reading s.notices alone would tell the model the board is empty. */
+    var all=[]; try{ all=(window.HideoutRCC&&window.HideoutRCC.notices)?window.HideoutRCC.notices():(s.notices||[]); }catch(e){ all=(s.notices||[]); }
+    var live=all.filter(function(n){ return n && !n.archived && (!n.until || String(n.until)>=ds); });
+    var cur=live.length
+      ? ("\nCURRENTLY ON THE BOARD: "+live.slice(0,20).map(function(n){
+          return "\u2022 \""+String(n.title||"")+"\""+(n.until?(" (until "+n.until+")"):"")+(n.tone==="urgent"?" [urgent]":"")+(n.branch?(" ["+n.branch+"]"):"")+(String(n.body||"").trim()?(" \u2014 "+String(n.body).replace(/\s+/g," ").slice(0,120)):"");
+        }).join("\n")+"\nIf they ask what is on the board, answer from this list. Do not post a duplicate \u2014 say it is already up and offer to replace or update it instead.")
+      : "\nThe board is empty right now.";
+    var brs=(s.branches||[]).map(function(b){return b.name;}).join(", ");
+    return "\n\n--- STAFF NOTICE BOARD ---\n"
+      +"The Today page carries a notice board the whole team reads. When the user wants to TELL the staff something \u2014 a handover note, an update, a reminder, a roster or supplier change, or a checklist for the team \u2014 do BOTH:\n"
+      +"1) One short line confirming what you understood.\n"
+      +"2) A fenced code block starting with ```notice-json containing ONLY valid JSON of this exact shape:\n"
+      +"```notice-json\n{\"title\":\"Short headline\",\"body\":\"Full message\",\"from\":\""+ds+"\",\"until\":\"\",\"pin\":false,\"tone\":\"info\",\"branch\":\"\"}\n```\n"
+      +"Rules: title is the single line staff see on the board \u2014 keep it under about 60 characters and make it say the thing, not \"Update\". "
+      +"body is the full message and takes simple markdown: # heading, - bullet, **bold**, and a \u2610 at the start of a line for a tick-box \u2014 use \u2610 lines whenever they ask for a CHECKLIST. "
+      +"Today is "+ds+" \u2014 resolve relative dates (tomorrow, next Friday) to real dates. from defaults to today. Leave until \"\" unless they said when it stops mattering; set it when the message is only for a date or a week. "
+      +"tone is \"urgent\" only if they say it is urgent. pin true only if they ask to pin it. "
+      +"branch must be exactly one of: "+(brs||"(none on file)")+" \u2014 leave \"\" when it is for all stores. "
+      +"NEVER invent content they did not give \u2014 ask instead. Emit the block ONLY when they want something put in front of the team; the app shows a confirm card before anything is posted."
+      +cur;
+  }
+  function extractNotice(text){
+    if(!text) return null;
+    var m=text.match(/```\s*notice-json\s*([\s\S]*?)```/i); if(!m) return null;
+    var n; try{ n=JSON.parse(m[1].trim()); }catch(e){ return null; }
+    if(!n || !(String(n.title||"").trim() || String(n.body||"").trim())) return null;
+    return { intro:text.slice(0,m.index).trim(), notice:n };
   }
   function extractCalEvent(text){
     if(!text) return null;
@@ -959,84 +1179,121 @@ window.OrderCore = {
   }
 
   function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  // Assistant text → safe light HTML: **bold**, "# heading", "- bullet", "☐ tick-box". Everything is escaped first.
+  function mdLite(t){
+    var lines=esc(t).replace(/\r/g,"").split("\n");
+    return lines.map(function(l){
+      var m;
+      if((m=l.match(/^\s*#{1,3}\s+(.*)$/))) l="<span class='hb-h'>"+m[1]+"</span>";
+      else if((m=l.match(/^\s*[-*\u2022]\s+(.*)$/))) l="<span class='hb-li'>"+m[1]+"</span>";
+      else if((m=l.match(/^\s*[\u2610\u2611]\s*(.*)$/))) l="<span class='hb-tick'></span>"+m[1];
+      return l.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(^|\s)\*(?!\s)([^*]+?)\*(?=\s|[.,;:!?]|$)/g,"$1<i>$2</i>");
+    }).join("\n").replace(/\n(<span class='hb-(?:h|li)'>)/g,"$1").replace(/(<\/span>)\n(?=<span class='hb-(?:h|li)'>|$)/g,"$1");
+  }
+  function setMsg(el, text){ el.innerHTML=mdLite(text); }
 
   // ---- one-time stylesheet ----
   function injectCSS(){
     if(document.getElementById("hb-css")) return;
     var st=document.createElement("style"); st.id="hb-css";
     st.textContent=[
-"#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;border:none;cursor:pointer;background:#241d16;color:#fbf5ec;height:62px;padding:0;border-radius:999px;box-shadow:0 10px 30px rgba(20,12,4,.34),0 2px 6px rgba(20,12,4,.24);font-family:'SF Pro Text','Inter',system-ui,sans-serif;overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:62px}",
-"#hb-fab:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(20,12,4,.4)}",
-"#hb-fab:active{transform:scale(.96)}",
-"#hb-fab .hb-ring{position:absolute;inset:0;border-radius:999px;box-shadow:0 0 0 0 rgba(200,26,34,.5);animation:hb-pulse 3.4s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}",
-"@keyframes hb-pulse{0%{box-shadow:0 0 0 0 rgba(200,26,34,.5)}55%{box-shadow:0 0 0 12px rgba(200,26,34,0)}100%{box-shadow:0 0 0 0 rgba(200,26,34,0)}}",
-"#hb-fab .hb-mark{width:62px;height:62px;flex:0 0 62px;display:flex;align-items:center;justify-content:center}",
-"#hb-fab .hb-mark img{width:38px;height:38px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}",
-"#hb-fab .hb-mono{width:34px;height:34px;border-radius:50%;background:#c81a22;color:#fff;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;font-family:'SF Pro Display','Inter',system-ui}",
-"#hb-fab .hb-lab{white-space:nowrap;font-size:14.5px;font-weight:600;letter-spacing:-.01em;opacity:0;max-width:0;transition:opacity .2s,max-width .28s,padding .28s;padding:0;overflow:hidden}",
-"#hb-fab.hb-wide{width:auto;padding-right:22px}",
-"#hb-fab.hb-wide .hb-lab{opacity:1;max-width:170px;padding-left:2px}",
-"@media (prefers-reduced-motion:reduce){#hb-fab .hb-ring{animation:none}#hb-fab{transition:none}}",
-"#hb-panel{position:fixed;right:20px;bottom:96px;z-index:99999;width:min(392px,calc(100vw - 28px));height:min(600px,78vh);background:#fbf5ec;border-radius:22px;box-shadow:0 30px 70px rgba(20,12,4,.36),0 2px 10px rgba(20,12,4,.18);display:none;flex-direction:column;overflow:hidden;font-family:'SF Pro Text','Inter',system-ui,sans-serif;transform-origin:bottom right;animation:hb-in .26s cubic-bezier(.2,.7,.2,1)}",
-"@keyframes hb-in{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}",
-"#hb-panel .hb-head{position:relative;padding:16px 18px 15px;background:#241d16;color:#fbf5ec;display:flex;align-items:center;gap:12px}",
-"#hb-panel .hb-head::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,rgba(200,26,34,.55),transparent)}",
-"#hb-panel .hb-badge{width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:rgba(251,245,236,.08);border:1px solid rgba(251,245,236,.14);display:flex;align-items:center;justify-content:center}",
+/* Bauhaus v2 chrome (2026-09-09, owner: "챗봇도 디자인 적용") — same tokens as the IOS/RCC v2 screens:
+   Jost, paper #f3f1ec, ink #141312, yellow #f2c100 = active, blue #1e4fb0 = info, red #ec3013 = urgent.
+   Radius 0, 3px rules, hard offset shadows. Scoped to #hb-fab / #hb-panel so host apps are untouched. */
+"@import url('https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap');",
+"#hb-fab,#hb-panel{--hb-paper:#f3f1ec;--hb-ink:#141312;--hb-yellow:#f2c100;--hb-blue:#1e4fb0;--hb-red:#ec3013;--hb-red-t:#b82412;--hb-muted:rgba(20,19,18,.72);--hb-line:rgba(20,19,18,.28);--hb-font:'Jost',Archivo,system-ui,sans-serif;font-family:var(--hb-font)!important}",
+"#hb-fab *,#hb-panel *{font-family:var(--hb-font)!important;border-radius:0!important;box-sizing:border-box}",
+"@keyframes hb-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}",
+"@keyframes hb-slide{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}",
+"@keyframes hb-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:none;opacity:1}}",
+"@keyframes hb-wipe{from{transform:scaleX(0)}to{transform:scaleX(1)}}",
+"#hb-fab{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;align-items:center;gap:0;cursor:pointer;background:var(--hb-ink);color:var(--hb-paper);height:60px;padding:0;border:3px solid var(--hb-ink);box-shadow:5px 5px 0 var(--hb-yellow);overflow:hidden;transition:transform .16s cubic-bezier(.2,.7,.2,1),box-shadow .2s,width .28s cubic-bezier(.2,.7,.2,1);width:60px;animation:hb-pop .5s .3s cubic-bezier(.2,.8,.2,1) both}",
+"#hb-fab:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--hb-yellow)}",
+"#hb-fab:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--hb-yellow)}",
+"#hb-fab .hb-ring{display:none}",
+"#hb-fab .hb-mark{width:54px;height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:center}",
+"#hb-fab .hb-mark img{width:34px;height:34px;object-fit:contain;filter:brightness(0) invert(1)}",
+"#hb-fab .hb-mono{width:32px;height:32px;background:var(--hb-yellow);color:var(--hb-ink);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center}",
+"#hb-fab .hb-lab{white-space:nowrap;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:0;max-width:0;transition:opacity .2s,max-width .28s,padding .28s;padding:0;overflow:hidden}",
+"#hb-fab.hb-wide{width:auto;padding-right:18px}",
+"#hb-fab.hb-wide .hb-lab{opacity:1;max-width:190px;padding-left:2px}",
+"#hb-panel{position:fixed;right:20px;bottom:96px;z-index:99999;width:min(400px,calc(100vw - 28px));height:min(620px,78vh);background:var(--hb-paper);color:var(--hb-ink);border:3px solid var(--hb-ink);box-shadow:10px 10px 0 var(--hb-ink);display:none;flex-direction:column;overflow:hidden;transform-origin:bottom right;animation:hb-rise .26s cubic-bezier(.2,.7,.2,1)}",
+"#hb-panel .hb-head{position:relative;padding:12px 14px;background:var(--hb-ink);color:var(--hb-paper);display:flex;align-items:center;gap:12px;border-bottom:6px solid var(--hb-yellow)}",
+"#hb-panel .hb-badge{width:44px;height:44px;flex:0 0 44px;background:var(--hb-yellow);border:2px solid var(--hb-yellow);display:flex;align-items:center;justify-content:center;animation:hb-pop .5s .1s both}",
 "#hb-panel .hb-badge img{width:30px;height:30px;object-fit:contain}",
-"#hb-panel .hb-badge .hb-mono{width:30px;height:30px;border-radius:50%;background:#c81a22;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}",
-"#hb-panel .hb-ttl{font-family:'SF Pro Display','Inter',system-ui;font-weight:600;font-size:16px;letter-spacing:-.02em;line-height:1.1}",
-"#hb-panel .hb-sub{font-size:11.5px;color:rgba(251,245,236,.62);margin-top:2px;letter-spacing:.01em}",
-"#hb-panel .hb-x{margin-left:auto;background:rgba(251,245,236,.1);border:none;color:#fbf5ec;width:30px;height:30px;border-radius:50%;font-size:17px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s}",
-"#hb-panel .hb-x:hover{background:rgba(251,245,236,.2)}",
-"#hb-msgs{flex:1;overflow-y:auto;padding:16px 15px 6px;display:flex;flex-direction:column;gap:11px;scroll-behavior:smooth}",
-"#hb-msgs .hb-b{flex:0 0 auto;max-width:87%;padding:10px 13px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}",
-"#hb-msgs .hb-u{align-self:flex-end;background:#c81a22;color:#fff;border-radius:16px 16px 5px 16px;box-shadow:0 1px 2px rgba(200,26,34,.25)}",
-"#hb-msgs .hb-a{align-self:flex-start;background:#fff;color:#2a2018;border:1px solid rgba(70,45,20,.1);border-radius:16px 16px 16px 5px}",
-"#hb-msgs .hb-chips{align-self:flex-start;display:flex;flex-wrap:wrap;gap:7px;margin-top:1px;max-width:100%}",
-"#hb-msgs .hb-chip{border:1px solid rgba(70,45,20,.18);background:#fff;color:#5f4a33;border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;transition:transform .12s,border-color .15s,color .15s}",
-"#hb-msgs .hb-chip:hover{border-color:#c81a22;color:#c81a22}",
-"#hb-msgs .hb-chip:active{transform:scale(.95)}",
-"#hb-msgs .hb-dots{display:inline-flex;gap:4px;align-items:center;padding:4px 2px}",
-"#hb-msgs .hb-dots i{width:6px;height:6px;border-radius:50%;background:#c2ac90;animation:hb-bounce 1.2s infinite}",
-"#hb-msgs .hb-dots i:nth-child(2){animation-delay:.15s}#hb-msgs .hb-dots i:nth-child(3){animation-delay:.3s}",
-"@keyframes hb-bounce{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}",
-"#hb-card{align-self:stretch;flex:0 0 auto;background:#fff;border:1px solid rgba(70,45,20,.14);border-radius:16px;overflow:hidden;box-shadow:0 6px 18px rgba(20,12,4,.08)}",
-"#hb-card .hb-f{width:100%;box-sizing:border-box;border:1px solid rgba(70,45,20,.18);background:#fff;border-radius:9px;padding:9px 10px;font-size:16px;color:#2a2018;outline:none;font-family:inherit}",
-"#hb-card .hb-f:focus{border-color:#c81a22;box-shadow:0 0 0 3px rgba(200,26,34,.1)}",
-"#hb-card .hb-lbl{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#a2917a;text-transform:uppercase;margin:13px 0 6px}",
-"#hb-card .hb-cc{border:1px solid rgba(70,45,20,.2);background:#fff;color:#5f4a33;border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;transition:transform .12s,background .15s,border-color .15s,color .15s}",
-"#hb-card .hb-cc.on{background:#c81a22;border-color:#c81a22;color:#fff}",
-"#hb-card .hb-cc:active{transform:scale(.94)}",
-"#hb-card .hb-rm{border:none;background:none;color:#c0a98d;font-size:19px;cursor:pointer;line-height:1;padding:0 3px;flex:0 0 auto}",
-"#hb-card .hb-rm:hover{color:#c81a22}",
-"#hb-card .hb-mk{width:15px;text-align:center;font-weight:700;flex:0 0 15px}",
-"#hb-panel .hb-foot{padding:11px 12px 13px;border-top:1px solid rgba(70,45,20,.1);background:#fbf5ec;display:flex;gap:9px;align-items:center}",
-"#hb-panel .hb-in{flex:1;border:1px solid rgba(70,45,20,.16);background:#fff;border-radius:999px;padding:11px 15px;font-size:16px;outline:none;color:#2a2018;transition:border-color .15s,box-shadow .15s}",
-"#hb-panel .hb-in:focus{border-color:#c81a22;box-shadow:0 0 0 3px rgba(200,26,34,.12)}",
-"#hb-panel .hb-send{border:none;border-radius:50%;width:42px;height:42px;flex:0 0 42px;background:#c81a22;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s,background .15s}",
-"#hb-panel .hb-send:hover{background:#a9141b}#hb-panel .hb-send:active{transform:scale(.92)}",
-"#hb-panel .hb-tabs{display:flex;gap:0;background:#241d16;padding:0 12px}",
-"#hb-panel .hb-tabs button{flex:0 0 auto;background:none;border:none;color:rgba(251,245,236,.6);font-size:13px;font-weight:600;padding:9px 12px 10px;cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;font-family:inherit}",
-"#hb-panel .hb-tabs button.on{color:#fbf5ec;border-bottom-color:#c81a22}",
-"#hb-panel .hb-tabs .hb-n{background:#c81a22;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;padding:0 4px;border-radius:8px;display:none;align-items:center;justify-content:center}",
+"#hb-panel .hb-badge .hb-mono{width:30px;height:30px;background:var(--hb-ink);color:var(--hb-yellow);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}",
+"#hb-panel .hb-ttl{font-weight:700;font-size:17px;letter-spacing:.02em;line-height:1.05;text-transform:uppercase;display:flex;align-items:center;gap:8px;animation:hb-slide .45s .05s both}",
+"#hb-panel .hb-sub{font-size:12px;color:rgba(243,241,236,.72);margin-top:3px;letter-spacing:.02em}",
+"#hb-panel .hb-x{margin-left:auto;background:transparent;border:2px solid rgba(243,241,236,.35);color:var(--hb-paper);width:44px;height:44px;font-size:22px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;flex:0 0 44px}",
+"#hb-panel .hb-x:hover{background:var(--hb-paper);color:var(--hb-ink)}",
+"#hb-panel .hb-tabs{display:flex;gap:0;background:var(--hb-ink);padding:0 14px;border-bottom:3px solid var(--hb-ink)}",
+"#hb-panel .hb-tabs button{flex:0 0 auto;background:none;border:0;color:rgba(243,241,236,.62);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:10px 12px 11px;min-height:44px;cursor:pointer;border-bottom:4px solid transparent;display:flex;align-items:center;gap:6px}",
+"#hb-panel .hb-tabs button.on{color:var(--hb-yellow);border-bottom-color:var(--hb-yellow)}",
+"#hb-panel .hb-tabs .hb-n{background:var(--hb-red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;padding:0 4px;display:none;align-items:center;justify-content:center}",
 "#hb-panel .hb-tabs .hb-n.show{display:inline-flex}",
-"#hb-ins{flex:1;overflow-y:auto;padding:14px 15px;display:none;flex-direction:column;gap:12px}",
-"#hb-ins .hb-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#fff;border:1px solid rgba(70,45,20,.12);border-radius:13px;padding:10px 12px}",
-"#hb-ins .hb-tog{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#5f4a33;cursor:pointer;font-weight:600}",
-"#hb-ins .hb-sw{width:34px;height:20px;border-radius:999px;background:#d9cdb8;position:relative;transition:background .18s;flex:0 0 auto}",
-"#hb-ins .hb-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .18s;box-shadow:0 1px 2px rgba(0,0,0,.25)}",
-"#hb-ins .hb-tog.on .hb-sw{background:#3f9e63}#hb-ins .hb-tog.on .hb-sw::after{left:16px}",
-"#hb-ins .hb-run{margin-left:auto;border:1px solid rgba(70,45,20,.2);background:#fff;color:#6b5335;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}",
-"#hb-ins .hb-run:active{transform:scale(.95)}",
-"#hb-ins .hb-sec{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#a2917a;text-transform:uppercase;margin:2px 2px -2px}",
-"#hb-ins .hb-find{display:flex;gap:9px;background:#fff;border:1px solid rgba(70,45,20,.1);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45;color:#2a2018}",
-"#hb-ins .hb-sev{width:9px;height:9px;border-radius:50%;flex:0 0 9px;margin-top:5px}",
-"#hb-ins .hb-know{background:#fff;border:1px solid rgba(70,45,20,.1);border-radius:12px;padding:11px 13px}",
-"#hb-ins .hb-know .q{font-weight:600;font-size:13px;color:#241d16;line-height:1.4}",
-"#hb-ins .hb-know .a{font-size:12.5px;color:#4a3d2e;line-height:1.5;margin-top:5px}",
-"#hb-ins .hb-empty{color:#a2917a;font-size:12.5px;text-align:center;padding:14px}",
-"#hb-panel .hb-live{width:7px;height:7px;border-radius:50%;background:#3f9e63;margin-left:2px;box-shadow:0 0 0 0 rgba(63,158,99,.6);animation:hb-live 2.4s infinite}",
-"@keyframes hb-live{0%{box-shadow:0 0 0 0 rgba(63,158,99,.55)}70%{box-shadow:0 0 0 6px rgba(63,158,99,0)}100%{box-shadow:0 0 0 0 rgba(63,158,99,0)}}"
+"#hb-msgs{flex:1;overflow-y:auto;padding:16px 14px 6px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;background-image:linear-gradient(rgba(20,19,18,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(20,19,18,.06) 1px,transparent 1px);background-size:22px 22px}",
+"#hb-msgs .hb-b{flex:0 0 auto;max-width:88%;padding:10px 13px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-break:break-word;animation:hb-rise .3s cubic-bezier(.2,.8,.2,1) both}",
+"#hb-msgs .hb-a b{font-weight:700}#hb-msgs .hb-a .hb-h{display:block;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:13px;margin:4px 0 2px}#hb-msgs .hb-a .hb-li{display:block;padding-left:14px;position:relative}#hb-msgs .hb-a .hb-li::before{content:'';position:absolute;left:0;top:9px;width:6px;height:6px;background:var(--hb-ink)}#hb-msgs .hb-a .hb-tick{display:inline-block;width:14px;height:14px;border:2px solid var(--hb-ink);vertical-align:-2px;margin-right:6px;background:#fff}",
+"#hb-msgs .hb-u{align-self:flex-end;background:var(--hb-ink);color:var(--hb-paper);border:2px solid var(--hb-ink);box-shadow:4px 4px 0 var(--hb-yellow)}",
+"#hb-msgs .hb-a{align-self:flex-start;background:#fff;color:var(--hb-ink);border:2px solid var(--hb-ink)}",
+"#hb-msgs .hb-a.hb-err{border-color:var(--hb-red);box-shadow:4px 4px 0 var(--hb-red)}",
+"#hb-msgs .hb-chips{align-self:flex-start;display:flex;flex-wrap:wrap;gap:7px;margin-top:1px;max-width:100%}",
+"#hb-msgs .hb-chip{border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:9px 12px;min-height:40px;font-size:13px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:transform .12s,background .15s;animation:hb-rise .3s both}",
+"#hb-msgs .hb-chip:nth-child(2){animation-delay:.05s}#hb-msgs .hb-chip:nth-child(3){animation-delay:.1s}#hb-msgs .hb-chip:nth-child(4){animation-delay:.15s}",
+"#hb-msgs .hb-chip:hover{background:var(--hb-yellow)}",
+"#hb-msgs .hb-chip:active{transform:translate(1px,1px)}",
+"#hb-msgs .hb-dots{display:inline-flex;gap:5px;align-items:center;padding:4px 2px}",
+"#hb-msgs .hb-dots i{width:8px;height:8px;background:var(--hb-ink);animation:hb-bounce 1.2s infinite}",
+"#hb-msgs .hb-dots i:nth-child(1){border-radius:50%!important;background:var(--hb-blue)}#hb-msgs .hb-dots i:nth-child(2){animation-delay:.15s;background:var(--hb-red)}#hb-msgs .hb-dots i:nth-child(3){animation-delay:.3s;width:0;height:0;background:none;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--hb-yellow)}",
+"@keyframes hb-bounce{0%,60%,100%{opacity:.4;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}",
+"#hb-card{align-self:stretch;flex:0 0 auto;background:#fff;border:3px solid var(--hb-ink);box-shadow:6px 6px 0 var(--hb-ink);overflow:hidden;animation:hb-rise .3s both;margin-right:6px}",
+"#hb-card .hb-ch{padding:10px 14px;background:var(--hb-ink);color:var(--hb-paper);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;border-bottom:4px solid var(--hb-yellow)}",
+"#hb-card .hb-cb{padding:12px 14px;font-size:15px;line-height:1.55;color:var(--hb-ink)}",
+"#hb-card .hb-meta{color:var(--hb-muted);font-size:12.5px;font-weight:500}",
+"#hb-card .hb-f{width:100%;box-sizing:border-box;border:2px solid var(--hb-ink);background:#fff;padding:9px 10px;font-size:16px;color:var(--hb-ink);outline:none;min-height:44px}",
+"#hb-card .hb-f:focus{box-shadow:3px 3px 0 var(--hb-yellow)}",
+"#hb-card select.hb-f{appearance:auto}",
+"#hb-card .hb-lbl{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--hb-muted);text-transform:uppercase;margin:13px 0 6px}",
+"#hb-card .hb-cc{border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:8px 12px;min-height:40px;font-size:13px;font-weight:700;cursor:pointer;transition:transform .12s,background .15s}",
+"#hb-card .hb-cc.on{background:var(--hb-ink);color:var(--hb-yellow)}",
+"#hb-card .hb-cc:hover:not(.on){background:var(--hb-yellow)}",
+"#hb-card .hb-cc:active{transform:translate(1px,1px)}",
+"#hb-card .hb-btn{border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:11px 16px;min-height:44px;font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:transform .12s,background .15s}",
+"#hb-card .hb-btn.hb-primary{flex:1;background:var(--hb-yellow);box-shadow:3px 3px 0 var(--hb-ink)}",
+"#hb-card .hb-btn.hb-primary:hover{background:var(--hb-ink);color:var(--hb-yellow)}",
+"#hb-card .hb-btn:disabled{opacity:.5;cursor:default}",
+"#hb-card .hb-dash{margin-top:7px;border:2px dashed var(--hb-line);background:#fff;color:var(--hb-ink);padding:9px 0;width:100%;min-height:44px;font-size:13px;font-weight:700;cursor:pointer}",
+"#hb-card .hb-dash:hover{border-color:var(--hb-ink);background:var(--hb-yellow)}",
+"#hb-card .hb-rm{border:none;background:none;color:var(--hb-muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;flex:0 0 auto;min-width:32px;min-height:44px}",
+"#hb-card .hb-rm:hover{color:var(--hb-red-t)}",
+"#hb-card .hb-mk{width:15px;text-align:center;font-weight:700;flex:0 0 15px}",
+"#hb-card .hb-note{font-size:12.5px;color:var(--hb-muted);margin-top:11px;line-height:1.45}",
+"#hb-card .hb-cur{color:var(--hb-muted);font-size:15px;font-weight:700}",
+"#hb-panel .hb-foot{padding:10px 12px 12px;border-top:3px solid var(--hb-ink);background:var(--hb-paper);display:flex;gap:8px;align-items:center}",
+"#hb-panel .hb-in{flex:1;min-width:0;border:2px solid var(--hb-ink);background:#fff;padding:10px 13px;min-height:44px;font-size:16px;outline:none;color:var(--hb-ink);transition:box-shadow .15s}",
+"#hb-panel .hb-in:focus{box-shadow:3px 3px 0 var(--hb-yellow)}",
+"#hb-panel .hb-send{border:2px solid var(--hb-ink);width:44px;height:44px;flex:0 0 44px;background:var(--hb-yellow);color:var(--hb-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s,background .15s,color .15s}",
+"#hb-panel .hb-send:hover{background:var(--hb-ink);color:var(--hb-yellow)}#hb-panel .hb-send:active{transform:translate(1px,1px)}",
+"#hb-panel .hb-send:disabled{opacity:.5;cursor:default}",
+"#hb-ins{flex:1;overflow-y:auto;padding:14px;display:none;flex-direction:column;gap:12px}",
+"#hb-ins .hb-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#fff;border:2px solid var(--hb-ink);padding:10px 12px}",
+"#hb-ins .hb-tog{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--hb-ink);cursor:pointer;font-weight:700;min-height:32px}",
+"#hb-ins .hb-sw{width:38px;height:22px;background:#fff;border:2px solid var(--hb-ink);position:relative;transition:background .18s;flex:0 0 auto}",
+"#hb-ins .hb-sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;background:var(--hb-ink);transition:left .18s}",
+"#hb-ins .hb-tog.on .hb-sw{background:var(--hb-yellow)}#hb-ins .hb-tog.on .hb-sw::after{left:18px}",
+"#hb-ins .hb-run{margin-left:auto;border:2px solid var(--hb-ink);background:#fff;color:var(--hb-ink);padding:8px 12px;min-height:40px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;white-space:nowrap}",
+"#hb-ins .hb-run:hover{background:var(--hb-yellow)}",
+"#hb-ins .hb-sec{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--hb-ink);text-transform:uppercase;margin:6px 0 -4px;padding-bottom:6px;border-bottom:3px solid var(--hb-ink)}",
+"#hb-ins .hb-find{display:flex;gap:10px;background:#fff;border:2px solid var(--hb-ink);padding:10px 12px;font-size:14px;line-height:1.45;color:var(--hb-ink)}",
+"#hb-ins .hb-sev{width:10px;height:10px;flex:0 0 10px;margin-top:6px}",
+"#hb-ins .hb-know{background:#fff;border:2px solid var(--hb-ink);padding:11px 13px}",
+"#hb-ins .hb-know .q{font-weight:700;font-size:14px;color:var(--hb-ink);line-height:1.4}",
+"#hb-ins .hb-know .a{font-size:13.5px;color:var(--hb-muted);line-height:1.5;margin-top:5px}",
+"#hb-ins .hb-empty{color:var(--hb-muted);font-size:13px;text-align:left;padding:10px 2px}",
+"#hb-panel .hb-live{width:9px;height:9px;border-radius:50%!important;background:var(--hb-blue);margin-left:2px;box-shadow:0 0 0 0 rgba(30,79,176,.6);animation:hb-live 2.4s infinite}",
+"@keyframes hb-live{0%{box-shadow:0 0 0 0 rgba(30,79,176,.55)}70%{box-shadow:0 0 0 6px rgba(30,79,176,0)}100%{box-shadow:0 0 0 0 rgba(30,79,176,0)}}",
+"@media (max-width:640px){#hb-panel{right:0;left:0;bottom:0;width:100%;height:min(82vh,680px);border-left:0;border-right:0;border-bottom:0;box-shadow:none;padding-bottom:env(safe-area-inset-bottom,0px)}#hb-panel .hb-foot{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}}",
+"@media (prefers-reduced-motion:reduce){#hb-fab,#hb-panel,#hb-fab *,#hb-panel *{animation:none!important;transition:none!important}}"
     ].join("");
     document.head.appendChild(st);
   }
@@ -1060,7 +1317,7 @@ window.OrderCore = {
     var msgs=panel.querySelector("#hb-msgs"), input=panel.querySelector(".hb-in"), send=panel.querySelector(".hb-send"), xBtn=panel.querySelector(".hb-x");
     var chatwrap=panel.querySelector("#hb-chatwrap"), insEl=panel.querySelector("#hb-ins"), nBadge=panel.querySelector("#hb-n"), liveDot=panel.querySelector("#hb-live"), curView="chat";
     function scroll(){ msgs.scrollTop=msgs.scrollHeight; }
-    function bubble(role,text){ var d=document.createElement("div"); d.className="hb-b "+(role==="user"?"hb-u":"hb-a"); d.textContent=text; msgs.appendChild(d); scroll(); return d; }
+    function bubble(role,text){ var d=document.createElement("div"); d.className="hb-b "+(role==="user"?"hb-u":"hb-a"); if(role==="user") d.textContent=text; else setMsg(d,text); msgs.appendChild(d); scroll(); return d; }
     function typing(){ var d=document.createElement("div"); d.className="hb-b hb-a"; d.innerHTML="<span class='hb-dots'><i></i><i></i><i></i></span>"; msgs.appendChild(d); scroll(); return d; }
     function chips(){ var w=document.createElement("div"); w.className="hb-chips"; sug.forEach(function(s){ var c=document.createElement("button"); c.className="hb-chip"; c.textContent=s; c.onclick=function(){ input.value=s; if(/[\u2026.]$/.test(s.trim())){ input.focus(); } else { ask(); } }; w.appendChild(c); }); msgs.appendChild(w); scroll(); }
 
@@ -1070,20 +1327,20 @@ window.OrderCore = {
       var wrap=document.createElement("div"); wrap.id="hb-card";
       var cats=rccCategories(), names=ingredientNames(), listId="hb-il-"+Math.random().toString(36).slice(2,7), UNITS=["g","kg","ml","L","each"];
       var chosen={cat:seed.category||""};
-      var H="<div style='padding:12px 14px;background:#241d16;color:#fff;font-family:\"SF Pro Display\",Inter,system-ui;font-weight:600;font-size:14.5px;letter-spacing:-.01em'>Build a recipe</div>";
+      var H="<div class='hb-ch'>Build a recipe</div>";
       var dl="<datalist id='"+listId+"'>"+names.map(function(n){return "<option value=\""+esc(n)+"\"></option>";}).join("")+"</datalist>";
-      var B="<div style='padding:4px 14px 14px'>"+dl;
+      var B="<div style='padding:4px 14px 14px;background:#fff'>"+dl;
       B+="<div class='hb-lbl'>Name</div><input class='hb-f' data-name placeholder='e.g. Iced Caramel Latte' value=\""+esc(seed.name||"")+"\"/>";
       B+="<div class='hb-lbl'>Category</div><div data-cats style='display:flex;flex-wrap:wrap;gap:6px'>"
         +cats.map(function(c){ return "<button type='button' class='hb-cc"+(c===chosen.cat?" on":"")+"' data-cat=\""+esc(c)+"\">"+esc(c)+"</button>"; }).join("")
         +"<button type='button' class='hb-cc' data-catcustom>+ Custom</button></div>"
         +"<input class='hb-f' data-catinput placeholder='Custom category' style='display:none;margin-top:6px'/>";
       B+="<div class='hb-lbl'>Ingredients</div><div data-rows style='display:flex;flex-direction:column;gap:6px'></div>"
-        +"<button type='button' data-addrow style='margin-top:7px;border:1px dashed rgba(70,45,20,.3);background:#fff;color:#6b5335;border-radius:9px;padding:8px 0;width:100%;font-size:12.5px;font-weight:500;cursor:pointer'>+ Add ingredient</button>";
+        +"<button type='button' data-addrow class='hb-dash'>+ Add ingredient</button>";
       B+="<div class='hb-lbl'>Method</div><textarea class='hb-f' data-proc rows='4' placeholder='1. …&#10;2. …' style='resize:vertical;line-height:1.5'>"+esc(seed.procedure||"")+"</textarea>";
-      B+="<div class='hb-lbl'>Sell price (optional)</div><div style='display:flex;align-items:center;gap:7px'><span style='color:#a2917a;font-size:15px'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.sellPrice?esc(seed.sellPrice):"")+"\" style='width:120px'/></div>";
-      B+="<div data-note style='font-size:11.5px;color:#8a7a63;margin-top:11px;line-height:1.45'></div>";
-      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' style='flex:1;border:none;border-radius:999px;padding:11px 0;background:#c81a22;color:#fff;font-weight:600;font-size:13.5px;cursor:pointer'>Save to Recipes</button><button type='button' data-act='cancel' style='border:1px solid rgba(70,45,20,.22);border-radius:999px;padding:11px 16px;background:#fff;color:#6b5335;font-size:13.5px;cursor:pointer'>Cancel</button></div>";
+      B+="<div class='hb-lbl'>Sell price (optional)</div><div style='display:flex;align-items:center;gap:7px'><span class='hb-cur'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.sellPrice?esc(seed.sellPrice):"")+"\" style='width:120px'/></div>";
+      B+="<div data-note class='hb-note'></div>";
+      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' class='hb-btn hb-primary'>Save to Recipes</button><button type='button' data-act='cancel' class='hb-btn'>Cancel</button></div>";
       B+="</div>";
       wrap.innerHTML=H+B; msgs.appendChild(wrap); scroll();
 
@@ -1091,14 +1348,14 @@ window.OrderCore = {
       function refreshNote(){ var miss=0; [].forEach.call(rowsEl.querySelectorAll("[data-nm]"),function(el){ if(!el.value.trim()) return; var mt=null; try{ mt=window.HideoutRCC.matchIngredient(el.value); }catch(e){} if(!mt) miss++; }); noteEl.textContent = miss? (miss+" new ingredient"+(miss>1?"s":"")+" will be created (price $0 \u2014 set later in Ingredients).") : ""; }
       function addRow(nm,qty,un){
         var row=document.createElement("div"); row.style.cssText="display:flex;gap:6px;align-items:center";
-        row.innerHTML="<span class='hb-mk' data-mk style='color:#c0a98d'>+</span>"
+        row.innerHTML="<span class='hb-mk' data-mk style='color:rgba(20,19,18,.45)'>+</span>"
           +"<input list='"+listId+"' data-nm class='hb-f' placeholder='Ingredient' style='flex:1;min-width:0' value=\""+esc(nm||"")+"\"/>"
           +"<input data-qty class='hb-f' type='number' inputmode='decimal' placeholder='Qty' style='width:60px;text-align:right' value=\""+(qty!=null&&qty!==""?esc(qty):"")+"\"/>"
           +"<select data-un class='hb-f' style='width:66px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(un||"g")?" selected":"")+">"+u+"</option>";}).join("")+"</select>"
           +"<button type='button' class='hb-rm' data-rm aria-label='Remove'>\u00d7</button>";
         rowsEl.appendChild(row);
         var nmEl=row.querySelector("[data-nm]"), mk=row.querySelector("[data-mk]");
-        function upd(){ var mt=null; try{ mt=nmEl.value.trim()?window.HideoutRCC.matchIngredient(nmEl.value):null; }catch(e){} if(mt){ mk.textContent="\u2713"; mk.style.color="#3f9e63"; } else { mk.textContent="+"; mk.style.color="#c0a98d"; } refreshNote(); }
+        function upd(){ var mt=null; try{ mt=nmEl.value.trim()?window.HideoutRCC.matchIngredient(nmEl.value):null; }catch(e){} if(mt){ mk.textContent="\u2713"; mk.style.color="#1e4fb0"; } else { mk.textContent="+"; mk.style.color="rgba(20,19,18,.45)"; } refreshNote(); }
         nmEl.addEventListener("input",upd); upd();
         row.querySelector("[data-rm]").onclick=function(){ row.remove(); if(!rowsEl.children.length) addRow(); refreshNote(); };
       }
@@ -1138,18 +1395,18 @@ window.OrderCore = {
       var wrap=document.createElement("div"); wrap.id="hb-card";
       var cats=rccCategories(), UNITS=["g","kg","ml","L","each"];
       var chosen={cat:seed.category||""};
-      var H="<div style='padding:12px 14px;background:#241d16;color:#fff;font-family:\"SF Pro Display\",Inter,system-ui;font-weight:600;font-size:14.5px;letter-spacing:-.01em'>Add an ingredient</div>";
-      var B="<div style='padding:4px 14px 14px'>";
+      var H="<div class='hb-ch'>Add an ingredient</div>";
+      var B="<div style='padding:4px 14px 14px;background:#fff'>";
       B+="<div class='hb-lbl'>Name</div><input class='hb-f' data-name placeholder='e.g. Full Cream Milk 2L' value=\""+esc(seed.name||"")+"\"/>";
       B+="<div class='hb-lbl'>Category</div><div data-cats style='display:flex;flex-wrap:wrap;gap:6px'>"
         +cats.map(function(c){ return "<button type='button' class='hb-cc"+(c===chosen.cat?" on":"")+"' data-cat=\""+esc(c)+"\">"+esc(c)+"</button>"; }).join("")
         +"<button type='button' class='hb-cc' data-catcustom>+ Custom</button></div>"
         +"<input class='hb-f' data-catinput placeholder='Custom category' style='display:none;margin-top:6px'/>";
-      B+="<div class='hb-lbl'>Purchase price</div><div style='display:flex;align-items:center;gap:7px'><span style='color:#a2917a;font-size:15px'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.purchasePrice!=null&&seed.purchasePrice!==""?esc(seed.purchasePrice):"")+"\" style='width:120px'/></div>";
+      B+="<div class='hb-lbl'>Purchase price</div><div style='display:flex;align-items:center;gap:7px'><span class='hb-cur'>$</span><input class='hb-f' data-price type='number' inputmode='decimal' placeholder='0.00' value=\""+(seed.purchasePrice!=null&&seed.purchasePrice!==""?esc(seed.purchasePrice):"")+"\" style='width:120px'/></div>";
       B+="<div class='hb-lbl'>Purchase pack (qty + unit)</div><div style='display:flex;gap:6px;align-items:center'><input class='hb-f' data-pqty type='number' inputmode='decimal' placeholder='Qty' value=\""+(seed.purchaseQty!=null&&seed.purchaseQty!==""?esc(seed.purchaseQty):"")+"\" style='width:80px;text-align:right'/><select data-punit class='hb-f' style='width:80px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(seed.purchaseUnit||"each")?" selected":"")+">"+u+"</option>";}).join("")+"</select></div>";
       B+="<div class='hb-lbl'>Use unit (in recipes)</div><select data-uunit class='hb-f' style='width:120px;padding:9px 5px'>"+UNITS.map(function(u){return "<option"+(u===(seed.useUnit||"g")?" selected":"")+">"+u+"</option>";}).join("")+"</select>";
-      B+="<div data-note style='font-size:11.5px;color:#8a7a63;margin-top:11px;line-height:1.45'>Allergens are auto-detected from the name — fine-tune later in the Ingredients tab.</div>";
-      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' style='flex:1;border:none;border-radius:999px;padding:11px 0;background:#c81a22;color:#fff;font-weight:600;font-size:13.5px;cursor:pointer'>Save to Ingredients</button><button type='button' data-act='cancel' style='border:1px solid rgba(70,45,20,.22);border-radius:999px;padding:11px 16px;background:#fff;color:#6b5335;font-size:13.5px;cursor:pointer'>Cancel</button></div>";
+      B+="<div data-note class='hb-note'>Allergens are auto-detected from the name — fine-tune later in the Ingredients tab.</div>";
+      B+="<div style='display:flex;gap:9px;margin-top:13px'><button type='button' data-act='save' class='hb-btn hb-primary'>Save to Ingredients</button><button type='button' data-act='cancel' class='hb-btn'>Cancel</button></div>";
       B+="</div>";
       wrap.innerHTML=H+B; msgs.appendChild(wrap); scroll();
       var noteEl=wrap.querySelector("[data-note]");
@@ -1172,7 +1429,7 @@ window.OrderCore = {
     // ---- two-agent engine: Auditor (finds data errors) + Learner (self-Q&A → memory) ----
     var AG_KEY="hideout_agents";
     function agLoad(){ try{ return JSON.parse(localStorage.getItem(AG_KEY)||"{}"); }catch(e){ return {}; } }
-    var agents=agLoad(); if(agents.on===undefined) agents.on=(opts.agents!==false); agents.audit=agents.audit||[]; agents.knowledge=agents.knowledge||[]; agents.viewedTs=agents.viewedTs||0;
+    var agents=agLoad(); if(agents.on===undefined) agents.on=(opts.agents===true);   // GPT review 2026-09-09: background agents are opt-in agents.audit=agents.audit||[]; agents.knowledge=agents.knowledge||[]; agents.viewedTs=agents.viewedTs||0;
     function agSave(){ try{ localStorage.setItem(AG_KEY, JSON.stringify(agents)); }catch(e){} }
     function aiAvail(){ if(window.claude&&window.claude.complete) return true; var b=(typeof opts.backendUrl==="function")?opts.backendUrl():opts.backendUrl; return !!b; }
     function unseenCount(){ return agents.audit.filter(function(f){ return f.ts>agents.viewedTs; }).length + agents.knowledge.filter(function(k){ return k.ts>agents.viewedTs; }).length; }
@@ -1180,7 +1437,7 @@ window.OrderCore = {
 
     async function runAuditor(){
       var prompt="TASK: Act as a data-quality auditor for The Hideout apps. Using ONLY the data above, list up to 5 of the most important concrete problems you can see — e.g. a menu dish missing a sell price, an ingredient missing purchase price or quantity, a likely-missing allergen, a recipe item whose unit doesn't match its ingredient, a menu dish whose margin is below its target, an ingredient a recipe references but that is archived/missing, or an obvious duplicate. Output ONE per line EXACTLY as: sev|item name|the issue  (sev = high, med or low). If you genuinely find nothing worth flagging, reply with just: NONE.";
-      var r=await callAI(opts, buildContext(opts), [], prompt);
+      var r=(await callAI(opts, buildContext(opts), [], prompt)).answer;
       if(/^\s*none\s*$/i.test(r||"")) { agents.lastAudit=Date.now(); agSave(); return 0; }
       var lines=(r||"").split("\n").map(function(x){return x.trim();}).filter(function(x){return x&&x.indexOf("|")>-1;});
       var parsed=lines.map(function(l){ var p=l.replace(/^[-*\d.\s]+/,"").split("|"); var sev=(p[0]||"med").toLowerCase().replace(/[^a-z]/g,""); if(["high","med","low"].indexOf(sev)<0) sev="med"; return { sev:sev, item:(p[1]||"").trim(), issue:(p.slice(2).join("|")||p[1]||l).trim(), ts:Date.now() }; }).filter(function(f){ return f.issue; });
@@ -1193,7 +1450,7 @@ window.OrderCore = {
     async function runLearner(){
       var recent=agents.knowledge.slice(0,8).map(function(k){ return k.q; }).join(" | ");
       var prompt="TASK: You are training yourself on The Hideout's data so you can answer staff instantly later. Ask ONE genuinely useful, specific question a chef or manager might ask about THIS data (menu, costs, margins, prep, allergens, branches or ordering)"+(recent?", NOT similar to any of these already covered: "+recent:"")+", then answer it accurately using ONLY the data above. Reply EXACTLY in this format and nothing else:\nQ: <the question>\nA: <a 2-4 sentence answer>";
-      var r=await callAI(opts, buildContext(opts), [], prompt);
+      var r=(await callAI(opts, buildContext(opts), [], prompt)).answer;
       var m=(r||"").match(/Q:\s*([\s\S]*?)\n+A:\s*([\s\S]*)/i); if(!m) return 0;
       var entry={ q:m[1].trim(), a:m[2].trim(), ts:Date.now() }; if(!entry.q||!entry.a) return 0;
       agents.knowledge=[entry].concat(agents.knowledge).slice(0,60); agents.lastLearn=Date.now(); agSave();
@@ -1218,12 +1475,12 @@ window.OrderCore = {
     }
     function timeAgo(ts){ if(!ts) return "never"; var s=Math.round((Date.now()-ts)/1000); if(s<60) return "just now"; var m=Math.round(s/60); if(m<60) return m+"m ago"; var h=Math.round(m/60); return h+"h ago"; }
     function renderInsights(){
-      var sevCol={high:"#c81a22",med:"#d98a2b",low:"#b6a488"};
+      var sevCol={high:"#ec3013",med:"#f2c100",low:"#1e4fb0"};
       var h="";
       h+="<div class='hb-bar'><label class='hb-tog"+(agents.on?" on":"")+"' data-tog><span class='hb-sw'></span>"+(agents.on?"Auto-check weekly: on":"Auto-check weekly: off")+"</label><button class='hb-run' data-run>Run now</button></div>";
       var mem=[]; try{ var ms=(hasRcc()?rccState():(RCC_CACHE||{})); mem=(ms.botMemory||[]).slice(-20).reverse(); }catch(e){}
       h+="<div class='hb-sec'>Memory \u2014 taught facts"+(mem.length?" ("+mem.length+")":"")+"</div>";
-      if(mem.length){ mem.forEach(function(n){ var txt=typeof n==="string"?n:((n&&n.text)||""); h+="<div class='hb-find'><span class='hb-sev' style='background:#3f9e63'></span><div>"+esc(txt)+"</div></div>"; }); }
+      if(mem.length){ mem.forEach(function(n){ var txt=typeof n==="string"?n:((n&&n.text)||""); h+="<div class='hb-find'><span class='hb-sev' style='background:#1e4fb0;border-radius:50%!important'></span><div>"+esc(txt)+"</div></div>"; }); }
       else h+="<div class='hb-empty'>Tell me a fact in chat (e.g. \u201cTony makes all bakery items\u201d) and I'll remember it here.</div>";
       h+="<div class='hb-sec'>Data checks"+(agents.audit.length?" ("+agents.audit.length+")":"")+" \u00b7 "+timeAgo(agents.lastAudit)+"</div>";
       if(agents.audit.length){ agents.audit.slice(0,20).forEach(function(f){ h+="<div class='hb-find'><span class='hb-sev' style='background:"+(sevCol[f.sev]||sevCol.med)+"'></span><div><b>"+esc(f.item||"Issue")+"</b> \u2014 "+esc(f.issue)+"</div></div>"; }); }
@@ -1249,8 +1506,8 @@ window.OrderCore = {
     function calCard(ev){
       var wrap=document.createElement("div"); wrap.id="hb-card";
       var line2=(ev.allDay?"All day":((ev.start||"")+(ev.end?("\u2013"+ev.end):"")));
-      wrap.innerHTML="<div style='padding:12px 14px;background:#241d16;color:#fff;font-weight:600;font-size:14.5px'>Add to calendar?</div>"
-        +"<div style='padding:12px 14px;font-size:13.5px;line-height:1.6;color:#2a2018'><b>"+esc(ev.title)+"</b><br/>"+esc(ev.date)+" \u00b7 "+esc(line2)+(ev.location?("<br/>@ "+esc(ev.location)):"")+(ev.notes?("<br/>"+esc(ev.notes)):"")+"<br/><span style='color:#a2917a;font-size:12px'>Branch: "+esc(ev.store||"adelaide")+"</span></div>"
+      wrap.innerHTML="<div class='hb-ch'>Add to calendar?</div>"
+        +"<div class='hb-cb'><b>"+esc(ev.title)+"</b><br/>"+esc(ev.date)+" \u00b7 "+esc(line2)+(ev.location?("<br/>@ "+esc(ev.location)):"")+(ev.notes?("<br/>"+esc(ev.notes)):"")+"<br/><span class='hb-meta'>Branch: "+esc(ev.store||"adelaide")+"</span></div>"
         +"<div style='display:flex;gap:8px;padding:0 14px 14px'><button class='hb-cc on' data-ok>\u2713 Add event</button><button class='hb-cc' data-no>Cancel</button></div>";
       msgs.appendChild(wrap); scroll();
       wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); bubble("assistant","Cancelled \u2014 nothing was added."); };
@@ -1265,39 +1522,80 @@ window.OrderCore = {
         }catch(e){ b.disabled=false; b.textContent="\u2713 Add event"; bubble("assistant","Could not reach the calendar backend: "+(e&&e.message||e)); }
       };
     }
+    function noticeCard(n){
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      var meta=[(n.from||"from today"), (n.until?("until "+n.until):"no end date"), (n.branch||"all stores")];
+      if(n.tone==="urgent") meta.push("URGENT"); if(n.pin) meta.push("pinned");
+      var body=esc(String(n.body||"")).replace(/\n/g,"<br/>");
+      wrap.innerHTML="<div class='hb-ch'>Post to the team notice board?</div>"
+        +"<div class='hb-cb'><b>"+esc(n.title||"Notice")+"</b>"+(body?("<br/>"+body):"")
+        +"<br/><span class='hb-meta'>"+esc(meta.join(" \u00b7 "))+"</span></div>"
+        +"<div style='display:flex;gap:8px;padding:0 14px 14px'><button class='hb-cc on' data-ok>\u2713 Post it</button><button class='hb-cc' data-no>Cancel</button></div>";
+      msgs.appendChild(wrap); scroll();
+      wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); bubble("assistant","Cancelled \u2014 nothing was posted."); };
+      wrap.querySelector("[data-ok]").onclick=function(){
+        var b=wrap.querySelector("[data-ok]"); b.disabled=true; b.textContent="Posting\u2026";
+        try{
+          window.HideoutRCC.addNotice(n); wrap.remove();
+          bubble("assistant","\u2713 Posted: "+(n.title||"Notice")+"\nIt is on the Today page now. Edit or take it down in Settings \u2192 Daily content \u2192 Staff notices.");
+          logQA(opts.source,"[notice post]","posted: "+(n.title||""));
+        }catch(e){ b.disabled=false; b.textContent="\u2713 Post it"; bubble("assistant","Could not post it: "+(e&&e.message||e)); }
+      };
+    }
+    function deliveryCard(a){
+      var wrap=document.createElement("div"); wrap.id="hb-card";
+      wrap.innerHTML="<div class='hb-ch'>Delivery change (one day)</div>"
+        +"<div class='hb-cb'><b>"+esc(a.person||"?")+"</b> runs the delivery on <b>"+esc(a.date||"?")+"</b>.<br/><span class='hb-meta'>Nothing is saved yet. Apply it in Settings \u2192 Delivery (one-off exceptions), or tap Apply if this app can save it.</span></div>"
+        +"<div style='display:flex;gap:8px;padding:0 14px 14px'>"+(opts.onDeliveryOverride?"<button class='hb-cc on' data-ok>\u2713 Apply</button>":"")+"<button class='hb-cc' data-no>Close</button></div>";
+      msgs.appendChild(wrap); scroll();
+      wrap.querySelector("[data-no]").onclick=function(){ wrap.remove(); };
+      var ok=wrap.querySelector("[data-ok]"); if(ok) ok.onclick=async function(){ ok.disabled=true; ok.textContent="Applying\u2026"; try{ await opts.onDeliveryOverride(a.date, a.person); wrap.remove(); bubble("assistant","\u2713 "+a.person+" is on delivery for "+a.date+"."); logQA(opts.source,"[delivery override]",a.date+" "+a.person); }catch(e){ ok.disabled=false; ok.textContent="\u2713 Apply"; bubble("assistant","Could not save it: "+(e&&e.message||e)); } };
+    }
+    function retryChip(q){ var w=document.createElement("div"); w.className="hb-chips"; var c=document.createElement("button"); c.className="hb-chip"; c.textContent="\u21BB Retry"; c.onclick=function(){ w.remove(); input.value=q; ask(); }; w.appendChild(c); msgs.appendChild(w); scroll(); }
     async function ask(){
       var q=input.value.trim(); if(!q||busy) return; input.value=""; var ch=msgs.querySelector(".hb-chips"); if(ch) ch.remove();
-      bubble("user",q); hist.push({role:"user",text:q}); busy=true;
-      var intent=canSaveRecipe() && wantsRecipe(q);
-      var ingIntent=canSaveRecipe() && !intent && wantsIngredient(q);
-      // Apps without recipe management (e.g. Ordering) can't save recipes/ingredients — redirect instead of dangling a builder it can't fulfil.
-      if(!canSaveRecipe() && (wantsRecipe(q)||wantsIngredient(q))){ var rb=bubble("bot","Recipe & ingredient building lives in the Recipe Cost app — open hideout-recipe-cost.web.app to create and save them. Here I can still answer questions about recipes, costs, prep and orders."); hist.push({role:"assistant",text:rb.textContent}); logQA(opts.source,q,"[redirect to RCC for build]"); busy=false; return; }
-      var t=typing();
+      var turn={role:"user",text:q}; bubble("user",q); hist.push(turn); busy=true; send.disabled=true; var t=null; var t0=Date.now();
       try{
+        var intent=canSaveRecipe() && wantsRecipe(q);
+        var ingIntent=canSaveRecipe() && !intent && wantsIngredient(q);
+        // Apps without recipe management (e.g. Ordering) can't save recipes/ingredients - redirect instead of dangling a builder it can't fulfil.
+        if(!canSaveRecipe() && (wantsRecipe(q)||wantsIngredient(q))){ var rb=bubble("bot","Recipe & ingredient building lives in the Recipe Cost app \u2014 open hideout-recipe-cost.web.app to create and save them. Here I can still answer questions about recipes, costs, prep and orders."); hist.push({role:"assistant",text:rb.textContent}); logQA(opts.source,q,"[redirect to RCC for build]"); return; }
+        t=typing();
         await ensureRcc();
-        var r=await callAI(opts, buildContext(opts, q), hist.slice(0,-1), q);
-        hist.push({role:"assistant",text:r||""});
+        var out=await callAI(opts, null, hist.slice(0,-1), q);
+        var r=out.answer||"";
+        hist.push({role:"assistant",text:r});
         var remembered=0;
         if(canRemember()){ var rem=extractRemember(r); if(rem){ rem.facts.forEach(function(f){ try{ window.HideoutRCC.remember(f); remembered++; }catch(e){} }); r=rem.rest||r; } }
         var parsed=canSaveRecipe()?extractRecipe(r):null;
         var ingParsed=canSaveRecipe()?extractIngredient(r):null;
         var calp=extractCalEvent(r);
+        var notp=canPostNotice()?extractNotice(r):null;
         t.className="hb-b hb-a";
-        if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
-        else if(ingParsed){ t.textContent=ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"; ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
-        else if(parsed){ t.textContent=parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"; recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
+        if(out.action&&out.action.type==="delivery_override"){ setMsg(t, r||"Here's the delivery change \u2014 confirm to apply:"); deliveryCard(out.action); logQA(opts.source, q, "[delivery draft] "+(out.action.date||"")+" "+(out.action.person||"")); }
+        else if(notp){ setMsg(t, notp.intro||"Here's the notice \u2014 confirm to put it on the board:"); noticeCard(notp.notice); logQA(opts.source, q, "[notice draft] "+(notp.notice.title||"")); }
+        else if(calp){ setMsg(t, calp.intro||"Here's the event \u2014 confirm to add:"); calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
+        else if(ingParsed){ setMsg(t, ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"); ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
+        else if(parsed){ setMsg(t, parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"); recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
         else if(ingIntent){ t.textContent="Let's add it \u2014 set the price and unit, then Save:"; ingredientBuilder(null); logQA(opts.source, q, "[ingredient builder opened]"); }
         else if(intent || (canSaveRecipe() && looksLikeRecipeAsk(r))){ t.textContent="Let's build it \u2014 pick a category, set the quantities, then Save:"; recipeBuilder(null); logQA(opts.source, q, "[recipe builder opened]"); }
-        else { t.textContent=(r||"(no response)")+(remembered?"\n\n\u2713 Saved to memory \u2014 I'll remember that.":""); logQA(opts.source, q, r||""); }
+        else { setMsg(t,(r||"(no response)")+(remembered?"\n\n\u2713 Saved to memory \u2014 I'll remember that.":"")); logQA(opts.source, q, r||""); }
         if(remembered && curView==="insights") renderInsights();
+        try{ console.debug("[HideoutBot] answered in "+(Date.now()-t0)+" ms"); }catch(e){}
       }
-      catch(e){ t.className="hb-b hb-a"; t.textContent="Error: "+(e&&e.message||e); }
-      busy=false;
+      catch(e){
+        turn.failed=true;                                        // an unanswered question must not linger in the API history
+        try{ console.error("[HideoutBot]", e); }catch(x){}
+        var msg=friendlyError(e);
+        if(t){ t.className="hb-b hb-a hb-err"; t.textContent=msg; } else bubble("assistant",msg);
+        retryChip(q);
+      }
+      finally{ busy=false; send.disabled=false; }
     }
     send.onclick=ask; input.addEventListener("keydown",function(e){ if(e.key==="Enter") ask(); });
   }
 
-  window.HideoutBot={ mount:mount, buildContext:buildContext, getLog:function(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY)||"[]"); }catch(e){ return []; } } };
+  window.HideoutBot={ version:BOT_VERSION, mount:mount, buildContext:buildContext, getLog:function(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY)||"[]"); }catch(e){ return []; } } };
 })();
 </script>
 <script type="text/babel" data-presets="react">
@@ -1323,30 +1621,30 @@ function ToastHost(){
 
 /* ---------------- primitives ---------------- */
 function Btn({children,onClick,tone,size,disabled,style,type}){
-  const base={border:"none",cursor:disabled?"not-allowed":"pointer",fontWeight:600,fontFamily:"var(--font-text)",borderRadius:999,transition:"transform .12s, opacity .12s",opacity:disabled?.5:1,whiteSpace:"nowrap"};
-  const sizes={sm:{padding:"7px 14px",fontSize:13},md:{padding:"10px 18px",fontSize:14},lg:{padding:"13px 24px",fontSize:15}};
-  const tones={primary:{background:"var(--color-primary)",color:"#fff"},ghost:{background:"var(--color-canvas-parchment)",color:"var(--color-ink)",border:"1px solid var(--color-hairline-alpha)"},dark:{background:"var(--color-surface-black)",color:"#fff"},danger:{background:"#fff",color:"#d70015",border:"1px solid rgba(215,0,21,.25)"}};
-  return <button type={type||"button"} disabled={disabled} onClick={onClick} className="vbtn-card" style={{...base,...(sizes[size]||sizes.md),...(tones[tone]||tones.primary),...style}}>{children}</button>;
+  const base={cursor:disabled?"not-allowed":"pointer",fontWeight:700,fontFamily:"var(--font-text)",textTransform:"uppercase",letterSpacing:".04em",transition:"transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s, opacity .12s",opacity:disabled?.5:1,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8};
+  const sizes={sm:{padding:"8px 12px",fontSize:13,minHeight:40},md:{padding:"11px 16px",fontSize:14,minHeight:44},lg:{padding:"13px 22px",fontSize:15,minHeight:48}};
+  const tones={primary:{background:"var(--color-primary)",color:"#fff",border:"3px solid var(--color-primary)"},ghost:{background:"#fff",color:"var(--color-ink)",border:"3px solid var(--color-ink)"},dark:{background:"var(--color-ink)",color:"#f3f1ec",border:"3px solid var(--color-ink)"},danger:{background:"#fff",color:"var(--color-danger-text)",border:"3px solid var(--color-danger-text)"},ok:{background:"var(--color-warning)",color:"var(--color-ink)",border:"3px solid var(--color-warning)"}};
+  return <button type={type||"button"} disabled={disabled} onClick={onClick} className={"vbtn-card"+(disabled?"":" lift")} style={{...base,...(sizes[size]||sizes.md),...(tones[tone]||tones.primary),...style}}>{children}</button>;
 }
 function Card({children,style,className,onClick}){ return <div onClick={onClick} className={cx("card",className)} style={{padding:18,...style}}>{children}</div>; }
-function Field({label,children,style}){ return <label style={{display:"flex",flexDirection:"column",gap:5,fontSize:12.5,color:"var(--color-ink-muted-80)",fontWeight:600,...style}}>{label}{children}</label>; }
+function Field({label,children,style}){ return <label style={{display:"flex",flexDirection:"column",gap:6,fontSize:12,color:"var(--color-ink-muted-80)",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",...style}}>{label}{children}</label>; }
 function Modal({title,children,onClose,wide,footer}){
   return ReactDOM.createPortal(
     <div className="fixed inset-0 flex items-start justify-center p-4 overflow-auto" style={{background:"rgba(20,12,6,.44)",zIndex:120}}>
-      <div className="modal-pop" onClick={e=>e.stopPropagation()} style={{background:"var(--color-canvas)",border:"1px solid var(--color-hairline-alpha)",borderRadius:20,width:"100%",maxWidth:wide?860:560,marginTop:28,marginBottom:28}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--color-hairline-alpha)"}}>
-          <div style={{fontFamily:"var(--font-display)",fontWeight:600,fontSize:17,color:"var(--color-ink)"}}>{title}</div>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,lineHeight:1,color:"var(--color-ink-muted-48)",cursor:"pointer"}}>×</button>
+      <div className="modal-pop" onClick={e=>e.stopPropagation()} style={{background:"#f3f1ec",border:"3px solid var(--color-ink)",boxShadow:"var(--shadow-hard)",width:"100%",maxWidth:wide?860:560,marginTop:28,marginBottom:28}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"3px solid var(--color-ink)",background:"#fff"}}>
+          <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:20,color:"var(--color-ink)"}}>{title}</div>
+          <button onClick={onClose} aria-label="Close" style={{background:"#fff",border:"3px solid var(--color-ink)",width:44,height:44,fontSize:20,fontWeight:700,lineHeight:1,color:"var(--color-ink)",cursor:"pointer"}}>✕</button>
         </div>
         <div style={{padding:20}}>{children}</div>
-        {footer && <div style={{padding:"14px 20px",borderTop:"1px solid var(--color-hairline-alpha)",display:"flex",justifyContent:"flex-end",gap:10}}>{footer}</div>}
+        {footer && <div style={{padding:"14px 18px",borderTop:"3px solid var(--color-ink)",display:"flex",justifyContent:"flex-end",gap:10}}>{footer}</div>}
       </div>
     </div>, document.body);
 }
 function Empty({children}){ return <div style={{textAlign:"center",padding:"48px 20px",color:"var(--color-ink-muted-48)",fontSize:14}}>{children}</div>; }
 function Segmented({options,value,onChange}){
-  return <div style={{display:"inline-flex",background:"var(--color-canvas-parchment)",borderRadius:999,padding:3,gap:2,flexWrap:"wrap"}}>
-    {options.map(o=>(<button key={o.v} onClick={()=>onChange(o.v)} className="vbtn-card" style={{border:"none",cursor:"pointer",borderRadius:999,padding:"7px 15px",fontSize:13,fontWeight:600,background:value===o.v?"var(--color-canvas)":"transparent",color:value===o.v?"var(--color-ink)":"var(--color-ink-muted-48)",boxShadow:value===o.v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{o.l}</button>))}
+  return <div className="seg2" role="group" style={{flexWrap:"wrap"}}>
+    {options.map(o=>(<button key={o.v} type="button" aria-pressed={value===o.v} onClick={()=>onChange(o.v)}>{o.l}</button>))}
   </div>;
 }
 /* animated count-up number */
@@ -1363,8 +1661,8 @@ function CountUp({value,dur,style,fmt}){
 }
 /* inline proportional bar */
 function Bar({pct,color,height}){
-  return <div style={{background:"var(--color-canvas-parchment)",borderRadius:999,height:height||8,overflow:"hidden",width:"100%"}}>
-    <div className="barfill" style={{height:"100%",width:Math.max(2,Math.min(100,pct))+"%",background:color||"var(--color-primary)",borderRadius:999}}></div>
+  return <div style={{background:"#fff",border:"2px solid var(--color-ink)",height:height||10,overflow:"hidden",width:"100%"}}>
+    <div className="barfill" style={{height:"100%",width:Math.max(2,Math.min(100,pct))+"%",background:color||"var(--color-ink)"}}></div>
   </div>;
 }
 
@@ -1393,11 +1691,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 const C = window.OrderCore;
 const { cx, money, uid, toast, Btn, Card, Field, Modal, Empty, Segmented, CountUp, Bar, Ico, Skeleton } = window.OUI;
 
-const inp = { width:"100%", border:"1px solid var(--color-hairline-alpha)", borderRadius:9, padding:"9px 11px", fontSize:16, background:"#fff", outline:"none", color:"var(--color-ink)", fontFamily:"var(--font-text)" };
-const th = { textAlign:"left", fontSize:11, textTransform:"uppercase", letterSpacing:".05em", color:"var(--color-ink-muted-48)", fontWeight:700, padding:"8px 10px", whiteSpace:"nowrap", borderBottom:"1px solid var(--color-hairline-alpha)" };
-const td = { padding:"9px 10px", fontSize:14, borderBottom:"1px solid var(--color-hairline-alpha)", color:"var(--color-ink)" };
+const inp = { width:"100%", border:"2px solid var(--color-ink)", borderRadius:0, padding:"9px 11px", fontSize:16, background:"#fff", outline:"none", color:"var(--color-ink)", fontFamily:"var(--font-text)", fontWeight:500 };
+const th = { textAlign:"left", fontSize:12, textTransform:"uppercase", letterSpacing:".08em", color:"var(--color-ink-muted-80)", fontWeight:700, padding:"12px 10px", whiteSpace:"nowrap", borderBottom:"3px solid var(--color-ink)" };
+const td = { padding:"11px 10px", fontSize:16, borderBottom:"1px solid var(--color-hairline)", color:"var(--color-ink)" };
 function HScroll({children}){ return <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",margin:"0 -2px"}}>{children}</div>; }
-function SectionLabel({children,right}){ return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"2px 0 12px"}}><div style={{fontSize:11,textTransform:"uppercase",letterSpacing:".14em",fontWeight:700,color:"var(--color-ink-muted-48)"}}>{children}</div>{right}</div>; }
+function SectionLabel({children,right}){ return <div className="lbl" style={{justifyContent:"space-between"}}><span className="tag">{children}</span>{right}</div>; }
 function catOf(ctx,id){ return ctx.categories.find(c=>c.id===id); }
 function itemsByCat(ctx){ const g={}; ctx.categories.forEach(c=>g[c.id]=[]); (ctx.items||[]).forEach(i=>{ (g[i.cat]=g[i.cat]||[]).push(i); }); return g; }
 // [FIX 2026-07-23] Items whose cat id isn't in ctx.categories were SILENTLY INVISIBLE in every
@@ -1424,7 +1722,8 @@ function dupFamilies(items){ const c={}; (items||[]).forEach(it=>{ const k=famil
 /* small hook: load async with loading + error, re-run on deps */
 function useAsync(fn, deps){
   const [s,setS]=useState({loading:true,error:"",data:null});
-  const run=()=>{ setS(x=>({...x,loading:true})); Promise.resolve().then(fn).then(d=>setS({loading:false,error:"",data:d})).catch(e=>setS({loading:false,error:e.message||"Error",data:null})); };
+  const seq=useRef(0);   // GPT review 2026-09-09: a slow older request must never overwrite the newer screen (date/branch switched fast)
+  const run=()=>{ const my=++seq.current; setS(x=>({...x,loading:true})); Promise.resolve().then(fn).then(d=>{ if(my===seq.current) setS({loading:false,error:"",data:d}); }).catch(e=>{ if(my===seq.current) setS({loading:false,error:e.message||"Error",data:null}); }); };
   useEffect(run, deps); // eslint-disable-line
   return [s, run];
 }
@@ -1467,7 +1766,7 @@ function TodaySummary({ctx}){
   const hiddenItems=cats.reduce((s,c)=>s+c.hiddenCount,0);
   cats=cats.filter(c=>c.visible.length);
 
-  return <div>
+  return <div className="app-pad">
     <div style={{marginBottom:16}}>{(()=>{
         const todayISO=(C.localISO?C.localISO(new Date()):new Date().toISOString().slice(0,10));
         const sh=(iso,n)=>{const d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");};
@@ -1481,56 +1780,30 @@ function TodaySummary({ctx}){
         const rl=e=>{e.currentTarget.style.transform="scale(1)";};
         const arrow={width:44,height:44,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:999,border:"1px solid var(--color-hairline)",background:"transparent",color:"var(--color-ink)",fontSize:22,lineHeight:1,cursor:"pointer",transition:"transform .12s ease",flex:"0 0 auto"};
         const seg=a=>({padding:"9px 16px",minHeight:40,display:"inline-flex",alignItems:"center",borderRadius:999,border:"none",background:a?"var(--color-primary)":"transparent",color:a?"#fff":"var(--color-ink-muted-48)",fontSize:13,fontWeight:700,fontFamily:"var(--font-display)",cursor:"pointer",transition:"transform .12s ease"});
-        return <div style={{display:"flex",flexWrap:"wrap",gap:14,alignItems:"center",justifyContent:"space-between",background:"#fff",border:"1px solid var(--color-hairline)",borderRadius:18,padding:"14px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <button type="button" aria-label="Previous day" onPointerDown={press} onPointerUp={rl} onPointerLeave={rl} onClick={()=>setDate(sh(date,-1))} style={arrow}>‹</button>
-            <div style={{minWidth:118}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:23,letterSpacing:"-0.5px",color:"var(--color-ink)"}}>{wd}</span>
-                {rel&&<span style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.6px",color:"var(--color-primary)",border:"1px solid var(--color-primary)",borderRadius:999,padding:"2px 8px"}}>{rel}</span>}
-              </div>
-              <div style={{fontSize:13,color:"var(--color-ink-muted-48)",marginTop:1}}>{md}</div>
+        /* v2 (2026-09-09): one black header block = date · day switch · submitted/total · delivery. The
+           pending branches are the 6am question, so they sit right under it as red squares. */
+        return <div className="screen" style={{background:"var(--color-ink)", color:"#f3f1ec", padding:"18px 18px 16px", display:"grid", gridTemplateColumns:"minmax(0,1fr) auto", gap:"14px 24px", alignItems:"end"}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:12, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", color:"var(--color-warning)", marginBottom:6}}>Orders · {rel||wd}{rel?(" · "+wd):""}</div>
+            <div style={{fontSize:"clamp(34px,6vw,56px)", fontWeight:700, textTransform:"uppercase", lineHeight:.95, letterSpacing:".01em"}}>{md.replace(/\s\d{4}$/,"")}</div>
+            <div style={{marginTop:10, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap"}}>
+              <span className={"badge2 "+(allIn?"warn":"bad")} style={{fontSize:13, minHeight:30}}>{allIn?"✓ ":"▲ "}{submittedLocs.length}/{ctx.locations.length} submitted</span>
+              <span style={{fontSize:15, color:"rgba(243,241,236,.8)"}}><b style={{color:"#f3f1ec", fontSize:22}}><CountUp value={grandTotal} /></b> units · <Ico name="truck" size={14} style={{verticalAlign:"-2px"}} /> delivery {deliveryPerson?<b style={{color:"#f3f1ec"}}>{deliveryPerson}</b>:<b style={{color:"var(--color-warning)"}}>no one rostered</b>}</span>
             </div>
-            <button type="button" aria-label="Next day" onPointerDown={press} onPointerUp={rl} onPointerLeave={rl} onClick={()=>setDate(sh(date,1))} style={arrow}>›</button>
-            <div style={{display:"flex",gap:4,background:"var(--color-canvas,#f5f5f7)",padding:4,borderRadius:999}}>
-              <button type="button" aria-pressed={date===yISO} onPointerDown={press} onPointerUp={rl} onPointerLeave={rl} onClick={()=>setDate(yISO)} style={seg(date===yISO)}>Yesterday</button>
-              <button type="button" aria-pressed={date===todayISO} onPointerDown={press} onPointerUp={rl} onPointerLeave={rl} onClick={()=>setDate(todayISO)} style={seg(date===todayISO)}>Today</button>
-            </div>
-            <label style={{position:"relative",width:44,height:44,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:999,border:"1px solid var(--color-hairline)",cursor:"pointer",flex:"0 0 auto"}} title="Pick a date" aria-label="Pick a date">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M8 2v4M16 2v4M3 9h18"></path></svg>
-              <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}} />
-            </label>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:999,background:allIn?"rgba(47,125,79,.1)":"var(--color-canvas,#f5f5f7)"}}>
-              <span style={{width:8,height:8,borderRadius:999,background:allIn?"#2f7d4f":"#c9a227",flex:"0 0 auto"}}></span>
-              <span style={{fontSize:13,fontWeight:600,color:"var(--color-ink)"}}>{submittedLocs.length}/{ctx.locations.length} submitted</span>
+          <div style={{display:"flex", flexDirection:"column", gap:8, alignItems:"flex-end"}}>
+            <div className="seg2 dark" role="group" aria-label="Day"><button type="button" aria-label="Previous day" onClick={()=>setDate(sh(date,-1))}>‹</button><button type="button" aria-pressed={date===yISO} onClick={()=>setDate(yISO)}>Yesterday</button><button type="button" aria-pressed={date===todayISO} onClick={()=>setDate(todayISO)}>Today</button><button type="button" aria-label="Next day" onClick={()=>setDate(sh(date,1))}>›</button></div>
+            <div style={{display:"flex", gap:8}}>
+              <label className="btn2 onink" style={{position:"relative", padding:"8px 12px", minHeight:40, fontSize:12}} title="Pick a date"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17"></rect><path d="M8 2v4M16 2v4M3 9h18"></path></svg>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}} /></label>
+              <button type="button" className="btn2 onink" style={{padding:"8px 12px", minHeight:40, fontSize:12}} onClick={()=>{ C.clearCache(); run(); }}><Ico name="refresh" size={13} />Refresh</button>
             </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:22,lineHeight:1,color:"var(--color-ink)"}}>{grandTotal}</div>
-              <div style={{fontSize:11,color:"var(--color-ink-muted-48)"}}>units</div>
-            </div>
-            <Btn size="sm" tone="ghost" onClick={()=>{ C.clearCache(); run(); }}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico name="refresh" size={13} />Refresh</span></Btn>
           </div>
         </div>;
       })()}</div>
 
-    {/* delivery hero */}
-    <div className="tab-in" style={{background:deliveryPerson?"var(--color-surface-tile-1)":"var(--color-canvas)",border:deliveryPerson?"none":"1px solid var(--color-hairline-alpha)",borderRadius:18,padding:"18px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:16}}>
-      <div style={{width:48,height:48,borderRadius:13,display:"flex",alignItems:"center",justifyContent:"center",flex:"0 0 auto",background:deliveryPerson?"rgba(255,255,255,.13)":"var(--color-canvas-parchment)",color:deliveryPerson?"#fff":"var(--color-ink)"}}><Ico name="truck" size={24} /></div>
-      <div style={{flex:1}}>
-        <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:".18em",fontWeight:700,color:deliveryPerson?"var(--color-body-muted)":"var(--color-ink-muted-48)"}}>Delivery · {C.DAY_LABELS[C.dayKeyForDate(date)]}</div>
-        <div style={{fontFamily:"var(--font-display)",fontWeight:600,fontSize:"clamp(20px,4vw,28px)",lineHeight:1.05,marginTop:3,color:deliveryPerson?"#fff":"var(--color-ink)"}}>{deliveryPerson||"No one rostered"}</div>
-      </div>
-      <div style={{textAlign:"right"}}>
-        <CountUp value={grandTotal} style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:26,color:deliveryPerson?"#fff":"var(--color-ink)",lineHeight:1,display:"block"}} />
-        <div style={{fontSize:11,color:deliveryPerson?"var(--color-body-muted)":"var(--color-ink-muted-48)",marginTop:2}}>units total</div>
-      </div>
-    </div>
-
-    {/* branch status chips */}
-    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
-      {ctx.locations.map(l=>{ const ok=submittedLocs.includes(l); const by=data[l.id]&&data[l.id]._by; return <div key={l.id} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:999,fontSize:13,fontWeight:600,background:ok?"var(--color-canvas)":"rgba(180,83,9,.09)",border:"1px solid "+(ok?"var(--color-hairline-alpha)":"rgba(180,83,9,.2)"),color:ok?"var(--color-ink)":"#b45309"}}><span style={{width:8,height:8,borderRadius:"50%",background:ok?"#3f9e63":"#b45309"}}></span>{l.name.replace(/\s*\(.*\)/,"")} · {ok?(by?"by "+by:"submitted"):"pending"}</div>; })}
+    {/* branch status — pending first, red squares */}
+    <div className="chips2" style={{border:0, padding:"0 0 14px", flexWrap:"wrap"}}>
+      {ctx.locations.slice().sort((a,b)=>(submittedLocs.includes(a)?1:0)-(submittedLocs.includes(b)?1:0)).map(l=>{ const ok=submittedLocs.includes(l); const by=data[l.id]&&data[l.id]._by; return <span key={l.id} className="chip2" style={{cursor:"default", background:ok?"#fff":"var(--color-danger-text)", color:ok?"var(--color-ink)":"#fff", borderColor:ok?"var(--color-ink)":"var(--color-danger-text)"}}>{ok?<span className="sh c" aria-hidden="true"></span>:<span className="sh s" aria-hidden="true" style={{background:"#fff"}}></span>}{l.name.replace(/\s*\(.*\)/,"")} <span className="n" style={{color:ok?"var(--color-ink-muted-80)":"rgba(255,255,255,.85)"}}>{ok?(by?"by "+by:"submitted"):"pending"}</span></span>; })}
     </div>
 
     {/* 주문 없는 지점 열 접기 토글 — 접힌 게 기본이라 몇 개가 숨었는지는 항상 보여준다 */}
@@ -1638,7 +1911,81 @@ function TodaySummary({ctx}){
 }
 
 /* ===================== SUBMIT ORDER ===================== */
+/* v2 (2026-09-09, GPT diagnosis UX-DIAGNOSIS_2026-09-09_ios-v2_gpt.md): one-thumb counting on a phone.
+   Dense rows instead of a 480px-wide table, Enter/Next jumps to the next item, the value is selected
+   on focus, category chips show progress and jump, the draft autosaves to localStorage under
+   department+date+location until the server confirms, and a failed read is an error + retry - never
+   an empty order that a save could overwrite. Legacy component kept below as SubmitOrderLegacy. */
 function SubmitOrder({ctx}){
+  const [loc,setLoc]=useState(ctx.branch||ctx.locations[0]?.id||"");
+  const [date,setDate]=useState(C.tomorrowISO());
+  const [draft,setDraft]=useState({}); const [note,setNote]=useState(""); const [by,setBy]=useState(()=>window.OUI.LS.get("hideout_ord_by","")||"");
+  const [saving,setSaving]=useState(false); const [saved,setSaved]=useState(false); const [cur,setCur]=useState(null); const [restored,setRestored]=useState(false);
+  const dkey="hideout_ord_draft:"+ctx.department+":"+date+":"+loc;
+  const [loaded,run]=useAsync(async ()=>{ const o=await C.loadOrder(date, loc); const d={}; Object.keys(o||{}).forEach(k=>{ if(k==="_note"||k==="_by") return; d[k]={remaining:o[k].remaining??"",needed:o[k].needed??""}; });
+    let local=null; try{ local=JSON.parse(localStorage.getItem(dkey)||"null"); }catch(e){}
+    const fresh=local && local.t && (Date.now()-local.t)<48*3600*1000;   // stale drafts (>48 h) are ignored
+    const serverHas=Object.keys(d).length>0 || !!(o&&(o._note||o._by));
+    if(fresh && local.draft && !serverHas && (Object.keys(local.draft).length||(local.note||"").trim())){ setDraft(local.draft); setNote(local.note||""); setRestored(true); }
+    else { setDraft(d); setNote((o&&o._note)||""); setRestored(false); }
+    if(o&&o._by) setBy(o._by); setSaved(false); return true; }, [date, loc, ctx.department]);
+  useEffect(()=>{ if(loaded.loading) return; try{ const has=Object.values(draft).some(x=>(x.needed!==""&&x.needed!=null)||(x.remaining!==""&&x.remaining!=null)) || note.trim(); if(has) localStorage.setItem(dkey, JSON.stringify({draft, note, t:Date.now()})); else localStorage.removeItem(dkey); }catch(e){} }, [draft, note]);
+  const dayKey=C.dayKeyForDate(date);
+  const groups=itemsByCat(ctx);
+  const cats=catsWithOrphans(ctx, groups).filter(c=>(groups[c.id]||[]).length);
+  const allItems=cats.reduce((a,c)=>a.concat(groups[c.id]||[]),[]);
+  const setCell=(id,field,val)=>setDraft(d=>({...d,[id]:{...(d[id]||{remaining:"",needed:""}),[field]:val}}));
+  const parFor=(it)=>{ const p=it.parLevels&&it.parLevels[loc]&&it.parLevels[loc][dayKey]; return p!=null?Number(p):null; };
+  const clean=v=>{ const t=String(v).replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"); return t==="."?"":t; };  // digits and one dot; a lone "." is nothing
+  const onRemaining=(it,val)=>{ val=clean(val); setCell(it.id,"remaining",val); const par=parFor(it); if(par!=null){
+    /* daily(perishable) 품목은 남은 수량으로 파를 깎지 않는다 (2026-08-26 주인) — Remaining 은 wastage 기록용, 주문은 파레벨 그대로. */
+    let calc=it.perishable?par:Math.max(0,par-(Number(val)||0));
+    if(it.minOrderQty!=null && calc>0 && calc<it.minOrderQty) calc=it.minOrderQty; setCell(it.id,"needed",String(calc)); } };
+  const filled=it=>{ const d=draft[it.id]; return !!d && ((d.remaining!==""&&d.remaining!=null) || (Number(d.needed)||0)>0); };
+  const totalNeeded=Object.values(draft).reduce((a,d)=>a+(Number(d.needed)||0),0);
+  const focusNext=(id)=>{ const idx=allItems.findIndex(x=>x.id===id); const nx=allItems[idx+1]; const el=nx?document.getElementById("rem-"+nx.id):document.getElementById("ord-note"); if(el){ el.focus(); try{ el.scrollIntoView({block:"center", behavior:"smooth"}); }catch(e){} } };
+  const jump=cid=>{ const el=document.getElementById("cat-"+cid); if(el) el.scrollIntoView({block:"start", behavior:"smooth"}); };
+  const save=async ()=>{
+    if(!by.trim()){ toast("Enter your name (Ordered by) first",true); return; }
+    setSaving(true);
+    try{ const out={}; Object.keys(draft).forEach(id=>{ const d=draft[id]; if((Number(d.needed)||0)>0 || (d.remaining!=="" && d.remaining!=null)) out[id]={remaining:d.remaining===""?"":Number(d.remaining),needed:Number(d.needed)||0}; }); if(note.trim()) out._note=note.trim(); if(by.trim()){ out._by=by.trim(); window.OUI.LS.set("hideout_ord_by",by.trim()); } await C.saveOrder(date, loc, out); try{ localStorage.removeItem(dkey); }catch(e){} setRestored(false); setSaved(true); toast("Order saved ✓"); }
+    catch(e){ toast("Save failed: "+e.message+" — your numbers are kept on this device",true); }
+    setSaving(false);
+  };
+  const locName=(ctx.locations.find(l=>l.id===loc)||{}).name||"";
+  return <div className="app-pad" style={{paddingBottom:110}}>
+    <div className="lbl"><span className="sh s"></span><span className="tag">Submit order</span><span className="cnt">count what’s left · par fills the rest · Enter jumps to the next item</span></div>
+    <div className="screen">
+      <div className="bar2">
+        <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,flex:"1 1 160px",minWidth:140}} aria-label="Location">{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...inp,flex:"0 1 170px",minWidth:150}} aria-label="Order for" />
+        <input value={by} onChange={e=>setBy(e.target.value)} placeholder="Your name" aria-label="Ordered by" style={{...inp,flex:"1 1 140px",minWidth:120,fontWeight:700,borderColor:by.trim()?"var(--color-ink)":"var(--color-danger-text)"}} />
+      </div>
+      <div className="chips2">{cats.map(c=>{ const list=groups[c.id]||[]; const n=list.filter(filled).length; return <button key={c.id} type="button" className="chip2" aria-pressed={n===list.length&&n>0} onClick={()=>jump(c.id)}>{c.label}<span className={"n"+(n<list.length?" hot":"")}>{n}/{list.length}</span></button>; })}</div>
+      <div style={{padding:"10px 14px 0", color:"var(--color-ink-muted-80)", fontSize:14}}>{C.DAY_LABELS[dayKey]} · par levels for this day fill <b>Needed</b> automatically. {loaded.data && !loaded.error && <span>Loaded the saved order for {locName}.</span>}</div>
+      {loaded.error && <div className="errbox" style={{margin:"12px 14px"}}><b>Couldn’t load the saved order.</b> {loaded.error}<div style={{marginTop:10, display:"flex", gap:10}}><button type="button" className="btn2" onClick={run}>Retry</button><span style={{alignSelf:"center", fontSize:14, color:"var(--color-ink-muted-80)"}}>Saving is off until the order loads — so nothing gets overwritten.</span></div></div>}
+      {restored && <div className="errbox" style={{margin:"12px 14px", borderLeftColor:"var(--color-warning)"}}><b style={{color:"var(--color-ink)"}}>Restored an unsent draft from this device.</b> Check it, then submit — or <button type="button" className="btn2" style={{minHeight:36, padding:"6px 10px", fontSize:12, marginLeft:8}} onClick={()=>{ setDraft({}); setNote(""); setRestored(false); try{ localStorage.removeItem(dkey); }catch(e){} }}>discard</button></div>}
+      {loaded.loading ? <div style={{padding:14}}><Skeleton /></div> : !loaded.error && cats.map(cat=>{ const list=groups[cat.id]||[]; const dup=dupFamilies(list); const n=list.filter(filled).length;
+        return <div key={cat.id} id={"cat-"+cat.id}>
+          <div className="grp2"><span className="sh s" style={{background:cat.color||"var(--color-primary)", marginRight:4}}></span>{cat.label} <span className="n">{n}/{list.length}</span></div>
+          <div className="ohead"><span>Item</span><span>Par</span><span>Remaining</span><span>Needed</span></div>
+          {list.map((it,i)=>{ const par=parFor(it); const d=draft[it.id]||{remaining:"",needed:""}; const on=(Number(d.needed)||0)>0;
+            return <div key={it.id} className={"orow"+(on?" on":"")+(cur===it.id?" cur":"")} style={{animationDelay:(Math.min(i,12)*0.03)+"s"}}>
+              <div style={{minWidth:0}}><div className="nm">{familyNameNodes(it.name,dup)}{it.perishable?<span className="badge2 warn" style={{marginLeft:8, fontSize:10, minHeight:20}} title="Daily item — Remaining is logged as waste only; the order stays at full par">daily</span>:null}</div><div className="un">{it.unit}{it.minOrderQty!=null?" · min "+it.minOrderQty:""}</div></div>
+              <div className="par"><b>par</b>{par!=null?par:"—"}</div>
+              <input id={"rem-"+it.id} className={"q"+((d.remaining!==""&&d.remaining!=null)?" has":"")} inputMode="decimal" placeholder="left" aria-label={"Remaining "+it.name} value={d.remaining} onFocus={e=>{ setCur(it.id); try{ e.target.select(); }catch(x){} }} onChange={e=>onRemaining(it,e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); focusNext(it.id); } }} />
+              <input className={"q need"+(on?" has":"")} inputMode="decimal" placeholder="0" aria-label={"Needed "+it.name} value={d.needed} onFocus={e=>{ setCur(it.id); try{ e.target.select(); }catch(x){} }} onChange={e=>setCell(it.id,"needed",clean(e.target.value))} onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); focusNext(it.id); } }} />
+            </div>; })}
+        </div>; })}
+      {!loaded.loading && !loaded.error && <div style={{padding:"16px 14px 18px", borderTop:"3px solid var(--color-ink)"}}><Field label={<span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico name="note" size={14} />Note for this order (optional)</span>}><textarea id="ord-note" value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. Short on croissants today, extra 10 for Saturday market" style={{...inp,height:80,resize:"vertical"}} /></Field></div>}
+    </div>
+    <div className={"savebar"+(loaded.error?" err":"")}>
+      <div style={{minWidth:0}}><div className="big"><CountUp value={totalNeeded} /> <span style={{fontSize:14, fontWeight:500}}>units</span></div><div className="sub">{loaded.error?"Fix the load error first":(by.trim()?(locName+" · "+C.DAY_LABELS[dayKey]+(saved?" · saved ✓":"")):"Enter your name to submit")}</div></div>
+      <button type="button" className={"btn2 "+(saved?"y":"p")} style={{borderColor:saved?"var(--color-warning)":"#fff"}} onClick={save} disabled={saving||!by.trim()||!!loaded.error||loaded.loading}>{saving?"Saving…":saved?"Saved · submit again":"Submit order"}</button>
+    </div>
+  </div>;
+}
+function SubmitOrderLegacy({ctx}){
   const [loc,setLoc]=useState(ctx.branch||ctx.locations[0]?.id||"");
   const [date,setDate]=useState(C.tomorrowISO());
   const [draft,setDraft]=useState({}); const [note,setNote]=useState(""); const [by,setBy]=useState(()=>window.OUI.LS.get("hideout_ord_by","")||"");
@@ -1777,7 +2124,71 @@ function PeriodReport({ctx}){
 }
 
 /* ===================== STOCK TAKE ===================== */
+/* v2 stock take (2026-09-09): same one-thumb pattern as Submit Order - dense rows, Enter → next
+   UNCOUNTED item, "uncounted only" + search, progress up top, save bar fixed. Legacy kept below. */
 function StockTake({ctx}){
+  const [loc,setLoc]=useState(ctx.branch||ctx.locations[0]?.id||"");
+  const [date,setDate]=useState(C.localISO(new Date()));
+  const [rec,setRec]=useState({counts:{},note:"",recordedBy:"",lossReason:"",enteredAt:""});
+  const [saving,setSaving]=useState(false); const [only,setOnly]=useState(false); const [q,setQ]=useState(""); const [cur,setCur]=useState(null);
+  const [loaded,run]=useAsync(async ()=>{ const r=await C.loadStockTake(date, loc, ctx.stockTakeLinked); setRec({counts:r.counts||{},note:r.note||"",recordedBy:r.recordedBy||"",lossReason:r.lossReason||"",enteredAt:r.enteredAt||""}); return r; }, [date, loc, ctx.department, ctx.stockTakeLinked]);
+  const existing=rec.enteredAt && Object.keys(rec.counts||{}).length>0;
+  const groups=itemsByCat(ctx);
+  const cats=catsWithOrphans(ctx, groups).filter(c=>(groups[c.id]||[]).length);
+  const counted=it=>rec.counts[it.id]!=="" && rec.counts[it.id]!=null;
+  const ql=q.trim().toLowerCase();
+  const show=it=>(!only||!counted(it)) && (!ql || (it.name||"").toLowerCase().includes(ql));
+  const allItems=cats.reduce((a,c)=>a.concat((groups[c.id]||[]).filter(show)),[]);
+  const total=(ctx.items||[]).length; const nCounted=(ctx.items||[]).filter(counted).length;
+  const clean=v=>{ const t=String(v).replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"); return t==="."?"":t; };
+  const setCount=(id,v)=>setRec(r=>({...r,counts:{...r.counts,[id]:clean(v)}}));
+  const focusNext=(id)=>{ const idx=allItems.findIndex(x=>x.id===id); let nx=null; for(let i=idx+1;i<allItems.length;i++){ if(!counted(allItems[i])){ nx=allItems[i]; break; } } if(!nx) nx=allItems[idx+1]; const el=nx?document.getElementById("cnt-"+nx.id):document.getElementById("st-by"); if(el){ el.focus(); try{ el.scrollIntoView({block:"center", behavior:"smooth"}); }catch(e){} } };
+  const jump=cid=>{ const el=document.getElementById("stcat-"+cid); if(el) el.scrollIntoView({block:"start", behavior:"smooth"}); };
+  const save=async ()=>{
+    if(existing && !confirm("A stock take already exists for this date & location. Overwrite it?")) return;
+    setSaving(true);
+    try{ const counts={}; Object.keys(rec.counts).forEach(id=>{ if(rec.counts[id]!=="" && rec.counts[id]!=null) counts[id]=Number(rec.counts[id]); }); await C.saveStockTake(date, loc, ctx.stockTakeLinked, {counts,note:rec.note,recordedBy:rec.recordedBy,lossReason:rec.lossReason,enteredAt:new Date().toISOString()}); toast("Stock take saved ✓"); }
+    catch(e){ toast("Save failed: "+e.message,true); }
+    setSaving(false);
+  };
+  return <div className="app-pad" style={{paddingBottom:110}}>
+    <div className="lbl"><span className="sh c"></span><span className="tag">Stock take</span><span className="cnt">count on-hand stock · Enter jumps to the next uncounted item</span></div>
+    <div className="screen">
+      <div className="bar2">
+        <select value={loc} onChange={e=>setLoc(e.target.value)} style={{...inp,flex:"1 1 160px",minWidth:140}} aria-label="Location">{ctx.locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...inp,flex:"0 1 170px",minWidth:150}} aria-label="Date" />
+        <input type="search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search items" style={{...inp,flex:"1 1 160px",minWidth:120}} />
+        <button type="button" className="chip2" aria-pressed={only} onClick={()=>setOnly(v=>!v)}>Uncounted only <span className="n">{total-nCounted}</span></button>
+      </div>
+      <div style={{display:"flex", gap:16, alignItems:"flex-end", padding:"14px 14px 8px", flexWrap:"wrap"}}>
+        <div style={{fontSize:40, fontWeight:700, lineHeight:.9, letterSpacing:"-.02em"}}>{nCounted} / {total}<div style={{fontSize:14, color:"var(--color-ink-muted-80)", fontWeight:500, marginTop:8, letterSpacing:0}}>counted · {total?Math.round(nCounted/total*100):0}%{ctx.stockTakeLinked?" · shared with the other department":""}{existing?" · a stock take already exists for this day — saving overwrites it":""}</div></div>
+        <div style={{flex:"1 1 200px", paddingBottom:4}}><Bar pct={total?nCounted/total*100:0} height={12} color={nCounted===total&&total?"var(--color-ok)":"var(--color-ink)"} /></div>
+      </div>
+      <div className="chips2">{cats.map(c=>{ const list=groups[c.id]||[]; const n=list.filter(counted).length; return <button key={c.id} type="button" className="chip2" aria-pressed={n===list.length&&n>0} onClick={()=>jump(c.id)}>{c.label}<span className={"n"+(n<list.length?" hot":"")}>{n}/{list.length}</span></button>; })}</div>
+      {loaded.error && <div className="errbox" style={{margin:"12px 14px"}}><b>Couldn’t load the saved stock take.</b> {loaded.error}<div style={{marginTop:10}}><button type="button" className="btn2" onClick={run}>Retry</button></div></div>}
+      {loaded.loading ? <div style={{padding:14}}><Skeleton /></div> : !loaded.error && cats.map(cat=>{ const list=(groups[cat.id]||[]).filter(show); if(!list.length) return null; const dup=dupFamilies(list); const n=(groups[cat.id]||[]).filter(counted).length;
+        return <div key={cat.id} id={"stcat-"+cat.id}>
+          <div className="grp2"><span className="sh s" style={{background:cat.color||"var(--color-primary)", marginRight:4}}></span>{cat.label} <span className="n">{n}/{(groups[cat.id]||[]).length}</span></div>
+          <div className="ohead two"><span>Item</span><span>Count</span></div>
+          {list.map((it,i)=>{ const has=counted(it); return <div key={it.id} className={"orow two"+(has?" on":"")+(cur===it.id?" cur":"")} style={{animationDelay:(Math.min(i,12)*0.03)+"s"}}>
+            <div style={{minWidth:0}}><div className="nm">{familyNameNodes(it.name,dup)}</div><div className="un">{it.unit}</div></div>
+            <input id={"cnt-"+it.id} className={"q"+(has?" has":"")} inputMode="decimal" placeholder="—" aria-label={"Count "+it.name} value={rec.counts[it.id]??""} onFocus={e=>{ setCur(it.id); try{ e.target.select(); }catch(x){} }} onChange={e=>setCount(it.id,e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); focusNext(it.id); } }} />
+          </div>; })}
+        </div>; })}
+      {!loaded.loading && !loaded.error && allItems.length===0 && <div style={{padding:"24px 14px", color:"var(--color-ink-muted-80)"}}>{only?"Everything is counted. 👍":"Nothing matches the search."}</div>}
+      {!loaded.loading && !loaded.error && <div style={{padding:"16px 14px 18px", borderTop:"3px solid var(--color-ink)", display:"grid", gap:12, gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))"}}>
+        <Field label="Recorded by"><input id="st-by" value={rec.recordedBy} onChange={e=>setRec(r=>({...r,recordedBy:e.target.value}))} style={inp} /></Field>
+        <Field label="Loss / waste reason (optional)"><input value={rec.lossReason} onChange={e=>setRec(r=>({...r,lossReason:e.target.value}))} style={inp} /></Field>
+        <Field label="Note (optional)" style={{gridColumn:"1/-1"}}><textarea value={rec.note} onChange={e=>setRec(r=>({...r,note:e.target.value}))} style={{...inp,height:70,resize:"vertical"}} /></Field>
+      </div>}
+    </div>
+    <div className={"savebar"+(loaded.error?" err":"")}>
+      <div><div className="big">{nCounted} <span style={{fontSize:14, fontWeight:500}}>of {total} counted</span></div><div className="sub">{(ctx.locations.find(l=>l.id===loc)||{}).name||""} · {date}</div></div>
+      <button type="button" className="btn2 p" style={{borderColor:"#fff"}} onClick={save} disabled={saving||!!loaded.error||loaded.loading}>{saving?"Saving…":existing?"Overwrite stock take":"Save stock take"}</button>
+    </div>
+  </div>;
+}
+function StockTakeLegacy({ctx}){
   const [loc,setLoc]=useState(ctx.branch||ctx.locations[0]?.id||"");
   const [date,setDate]=useState(C.localISO(new Date()));
   const [rec,setRec]=useState({counts:{},note:"",recordedBy:"",lossReason:"",enteredAt:""});
@@ -2118,17 +2529,19 @@ function ItemsCard({ctx}){
   };
   const units=Array.from(new Set((ctx.items||[]).map(i=>(i.unit||"").trim()).filter(Boolean))).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
 
-  return <Card>
-    <SectionLabel right={<div style={{display:"flex",gap:8,alignItems:"center"}}>{selIds.length>0&&<Btn size="sm" tone="danger" onClick={removeSelected}>Delete {selIds.length}</Btn>}<Btn size="sm" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</Btn></div>}>Items ({total===ctx.items.length?total:total+" / "+ctx.items.length})</SectionLabel>
-    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-      <input placeholder="Search name, unit, category…" value={q} onChange={e=>setQ(e.target.value)} style={{...inp,flex:"1 1 220px",width:"auto"}} />
-      <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{...inp,flex:"0 1 190px",width:"auto"}}>
+  return <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
+    <div className="bar2">
+      <input type="search" placeholder="Search name, unit, category, allergen" value={q} onChange={e=>setQ(e.target.value)} style={{...inp,flex:"1 1 220px",minWidth:160}} />
+      <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{...inp,flex:"0 1 200px",minWidth:150}}>
         <option value="all">All categories</option>
         {ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
         <option value="none">Uncategorised</option>
       </select>
-      {(q||catFilter!=="all")&&<Btn size="sm" tone="ghost" onClick={()=>{setQ("");setCatFilter("all");}}>Clear</Btn>}
+      <span className="cnt" style={{color:"var(--color-ink-muted-80)",whiteSpace:"nowrap"}}>{total===ctx.items.length?total:total+" / "+ctx.items.length} items</span>
+      {selIds.length>0&&<button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={removeSelected}>Delete {selIds.length}</button>}
+      <button type="button" className="btn2 p" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</button>
     </div>
+    <div className="chips2"><button type="button" className="chip2" aria-pressed={catFilter==="all"} onClick={()=>setCatFilter("all")}>All <span className="n">{ctx.items.length}</span></button>{ctx.categories.map(c=>{ const n=(ctx.items||[]).filter(i=>i.cat===c.id).length; return <button key={c.id} type="button" className="chip2" aria-pressed={catFilter===c.id} onClick={()=>setCatFilter(catFilter===c.id?"all":c.id)}><span className="sh s" style={{background:c.color||"var(--color-primary)"}}></span>{c.label} <span className="n">{n}</span></button>; })}{(ctx.items||[]).some(i=>!ctx.categories.some(c=>c.id===i.cat)) && <button type="button" className="chip2" aria-pressed={catFilter==="none"} onClick={()=>setCatFilter(catFilter==="none"?"all":"none")}><span className="sh t"></span>Uncategorised <span className="n hot">{(ctx.items||[]).filter(i=>!ctx.categories.some(c=>c.id===i.cat)).length}</span></button>}</div>
     <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:460}}>
       <thead><tr>
         <th style={{...th,width:30,paddingRight:0}}><input type="checkbox" checked={pageAllSelected} onChange={toggleAllOnPage} style={{cursor:"pointer",width:15,height:15}} title="Select page" /></th>
@@ -2139,14 +2552,14 @@ function ItemsCard({ctx}){
       </tr></thead>
       <tbody>{view.map(it=>(<tr key={it.id} style={sel[it.id]?{background:"var(--color-canvas-parchment)"}:null}>
         <td style={{...td,paddingRight:0}}><input type="checkbox" checked={!!sel[it.id]} onChange={()=>toggleOne(it.id)} style={{cursor:"pointer",width:15,height:15}} /></td>
-        <td style={td}><div style={{fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{it.name}{it.perishable?<span title="Daily item — leftovers are binned and counted as waste" style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px"}}>DAILY</span>:null}</div>{it.allergens&&<div style={{fontSize:11,color:"#b45309"}}>{it.allergens}</div>}</td>
-        <td style={{...td,color:"var(--color-ink-muted-48)"}}>{it.unit}</td>
-        <td style={{...td,color:"var(--color-ink-muted-48)"}}>{catLabel(it.cat)}</td>
-        <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }} style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer",fontSize:13,fontWeight:600,marginRight:10}}>Edit</button><button onClick={()=>removeItem(it)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>Delete</button></td>
+        <td style={{...td,cursor:"pointer"}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}><div style={{fontWeight:700,display:"flex",alignItems:"center",gap:8}}>{it.name}{it.perishable?<span className="badge2 warn" style={{fontSize:10,minHeight:20}} title="Daily item — leftovers are binned and counted as waste">daily</span>:null}{it.rccId?<span className="badge2 dim" style={{fontSize:10,minHeight:20}} title="Price follows RCC">RCC $</span>:null}</div>{it.allergens&&<div style={{fontSize:13,color:"var(--color-ink-muted-80)"}}><span className="sh t" style={{borderLeftWidth:5,borderRightWidth:5,borderBottomWidth:9,marginRight:5}}></span>{it.allergens}</div>}</td>
+        <td style={{...td,color:"var(--color-ink-muted-80)"}}>{it.unit}</td>
+        <td style={{...td,color:"var(--color-ink-muted-80)"}}>{(()=>{ const c=ctx.categories.find(c=>c.id===it.cat); return c?<span><span className="sh s" style={{background:c.color||"var(--color-primary)",marginRight:6,width:10,height:10}}></span>{c.label}</span>:<span className="badge2 bad">▲ none</span>; })()}</td>
+        <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,marginRight:6}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}>Edit</button><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={()=>removeItem(it)}>Delete</button></td>
       </tr>))}</tbody>
     </table></HScroll>
     {total===0 && <Empty>{ctx.items.length?"No items match this search.":"No items."}</Empty>}
-    {total>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,flexWrap:"wrap"}}>
+    {total>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 14px",borderTop:"3px solid var(--color-ink)",flexWrap:"wrap"}}>
       <div style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>{start+1}–{Math.min(start+size,total)} of {total}</div>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <select value={String(pageSize)} onChange={e=>setPageSize(e.target.value==="all"?"all":Number(e.target.value))} style={{...inp,width:"auto",fontSize:13,padding:"7px 9px"}}>
@@ -2203,7 +2616,7 @@ function ItemsCard({ctx}){
         <Field label={'Group (combines totals — e.g. "Croissant dough")'}><input value={edit.groupLabel||""} onChange={e=>setEdit({...edit,groupLabel:e.target.value})} style={inp} list="ord-group-options" placeholder="Optional — items sharing this label are summed in Today" /><datalist id="ord-group-options">{Array.from(new Set((ctx.items||[]).map(i=>(i.groupLabel||"").trim()).filter(Boolean))).map(g=><option key={g} value={g} />)}</datalist></Field>
       </div>
     </Modal>}
-  </Card>;
+  </div>;
 }
 
 /* ---------- Categories ---------- */
@@ -2213,15 +2626,33 @@ function CategoriesCard({ctx}){
   const rename=(id,label)=>ctx.saveCategories(ctx.categories.map(c=>c.id===id?{...c,label}:c));
   const setColor=(id,color)=>ctx.saveCategories(ctx.categories.map(c=>c.id===id?{...c,color}:c));
   const remove=(c)=>{ const used=(ctx.items||[]).some(i=>i.cat===c.id); if(used && !confirm(`"${c.label}" has items. Remove anyway? Those items keep their category id but won't show grouped.`)) return; if(!used && !confirm(`Remove "${c.label}"?`)) return; ctx.saveCategories(ctx.categories.filter(x=>x.id!==c.id)); };
-  return <Card>
-    <SectionLabel>Categories</SectionLabel>
-    <div style={{display:"grid",gap:8}}>{ctx.categories.map(c=>(<div key={c.id} style={{display:"flex",gap:8,alignItems:"center"}}>
-      <input type="color" value={c.color||"#C2693F"} onChange={e=>setColor(c.id,e.target.value)} style={{width:34,height:34,border:"1px solid var(--color-hairline-alpha)",borderRadius:8,background:"#fff",padding:2,cursor:"pointer"}} />
-      <input value={c.label} onChange={e=>rename(c.id,e.target.value)} style={{...inp,flex:1}} />
-      <button onClick={()=>remove(c)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>remove</button>
-    </div>))}</div>
-    <div style={{display:"flex",gap:8,marginTop:12}}><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="New category" style={{...inp,flex:1}} /><Btn onClick={add}>Add</Btn></div>
-  </Card>;
+  /* v2: list on the left, one editor on the right (same pattern as RCC Settings). Order = the order
+     categories appear in Submit Order / Today, so ▲▼ is here too. */
+  const [pick,setPick]=useState(null);
+  const cur=ctx.categories.find(c=>c.id===pick)||ctx.categories[0];
+  const countOf=c=>(ctx.items||[]).filter(i=>i.cat===c.id).length;
+  const move=(id,dir)=>{ const arr=[...ctx.categories]; const i=arr.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; ctx.saveCategories(arr); };
+  const orphan=(ctx.items||[]).filter(i=>!ctx.categories.some(c=>c.id===i.cat)).length;
+  return <div>
+    <div className="lp">
+      <div className="list">
+        <div style={{display:"flex",gap:8,padding:"10px 12px",borderBottom:"3px solid var(--color-ink)"}}><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="New category" style={{...inp,flex:1,minWidth:0}} /><button type="button" className="btn2 p" onClick={add}>Add</button></div>
+        {ctx.categories.map((c,i)=><button key={c.id} type="button" aria-current={cur&&cur.id===c.id} onClick={()=>setPick(c.id)}><span className="sh s" style={{background:c.color||"var(--color-primary)"}}></span><span style={{flex:1,minWidth:0}}>{c.label||<span className="desc">Untitled</span>}<small>{countOf(c)} item{countOf(c)===1?"":"s"} · position {i+1}</small></span></button>)}
+        {orphan>0 && <div style={{padding:"12px 14px",fontSize:14,color:"var(--color-danger-text)",fontWeight:700}}>▲ {orphan} item{orphan===1?"":"s"} in a removed category — reassign in Items.</div>}
+      </div>
+      <div className="edit">{cur ? <>
+        <div className="kv">
+          <div><div className="lab">Name</div><input value={cur.label} onChange={e=>rename(cur.id,e.target.value)} style={inp} /></div>
+          <div><div className="lab">Colour (marker)</div><div style={{display:"flex",gap:10,alignItems:"center"}}><input type="color" className="swatch" value={cur.color||"#C2693F"} onChange={e=>setColor(cur.id,e.target.value)} /><span className="badge2" style={{background:cur.color||"var(--color-primary)",color:"#fff",borderColor:cur.color||"var(--color-primary)"}}>{cur.label||"category"}</span></div></div>
+        </div>
+        <div className="lab" style={{marginTop:16}}>Position in lists</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}><button type="button" className="btn2" disabled={ctx.categories[0]&&ctx.categories[0].id===cur.id} onClick={()=>move(cur.id,-1)}>▲ Up</button><button type="button" className="btn2" disabled={ctx.categories[ctx.categories.length-1]&&ctx.categories[ctx.categories.length-1].id===cur.id} onClick={()=>move(cur.id,1)}>▼ Down</button><span className="desc" style={{margin:0}}>{ctx.categories.findIndex(c=>c.id===cur.id)+1} of {ctx.categories.length}</span></div>
+        <div className="lab" style={{marginTop:16}}>Items in this category · {countOf(cur)}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{(ctx.items||[]).filter(i=>i.cat===cur.id).slice(0,40).map(i=><span key={i.id} className="badge2 dim" style={{textTransform:"none",letterSpacing:0,fontWeight:600}}>{i.name}</span>)}{countOf(cur)>40&&<span className="desc">+{countOf(cur)-40} more</span>}{countOf(cur)===0&&<span className="desc" style={{margin:0}}>None yet — assign items in Items.</span>}</div>
+        <div style={{marginTop:22}}><button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={()=>remove(cur)}>Remove category</button></div>
+      </> : <div className="desc">Add a category on the left.</div>}</div>
+    </div>
+  </div>;
 }
 
 /* ---------- Locations & passcodes ---------- */
@@ -2234,18 +2665,23 @@ function LocationsCard({ctx}){
      Today 매트릭스·Submit Order 의 열 순서라서, 여기서 한 칸 옮기면 모든 표가 같이 따라간다. */
   const move=(id,dir)=>{ const arr=[...ctx.locations]; const i=arr.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; ctx.saveLocations(arr); };
   const mv={background:"none",border:"1px solid var(--color-hairline-alpha)",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:13,color:"var(--color-ink)",display:"inline-flex",alignItems:"center",justifyContent:"center"};
-  return <Card>
-    <SectionLabel>Branches & passcodes</SectionLabel>
-    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:12}}>Each branch can have a numeric passcode required on login. Master key {MASTER} always works. Orders, Today’s Summary and Stock Take are tracked per branch. <b>◀ ▶ sets the column order</b> — the top branch here is the left-most column on Today and Submit Order.</p>
-    <div style={{display:"grid",gap:8}}>{ctx.locations.map((l,i)=>(<div key={l.id} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-      <button type="button" title="Move left (earlier column)" aria-label="Move left" disabled={i===0} onClick={()=>move(l.id,-1)} style={{...mv,opacity:i===0?.35:1}}>◀</button>
-      <button type="button" title="Move right (later column)" aria-label="Move right" disabled={i===ctx.locations.length-1} onClick={()=>move(l.id,1)} style={{...mv,opacity:i===ctx.locations.length-1?.35:1}}>▶</button>
-      <input value={l.name} onChange={e=>upd(l.id,"name",e.target.value)} style={{...inp,flex:1,minWidth:150}} />
-      <input inputMode="numeric" placeholder="Passcode" value={l.passcode||""} onChange={e=>upd(l.id,"passcode",e.target.value.replace(/\D/g,""))} style={{...inp,width:120}} />
-      {ctx.locations.length>1 && <button onClick={()=>remove(l)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>remove</button>}
-    </div>))}</div>
-    <div style={{display:"flex",gap:8,marginTop:12}}><input value={name} onChange={e=>setName(e.target.value)} placeholder="New branch name" style={{...inp,flex:1}} /><Btn onClick={add}>Add branch</Btn></div>
-  </Card>;
+  /* v2: a table — column order (◀ ▶), name, passcode, remove. The top row is the left-most column on
+     Today and Submit Order. Master key always works, so no passcode is shown in clear here. */
+  return <div>
+    <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
+      <HScroll><table className="tbl">
+        <thead><tr><th style={{...th,width:110}}>Order</th><th style={th}>Branch</th><th style={{...th,width:170}}>Passcode</th><th style={{...th,width:120}}></th></tr></thead>
+        <tbody>{ctx.locations.map((l,i)=><tr key={l.id}>
+          <td style={td}><div style={{display:"flex",gap:6}}><button type="button" className="btn2" title="Move left (earlier column)" aria-label="Move left" disabled={i===0} onClick={()=>move(l.id,-1)} style={{padding:"6px 10px",minHeight:40}}>◀</button><button type="button" className="btn2" title="Move right (later column)" aria-label="Move right" disabled={i===ctx.locations.length-1} onClick={()=>move(l.id,1)} style={{padding:"6px 10px",minHeight:40}}>▶</button></div></td>
+          <td style={td}><div style={{display:"flex",gap:10,alignItems:"center"}}><span className="badge2 dim" style={{minWidth:44,justifyContent:"center"}}>{i+1}</span><input value={l.name} onChange={e=>upd(l.id,"name",e.target.value)} style={{...inp,minWidth:160}} aria-label="Branch name" /></div></td>
+          <td style={td}><input inputMode="numeric" placeholder="none" value={l.passcode||""} onChange={e=>upd(l.id,"passcode",e.target.value.replace(/\D/g,""))} style={{...inp,width:150,textAlign:"center",letterSpacing:2}} aria-label="Passcode" /></td>
+          <td style={{...td,textAlign:"right"}}>{ctx.locations.length>1 && <button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)",padding:"6px 10px",minHeight:40}} onClick={()=>remove(l)}>Remove</button>}</td>
+        </tr>)}</tbody>
+      </table></HScroll>
+      <div style={{display:"flex",gap:8,padding:"12px 14px",borderTop:"3px solid var(--color-ink)"}}><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="New branch name" style={{...inp,flex:1}} /><button type="button" className="btn2 p" onClick={add}>Add branch</button></div>
+    </div>
+    <p className="desc" style={{marginTop:12}}>A passcode is asked for on the branch gate; the master key always works. Orders, Today and Stock Take are tracked per branch — removing a branch hides its data but does not delete it.</p>
+  </div>;
 }
 
 /* ---------- Connection (Apps Script backend URL) ---------- */
@@ -2421,36 +2857,44 @@ function AiTrainingCard({ctx}){
 }
 
 /* ---------- Settings shell ---------- */
+/* Settings v2 (2026-09-09, owner: "RCC 설정과 같은 스타일") — left nav in 4 groups + one pane. Items,
+   Par levels, Categories and Profile stay open; the rest keep the settings-password gate, shown inline. */
 function Settings({ctx}){
   const [unlocked,setUnlocked]=useState(false); const [pw,setPw]=useState(""); const [err,setErr]=useState("");
-  const [sub,setSub]=useState("profile");
-  const OPEN=["profile","items","parlevels","categories"]; // day-to-day open sections (P5: Profile has no lock)
-  const SECTIONS=[["profile","Profile"],["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["users","Users"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
+  const [sub,setSub]=useState("items");
+  const OPEN=["profile","board","items","parlevels","categories"];
+  const NAV=[["Day to day",[["items","Items",(ctx.items||[]).length],["parlevels","Par levels",0],["categories","Categories",(ctx.categories||[]).length]]],["Stores & people",[["locations","Branches & passcodes",(ctx.locations||[]).length],["users","Users",0],["board","Staff board & my profile",0]]],["Automation",[["suppliers","Suppliers (auto-email)",(ctx.suppliers||[]).length],["delivery","Delivery roster",0],["dailysummary","Daily summary email",0],["aitraining","AI training",(ctx.qcNotes||[]).length]]],["System",[["connection","Connection",0]]]];
+  const TITLE={items:["Items","Everything the team can order — name, unit, category, cost link to RCC, daily/dispose flag, group label."],parlevels:["Par levels","How much each branch should hold per weekday. Submit Order fills Needed from these."],categories:["Categories","The groups Submit Order, Today and Stock Take are organised by. Colour shows as the marker."],locations:["Branches & passcodes","Order and name of the branches. ◀ ▶ sets the column order on Today and Submit Order."],users:["Users","Who can sign in and what they can see."],profile:["My profile","Your photo and name on the staff board."],board:["Staff board & my profile","Postcards between the stores — open the board, and set the photo and name your posts show."],suppliers:["Suppliers (auto-email)","Who gets the order emails, when, and the template."],delivery:["Delivery roster","Who is on delivery each weekday, plus one-off overrides."],dailysummary:["Daily summary email","The end-of-day summary — recipient, time, sender."],aitraining:["AI training","Q&A the assistant uses to answer staff."],connection:["Connection","Backend URL and the direct-Firestore speed setting."]};
   const gated = !OPEN.includes(sub) && !unlocked;
   const tryUnlock=()=>{ if(pw===SETTINGS_PASSWORD||pw===MASTER){ setUnlocked(true); setErr(""); } else setErr("Incorrect"); };
-  return <div>
-    <Card style={{marginBottom:14,padding:10}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{SECTIONS.map(([k,l])=>(<button key={k} onClick={()=>setSub(k)} className="vbtn-card" style={{border:"1px solid var(--color-hairline-alpha)",borderRadius:999,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",background:sub===k?"var(--color-surface-black)":"var(--color-canvas)",color:sub===k?"#fff":"var(--color-ink-muted-80)"}}>{l}{!OPEN.includes(k)&&!unlocked?" 🔒":""}</button>))}</div>
-    </Card>
-    {gated ? <Card style={{maxWidth:380,margin:"0 auto",textAlign:"center"}}>
-      <div style={{fontWeight:600,marginBottom:4}}>Settings locked</div>
-      <p style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:12}}>Enter the settings password (or master key).</p>
-      <input type="password" inputMode="numeric" value={pw} onChange={e=>{setPw(e.target.value.replace(/\D/g,""));setErr("");}} onKeyDown={e=>e.key==="Enter"&&tryUnlock()} style={{...inp,textAlign:"center",letterSpacing:4,marginBottom:8}} autoFocus />
-      {err && <div style={{fontSize:12,color:"#d70015",marginBottom:8}}>{err}</div>}
-      <Btn onClick={tryUnlock} style={{width:"100%"}}>Unlock</Btn>
-    </Card> : <>
-      {sub==="profile" && <ProfileCard />}
-      {sub==="items" && <ItemsCard ctx={ctx} />}
-      {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
-      {sub==="categories" && <CategoriesCard ctx={ctx} />}
-      {sub==="locations" && <LocationsCard ctx={ctx} />}
-      {sub==="users" && <UsersCard />}
-      {sub==="suppliers" && <SuppliersCard ctx={ctx} />}
-      {sub==="delivery" && <DeliveryCard ctx={ctx} />}
-      {sub==="dailysummary" && <DailySummaryCard ctx={ctx} />}
-      {sub==="aitraining" && <AiTrainingCard ctx={ctx} />}
-      {sub==="connection" && <ConnectionCard ctx={ctx} />}
-    </>}
+  return <div className="app-pad">
+    <div className="lbl"><span className="sh c"></span><span className="tag">Settings</span><span className="cnt">items · par levels · stores · automation</span></div>
+    <div className="screen navcol">
+      <div className="nav">{NAV.map(([g,items])=><div key={g}><div className="g">{g}</div>{items.map(([k,l,n])=><button key={k} type="button" aria-current={sub===k} onClick={()=>setSub(k)}><span>{l}</span><span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{n>0&&<span className="cnt2">{n}</span>}{!OPEN.includes(k)&&!unlocked&&<span className="lock" aria-label="locked">🔒</span>}</span></button>)}</div>)}</div>
+      <div className="pane" key={sub}>
+        <h2>{TITLE[sub][0]}</h2><p className="desc">{TITLE[sub][1]}</p>
+        {gated ? <div className="lockbox">
+          <div className="lab">Settings password</div>
+          <p className="desc" style={{marginBottom:10}}>This section changes shared data. Enter the settings password (or master key).</p>
+          <input type="password" inputMode="numeric" value={pw} onChange={e=>{setPw(e.target.value.replace(/\D/g,""));setErr("");}} onKeyDown={e=>e.key==="Enter"&&tryUnlock()} style={{...inp,textAlign:"center",letterSpacing:4,marginBottom:8}} autoFocus />
+          {err && <div style={{fontSize:14,color:"var(--color-danger-text)",fontWeight:700,marginBottom:8}}>▲ {err}</div>}
+          <button type="button" className="btn2 p" style={{width:"100%"}} onClick={tryUnlock}>Unlock</button>
+        </div> : <>
+          {sub==="profile" && <ProfileCard />}
+          {sub==="board" && (window.OrderBoardTab ? <window.OrderBoardTab /> : <ProfileCard />)}
+          {sub==="items" && <ItemsCard ctx={ctx} />}
+          {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
+          {sub==="categories" && <CategoriesCard ctx={ctx} />}
+          {sub==="locations" && <LocationsCard ctx={ctx} />}
+          {sub==="users" && <UsersCard />}
+          {sub==="suppliers" && <SuppliersCard ctx={ctx} />}
+          {sub==="delivery" && <DeliveryCard ctx={ctx} />}
+          {sub==="dailysummary" && <DailySummaryCard ctx={ctx} />}
+          {sub==="aitraining" && <AiTrainingCard ctx={ctx} />}
+          {sub==="connection" && <ConnectionCard ctx={ctx} />}
+        </>}
+      </div>
+    </div>
   </div>;
 }
 
@@ -2629,7 +3073,7 @@ function AiWidget({ctx}){
   </>;
 }
 
-window.OrderSettings = { Settings, AiWidget };
+window.OrderSettings = { Settings, AiWidget, ProfileCard };
 })();
 
 </script>
@@ -2641,11 +3085,30 @@ const { useState, useEffect, useRef } = React;
 const C = window.OrderCore;
 const { LS, cx, toast, ToastHost, Btn, Card, Field, Ico } = window.OUI;
 const T = window.OrderTabs;
-const { Settings, AiWidget } = window.OrderSettings;
+const { Settings, AiWidget, ProfileCard } = window.OrderSettings;
 const LOGO = window.HIDEOUT_LOGO || "";
 
-const TABS = [["daily","Today"],["order","Submit Order"],["period","Period Report"],["stock","Stock Take"],["trends","Trends"],["settings","Settings"]];
-const TT = { daily:["Today at The Hideout","What’s ordered, where it goes, and who’s on delivery"], order:["Submit Order","Count what’s left — par levels fill the rest"], period:["Period Report","Order totals across a date range"], stock:["Stock Take","Count on-hand stock by branch"], trends:["Trends","Where orders, spend and waste are heading"], settings:["Settings","Items, par levels, branches & connection"] };
+const TABS = [["daily","Today"],["order","Submit Order"],["stock","Stock Take"],["period","Period Report"],["trends","Trends"],["settings","Settings"]];
+const TT = { daily:["Today at The Hideout","What’s ordered, where it goes, and who’s on delivery"], order:["Submit Order","Count what’s left — par levels fill the rest"], period:["Period Report","Order totals across a date range"], stock:["Stock Take","Count on-hand stock by branch"], trends:["Trends","Where orders, spend and waste are heading"], board:["Staff board","Postcards from the team — and your own name & photo"], settings:["Settings","Items, par levels, branches & connection"] };
+/* Staff board tab (2026-09-09 owner: "staff board 는 어떤 탭이야? 아예 하나 신설해서 설정에 연결해서 자기정보
+   입력할 수 있게") — the postcards widget used to hide behind a header button. This tab opens it and carries
+   the person's own profile (photo + display name, saved to allowlist/{email}) so new staff set themselves up here. */
+function BoardTab(){
+  const open=()=>{ try{ if(window.HideoutPostcards&&window.HideoutPostcards.open){ window.HideoutPostcards.open(); return true; } }catch(e){} return false; };
+  return <div className="screen" style={{padding:"18px 18px 20px", display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:20}} >
+      <div>
+        <div className="lab">The board</div>
+        <p className="desc" style={{marginBottom:14}}>Pin a postcard, drop a photo, react to what the other stores posted. It opens as a layer over the app — close it and you are back here. Also under ☰ More → Open staff board.</p>
+        <button type="button" className="btn2 p" style={{minHeight:56, fontSize:16}} onClick={()=>{ if(!open()) toast("The board is still loading — try again in a second",true); }}>Open the staff board →</button>
+        <p className="desc" style={{marginTop:14}}>Your posts show your photo and display name from the right. Set them once — they are shared with RCC too.</p>
+      </div>
+      <div style={{borderLeft:"3px solid var(--color-ink)", paddingLeft:20}} className="board-profile">
+        <div className="lab">My profile</div>
+        <ProfileCard />
+      </div>
+    </div>;
+}
+window.OrderBoardTab=BoardTab;
 
 /* ---- branch + department gate ---- */
 function Gate({locations, onUnlock}){
@@ -2762,6 +3225,9 @@ function App(){
   const [department,setDepartment]=useState(LS.get("hideout_ord_dept","")||null);
   const [core,setCore]=useState(null); // {items,categories,suppliers,...}
   const [tab,setTab]=useState("daily"); const [tabMenu,setTabMenu]=useState(false);
+  const [more,setMore]=useState(false); const [sheet,setSheet]=useState(null);   // v2 header: More ▾ menu · app-switcher / branch+dept sheets
+  const moreRef=useRef(null);
+  useEffect(()=>{ if(!more&&!sheet) return; const onDoc=e=>{ if(more && moreRef.current && !moreRef.current.contains(e.target)) setMore(false); }; const onKey=e=>{ if(e.key==="Escape"){ setMore(false); setSheet(null); } }; document.addEventListener("pointerdown",onDoc); document.addEventListener("keydown",onKey); return ()=>{ document.removeEventListener("pointerdown",onDoc); document.removeEventListener("keydown",onKey); }; },[more,sheet]);
   const [sync,setSync]=useState({ok:null,err:""});
   const [tick,setTick]=useState(0);
   const corePromise=useRef(null);
@@ -2918,42 +3384,70 @@ function App(){
 
   window.__ORD_CFG={locations:locations, items:core.items, qcNotes:core.qcNotes, weeklyDeliveryInfo:core.weeklyDeliveryInfo, deliveryOverrides:core.deliveryOverrides, department:department};
   return <div key={tick}>
-    {/* header */}
-    <div className="sticky top-0" style={{zIndex:50,background:"var(--color-surface-black)"}}>
-      <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"6px 14px",padding:"9px 16px",minHeight:52}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,order:1}}>
-          {LOGO?<img src={LOGO} alt="" style={{height:26,filter:"brightness(0) invert(1)"}} />:<span style={{color:"#fff",fontFamily:"var(--font-display)",fontWeight:700}}>Hideout</span>}
-          <LocMenu locations={locations} branch={branch} onSwitch={switchBranch} />
-        </div>
-        <div style={{order:2,marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-          <div style={{display:"inline-flex",background:"rgba(255,255,255,.08)",borderRadius:999,padding:2}}>
-            {[["chef","Chef"],["barista","Barista"]].map(([k,l])=>(<button key={k} onClick={()=>k!==department&&switchDept(k)} style={{border:"none",cursor:"pointer",borderRadius:999,padding:"5px 12px",fontSize:12,fontWeight:600,background:department===k?"var(--color-primary)":"transparent",color:department===k?"#fff":"var(--color-body-muted)"}}>{l}</button>))}
-          </div>
-          <button onClick={()=>{ try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }} title="Staff board" style={{background:"rgba(255,255,255,.08)",border:"none",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:999}}>Board</button>
-          <button onClick={refresh} title="Refresh" style={{background:"none",border:"none",color:"var(--color-body-muted)",cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center"}}><Ico name="refresh" size={16} /></button>
-          <span title={sync.err||"synced"} style={{width:8,height:8,borderRadius:"50%",background:sync.ok===false?"#ff8a80":sync.ok?"#74d99f":"#c9b",display:"inline-block"}}></span>
-          <PowerMenu />
-        </div>
-        {/* tab bar */}
-        <div style={{order:3,width:"100%",display:"flex",gap:4,overflowX:"auto",scrollbarWidth:"none",paddingTop:4}}>
-          {TABS.map(([k,l])=>(<button key={k} onClick={()=>setTab(k)} className="vbtn-card" style={{flexShrink:0,border:"none",cursor:"pointer",borderRadius:999,padding:"8px 15px",fontSize:13,fontWeight:600,whiteSpace:"nowrap",background:tab===k?"var(--color-canvas)":"transparent",color:tab===k?"var(--color-ink)":"var(--color-body-muted)"}}>{l}</button>))}
+    {/* header v2 (2026-09-09): app switcher · logo · branch+department button · sync · More ▾; tabs on
+        desktop, a fixed bottom nav (Today · Order · Stock · More) on phones. Board/Refresh/Period/Trends/
+        Settings/Lock live under More so the top bar stays 60px on a phone. */}
+    <div className="sticky top-0 hdr2" style={{zIndex:50}}>
+      <div className="row1">
+        <button type="button" className="iconb sw" title="Switch app · RCC" aria-label="Switch app" onClick={()=>setSheet("apps")}>⇄</button>
+        {LOGO?<img src={LOGO} alt="" style={{height:26,filter:"brightness(0) invert(1)",flex:"none"}} />:<span style={{fontWeight:700}}>Hideout</span>}
+        <button type="button" className="locb" onClick={()=>setSheet("where")} title="Switch branch or department"><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(locations.find(l=>l.id===branch)||{}).name?String(locations.find(l=>l.id===branch).name).replace(/\s*\(.*\)/,""):"Select branch"}</span><small>{department==="barista"?"Barista":"Chef"}</small><span aria-hidden="true">▾</span></button>
+        <span style={{marginLeft:"auto"}}></span>
+        <span title={sync.err||"synced"} aria-label={sync.ok===false?"offline":"synced"} className={sync.ok?"sh c":"sh s"} style={{width:12,height:12,background:sync.ok===false?"var(--color-danger-text)":sync.ok?"var(--color-ok)":"rgba(243,241,236,.4)"}}></span>
+        <div style={{position:"relative"}} ref={moreRef}>
+          <button type="button" className="iconb" aria-label="More" aria-expanded={more} onClick={()=>setMore(v=>!v)}>☰</button>
+          {more && <div className="menu2">
+            <div className="k">Go to</div>
+            {TABS.filter(([k])=>!["daily","order","stock"].includes(k)).map(([k,l])=><button key={k} type="button" onClick={()=>{ setTab(k); setMore(false); }}>{l}</button>)}
+            <div className="k">Tools</div>
+            <button type="button" onClick={()=>{ setMore(false); try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }}>Open staff board</button>
+            <button type="button" onClick={()=>{ setMore(false); refresh(); }}>Refresh data</button>
+            <button type="button" onClick={()=>{ setMore(false); setSheet("apps"); }}>Switch app → RCC</button>
+            <div className="k">Device</div>
+            <button type="button" onClick={()=>{ setMore(false); if(confirm("Lock this device? You’ll need the passcode again.")) location.reload(); }}>Lock device</button>
+            {(window.HideoutGate&&typeof window.HideoutGate.signOut==="function") && <button type="button" onClick={()=>{ setMore(false); try{ window.HideoutGate.signOut(); }catch(e){} }}>Sign out (Google)</button>}
+            {(window.HideoutGate&&typeof window.HideoutGate.signOut==="function") && <button type="button" onClick={()=>{ setMore(false); try{ window.HideoutGate.signOut(); window.HideoutGate.signIn(); }catch(e){} }}>Switch account</button>}
+          </div>}
         </div>
       </div>
+      <div className="tabs" role="tablist">{TABS.map(([k,l])=>(<button key={k} type="button" role="tab" aria-pressed={tab===k} aria-selected={tab===k} onClick={()=>setTab(k)}>{l}</button>))}</div>
     </div>
-    {/* title band (dark, non-sticky) */}
-    <div style={{background:"var(--color-surface-black)"}}>
-      <div key={"h"+tab} className="tab-in" style={{maxWidth:900,margin:"0 auto",padding:"2px 16px 20px"}}>
-        <h1 style={{margin:0,color:"#fff",fontFamily:"var(--font-display)",fontWeight:600,fontSize:"clamp(22px,4.6vw,30px)",lineHeight:1.06,letterSpacing:"-0.4px"}}>{TT[tab][0]}</h1>
-        <p style={{margin:"4px 0 0",color:"var(--color-body-muted)",fontSize:"clamp(12px,2.3vw,14px)",letterSpacing:"-0.1px"}}>{TT[tab][1]}{["daily","order","stock"].includes(tab)?" · "+(locations.find(l=>l.id===branch)?.name?.replace(/\s*\(.*\)/,"")||""):""}</p>
+    {/* title band */}
+    <div className="titleband">
+      <div key={"h"+tab} style={{maxWidth:900,margin:"0 auto",padding:"14px 16px 18px"}}>
+        <h1>{TT[tab][0]}</h1>
+        <p>{TT[tab][1]}{["daily","order","stock"].includes(tab)?" · "+(locations.find(l=>l.id===branch)?.name?.replace(/\s*\(.*\)/,"")||""):""}</p>
       </div>
     </div>
+    {/* bottom nav (phones) */}
+    <nav className="bnav" aria-label="Main">
+      {[["daily","Today","c"],["order","Order","s"],["stock","Stock","t"]].map(([k,l,shape])=><button key={k} type="button" aria-pressed={tab===k} onClick={()=>setTab(k)}><span className={"sh "+shape} aria-hidden="true"></span>{l}</button>)}
+      <button type="button" aria-pressed={!["daily","order","stock"].includes(tab)} onClick={()=>setMore(true)}><span aria-hidden="true" style={{fontSize:16,lineHeight:1}}>☰</span>More</button>
+    </nav>
+    {/* sheets: app switcher · branch + department */}
+    {sheet==="apps" && <div className="sheet" onClick={()=>setSheet(null)}><div className="box" onClick={e=>e.stopPropagation()}>
+      <div className="lbl" style={{marginBottom:6}}><span className="sh c"></span><span className="tag">Switch app</span></div>
+      <div className="k">The Hideout apps</div>
+      <button type="button" className="opt" aria-pressed={true}><span>IOS — Ordering & Inventory<small style={{display:"block"}}>you are here · order.hideoutdb.com</small></span><span className="sh s"></span></button>
+      <a className="opt" href="https://hideout-recipe-cost.web.app" style={{textDecoration:"none"}}><span>RCC — Recipes, cost & Today board<small style={{display:"block"}}>hideout-recipe-cost.web.app</small></span><span>→</span></a>
+      <div style={{display:"flex", justifyContent:"flex-end", marginTop:10}}><button type="button" className="btn2" onClick={()=>setSheet(null)}>Close</button></div>
+    </div></div>}
+    {sheet==="where" && <div className="sheet" onClick={()=>setSheet(null)}><div className="box" onClick={e=>e.stopPropagation()}>
+      <div className="lbl" style={{marginBottom:6}}><span className="sh s"></span><span className="tag">Where are you</span></div>
+      <div className="k">Department</div>
+      <div className="seg2" style={{marginBottom:6}}>{[["chef","Chef / Kitchen"],["barista","Barista / Front"]].map(([k,l])=><button key={k} type="button" aria-pressed={department===k} onClick={()=>{ if(k!==department) switchDept(k); }}>{l}</button>)}</div>
+      <div className="k">Branch</div>
+      <div style={{color:"var(--color-ink)"}}><LocMenu locations={locations} branch={branch} onSwitch={id=>{ switchBranch(id); setSheet(null); }} /></div>
+      <div className="k" style={{marginTop:6}}>Current: {(locations.find(l=>l.id===branch)||{}).name||"—"} · {department==="barista"?"Barista":"Chef"}</div>
+      <div style={{display:"flex", justifyContent:"flex-end", marginTop:10}}><button type="button" className="btn2 p" onClick={()=>setSheet(null)}>Done</button></div>
+    </div></div>}
 
     {/* Instagram-style staff story row — filled by postcards.js (persists across tab changes) */}
     <div id="pc-tray-host"></div>
 
     {sync.ok===false && <div style={{background:"#fbeceb",color:"#b23b3b",padding:"8px 16px",fontSize:12.5,textAlign:"center"}}>Showing last-known data — couldn’t reach the backend ({sync.err}). Check Settings › Connection.</div>}
 
-    <div key={tab} className="tab-in" style={{maxWidth:900,margin:"0 auto",padding:"18px 14px 90px"}}>
+    <div key={tab} className="tab-in app-pad" style={{maxWidth:1100,margin:"0 auto",padding:"18px 14px 90px"}}>
       {tab==="daily" && <T.TodaySummary ctx={ctx} />}
       {tab==="order" && <T.SubmitOrder ctx={ctx} />}
       {tab==="period" && <T.PeriodReport ctx={ctx} />}

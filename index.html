@@ -1431,7 +1431,11 @@ window.OrderCore = {
     // ---- two-agent engine: Auditor (finds data errors) + Learner (self-Q&A → memory) ----
     var AG_KEY="hideout_agents";
     function agLoad(){ try{ return JSON.parse(localStorage.getItem(AG_KEY)||"{}"); }catch(e){ return {}; } }
-    var agents=agLoad(); if(agents.on===undefined) agents.on=(opts.agents===true);   // GPT review 2026-09-09: background agents are opt-in agents.audit=agents.audit||[]; agents.knowledge=agents.knowledge||[]; agents.viewedTs=agents.viewedTs||0;
+    var agents=agLoad(); if(agents.on===undefined) agents.on=(opts.agents===true);   /* GPT review 2026-09-09: background agents are opt-in */
+    /* 2026-09-10: the initialisers below were swallowed by a // comment on the same line, so on a device with no
+       saved bot state agents.audit was undefined and unseenCount() threw inside mount → React unmounted the whole app
+       (phone / incognito: blank page after picking a department). */
+    agents.audit=agents.audit||[]; agents.knowledge=agents.knowledge||[]; agents.viewedTs=agents.viewedTs||0;
     function agSave(){ try{ localStorage.setItem(AG_KEY, JSON.stringify(agents)); }catch(e){} }
     function aiAvail(){ if(window.claude&&window.claude.complete) return true; var b=(typeof opts.backendUrl==="function")?opts.backendUrl():opts.backendUrl; return !!b; }
     function unseenCount(){ return agents.audit.filter(function(f){ return f.ts>agents.viewedTs; }).length + agents.knowledge.filter(function(k){ return k.ts>agents.viewedTs; }).length; }
@@ -3237,7 +3241,7 @@ function App(){
 
   const botMounted=useRef(false);
   // AUTH GATE (2026-07-24): mount the AI chatbot only after the passcode gate is cleared (phase==="app"); never re-mount.
-  useEffect(()=>{ if(phase==="app" && !botMounted.current && window.HideoutBot){ botMounted.current=true; window.HideoutBot.mount({source:"ordering", cfg:()=>window.__ORD_CFG||{}, backendUrl:()=>C.cfg.backendUrl, token:C.API_SECRET, greeting:"Ask about orders, items, allergens, delivery or recipes."}); } },[phase]);
+  useEffect(()=>{ if(phase==="app" && !botMounted.current && window.HideoutBot){ botMounted.current=true; try{ window.HideoutBot.mount({source:"ordering", cfg:()=>window.__ORD_CFG||{}, backendUrl:()=>C.cfg.backendUrl, token:C.API_SECRET, greeting:"Ask about orders, items, allergens, delivery or recipes."}); }catch(e){ try{ console.error("[HideoutBot] mount failed", e); }catch(_){} } } },[phase]);
   // AUTH GATE (2026-07-24): flag the document authed so gated staff widgets (postcards FAB/tray, chatbot) can show. Toggles on every phase change; also notifies postcards.js via the 'hideout-authed' event.
   useEffect(()=>{ try{ document.documentElement.classList.toggle("hideout-authed", phase==="app"); document.dispatchEvent(new Event("hideout-authed")); }catch(e){} },[phase]);
 

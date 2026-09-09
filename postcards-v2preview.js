@@ -48,7 +48,7 @@
       messagingSenderId:"717961739938",appId:"1:717961739938:web:752af54de485d7f7c921fb"};
     var LIVE={app:null,auth:null,db:null,me:null,docs:[],unsub:null,staff:[],cm:{}};
     /* 기본 앱 이름을 쓴다 — 같은 오리진의 주문 앱이 만들어 둔 로그인 세션을 그대로 물려받는다 */
-    LIVE.app=firebase.apps.length?firebase.app():firebase.initializeApp(FB);
+    try{ LIVE.app=firebase.app(); }catch(e){ LIVE.app=firebase.initializeApp(FB); }
     LIVE.auth=LIVE.app.auth(); LIVE.db=LIVE.app.firestore();
 
     /* 카드 색을 브랜드에서 파생 — 엽서 구분성은 유지(A안), 톤은 브랜드에 맞춘다 */

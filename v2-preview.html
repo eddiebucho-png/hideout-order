@@ -1179,6 +1179,18 @@ window.OrderCore = {
   }
 
   function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  // Assistant text → safe light HTML: **bold**, "# heading", "- bullet", "☐ tick-box". Everything is escaped first.
+  function mdLite(t){
+    var lines=esc(t).replace(/\r/g,"").split("\n");
+    return lines.map(function(l){
+      var m;
+      if((m=l.match(/^\s*#{1,3}\s+(.*)$/))) l="<span class='hb-h'>"+m[1]+"</span>";
+      else if((m=l.match(/^\s*[-*\u2022]\s+(.*)$/))) l="<span class='hb-li'>"+m[1]+"</span>";
+      else if((m=l.match(/^\s*[\u2610\u2611]\s*(.*)$/))) l="<span class='hb-tick'></span>"+m[1];
+      return l.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(^|\s)\*(?!\s)([^*]+?)\*(?=\s|[.,;:!?]|$)/g,"$1<i>$2</i>");
+    }).join("\n").replace(/\n(<span class='hb-(?:h|li)'>)/g,"$1").replace(/(<\/span>)\n(?=<span class='hb-(?:h|li)'>|$)/g,"$1");
+  }
+  function setMsg(el, text){ el.innerHTML=mdLite(text); }
 
   // ---- one-time stylesheet ----
   function injectCSS(){
@@ -1189,7 +1201,7 @@ window.OrderCore = {
    Jost, paper #f3f1ec, ink #141312, yellow #f2c100 = active, blue #1e4fb0 = info, red #ec3013 = urgent.
    Radius 0, 3px rules, hard offset shadows. Scoped to #hb-fab / #hb-panel so host apps are untouched. */
 "@import url('https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap');",
-"#hb-fab,#hb-panel{--hb-paper:#f3f1ec;--hb-ink:#141312;--hb-yellow:#f2c100;--hb-blue:#1e4fb0;--hb-red:#ec3013;--hb-red-t:#b82412;--hb-muted:rgba(20,19,18,.72);--hb-line:rgba(20,19,18,.28);--hb-font:'Jost',Archivo,system-ui,sans-serif;font-family:var(--hb-font)}",
+"#hb-fab,#hb-panel{--hb-paper:#f3f1ec;--hb-ink:#141312;--hb-yellow:#f2c100;--hb-blue:#1e4fb0;--hb-red:#ec3013;--hb-red-t:#b82412;--hb-muted:rgba(20,19,18,.72);--hb-line:rgba(20,19,18,.28);--hb-font:'Jost',Archivo,system-ui,sans-serif;font-family:var(--hb-font)!important}",
 "#hb-fab *,#hb-panel *{font-family:var(--hb-font)!important;border-radius:0!important;box-sizing:border-box}",
 "@keyframes hb-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}",
 "@keyframes hb-slide{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}",
@@ -1221,6 +1233,7 @@ window.OrderCore = {
 "#hb-panel .hb-tabs .hb-n.show{display:inline-flex}",
 "#hb-msgs{flex:1;overflow-y:auto;padding:16px 14px 6px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;background-image:linear-gradient(rgba(20,19,18,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(20,19,18,.06) 1px,transparent 1px);background-size:22px 22px}",
 "#hb-msgs .hb-b{flex:0 0 auto;max-width:88%;padding:10px 13px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-break:break-word;animation:hb-rise .3s cubic-bezier(.2,.8,.2,1) both}",
+"#hb-msgs .hb-a b{font-weight:700}#hb-msgs .hb-a .hb-h{display:block;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:13px;margin:4px 0 2px}#hb-msgs .hb-a .hb-li{display:block;padding-left:14px;position:relative}#hb-msgs .hb-a .hb-li::before{content:'';position:absolute;left:0;top:9px;width:6px;height:6px;background:var(--hb-ink)}#hb-msgs .hb-a .hb-tick{display:inline-block;width:14px;height:14px;border:2px solid var(--hb-ink);vertical-align:-2px;margin-right:6px;background:#fff}",
 "#hb-msgs .hb-u{align-self:flex-end;background:var(--hb-ink);color:var(--hb-paper);border:2px solid var(--hb-ink);box-shadow:4px 4px 0 var(--hb-yellow)}",
 "#hb-msgs .hb-a{align-self:flex-start;background:#fff;color:var(--hb-ink);border:2px solid var(--hb-ink)}",
 "#hb-msgs .hb-a.hb-err{border-color:var(--hb-red);box-shadow:4px 4px 0 var(--hb-red)}",
@@ -1304,7 +1317,7 @@ window.OrderCore = {
     var msgs=panel.querySelector("#hb-msgs"), input=panel.querySelector(".hb-in"), send=panel.querySelector(".hb-send"), xBtn=panel.querySelector(".hb-x");
     var chatwrap=panel.querySelector("#hb-chatwrap"), insEl=panel.querySelector("#hb-ins"), nBadge=panel.querySelector("#hb-n"), liveDot=panel.querySelector("#hb-live"), curView="chat";
     function scroll(){ msgs.scrollTop=msgs.scrollHeight; }
-    function bubble(role,text){ var d=document.createElement("div"); d.className="hb-b "+(role==="user"?"hb-u":"hb-a"); d.textContent=text; msgs.appendChild(d); scroll(); return d; }
+    function bubble(role,text){ var d=document.createElement("div"); d.className="hb-b "+(role==="user"?"hb-u":"hb-a"); if(role==="user") d.textContent=text; else setMsg(d,text); msgs.appendChild(d); scroll(); return d; }
     function typing(){ var d=document.createElement("div"); d.className="hb-b hb-a"; d.innerHTML="<span class='hb-dots'><i></i><i></i><i></i></span>"; msgs.appendChild(d); scroll(); return d; }
     function chips(){ var w=document.createElement("div"); w.className="hb-chips"; sug.forEach(function(s){ var c=document.createElement("button"); c.className="hb-chip"; c.textContent=s; c.onclick=function(){ input.value=s; if(/[\u2026.]$/.test(s.trim())){ input.focus(); } else { ask(); } }; w.appendChild(c); }); msgs.appendChild(w); scroll(); }
 
@@ -1559,14 +1572,14 @@ window.OrderCore = {
         var calp=extractCalEvent(r);
         var notp=canPostNotice()?extractNotice(r):null;
         t.className="hb-b hb-a";
-        if(out.action&&out.action.type==="delivery_override"){ t.textContent=r||"Here's the delivery change \u2014 confirm to apply:"; deliveryCard(out.action); logQA(opts.source, q, "[delivery draft] "+(out.action.date||"")+" "+(out.action.person||"")); }
-        else if(notp){ t.textContent=notp.intro||"Here's the notice \u2014 confirm to put it on the board:"; noticeCard(notp.notice); logQA(opts.source, q, "[notice draft] "+(notp.notice.title||"")); }
-        else if(calp){ t.textContent=calp.intro||"Here's the event \u2014 confirm to add:"; calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
-        else if(ingParsed){ t.textContent=ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"; ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
-        else if(parsed){ t.textContent=parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"; recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
+        if(out.action&&out.action.type==="delivery_override"){ setMsg(t, r||"Here's the delivery change \u2014 confirm to apply:"); deliveryCard(out.action); logQA(opts.source, q, "[delivery draft] "+(out.action.date||"")+" "+(out.action.person||"")); }
+        else if(notp){ setMsg(t, notp.intro||"Here's the notice \u2014 confirm to put it on the board:"); noticeCard(notp.notice); logQA(opts.source, q, "[notice draft] "+(notp.notice.title||"")); }
+        else if(calp){ setMsg(t, calp.intro||"Here's the event \u2014 confirm to add:"); calCard(calp.ev); logQA(opts.source, q, "[calendar draft] "+calp.ev.title); }
+        else if(ingParsed){ setMsg(t, ingParsed.intro||"Here's the ingredient \u2014 check the details, then Save:"); ingredientBuilder(ingParsed.ingredient); logQA(opts.source, q, "[ingredient draft] "+ingParsed.ingredient.name); }
+        else if(parsed){ setMsg(t, parsed.intro||"Here's a draft \u2014 tweak anything, then Save:"); recipeBuilder(parsed.recipe); logQA(opts.source, q, "[recipe draft] "+parsed.recipe.name); }
         else if(ingIntent){ t.textContent="Let's add it \u2014 set the price and unit, then Save:"; ingredientBuilder(null); logQA(opts.source, q, "[ingredient builder opened]"); }
         else if(intent || (canSaveRecipe() && looksLikeRecipeAsk(r))){ t.textContent="Let's build it \u2014 pick a category, set the quantities, then Save:"; recipeBuilder(null); logQA(opts.source, q, "[recipe builder opened]"); }
-        else { t.textContent=(r||"(no response)")+(remembered?"\n\n\u2713 Saved to memory \u2014 I'll remember that.":""); logQA(opts.source, q, r||""); }
+        else { setMsg(t,(r||"(no response)")+(remembered?"\n\n\u2713 Saved to memory \u2014 I'll remember that.":"")); logQA(opts.source, q, r||""); }
         if(remembered && curView==="insights") renderInsights();
         try{ console.debug("[HideoutBot] answered in "+(Date.now()-t0)+" ms"); }catch(e){}
       }

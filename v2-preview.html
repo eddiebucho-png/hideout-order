@@ -3242,7 +3242,8 @@ function App(){
   useEffect(()=>{ try{ document.documentElement.classList.toggle("hideout-authed", phase==="app"); document.dispatchEvent(new Event("hideout-authed")); }catch(e){} },[phase]);
 
   // initial: set backend from LS, load locations (dept-independent)
-  useEffect(()=>{ C.cfg.backendUrl=LS.get("hideout_ord_backendUrl","")||C.DEFAULT_BACKEND_URL;
+  useEffect(()=>{ { const storedB=LS.get("hideout_ord_backendUrl",""); if(storedB && storedB!==C.DEFAULT_BACKEND_URL){ try{ console.warn("[ordering] stored backend URL differs from the deployed default — resetting", storedB); LS.set("hideout_ord_backendUrl",""); }catch(e){} } }
+    C.cfg.backendUrl=C.DEFAULT_BACKEND_URL;
     C.cfg.fsProjectId=LS.get("hideout_ord_fsProject","")||C.cfg.fsProjectId;
     C.cfg.fsApiKey=LS.get("hideout_ord_fsKey","")||C.cfg.fsApiKey;
     /* 2026-08-25 이사 마이그레이션 — 기기에 저장된 옛 프로젝트(hb20)가 코드 기본값을 덮어써서,
@@ -3357,9 +3358,9 @@ function App(){
     }catch(e){ setSync({ok:false,err:e.message}); setCore(prev=>prev||{locations,categories:C.defaultCategoriesForDept(),items:C.defaultItemsForDept(),suppliers:[],senderName:"",fromDisplayName:"",stockTakeLinked:false,weeklyDeliveryInfo:{mon:"",tue:"",wed:"",thu:"",fri:"",sat:"",sun:""},deliveryOverrides:{},qcNotes:[],dailySummaryRecipient:"",dailySummarySendTime:"18:00",dailySummaryChefEnabled:true,dailySummaryBaristaEnabled:true}); }
   };
 
-  const onUnlock=(bid)=>{ setBranch(bid); if(department){ ensureCore(department).then(()=>setPhase("app")); } else setPhase("dept"); };
+  const onUnlock=(bid)=>{ setBranch(bid); if(department){ setPhase("app"); ensureCore(department).catch(e=>{ setSync({ok:false,err:(e&&e.message)||"load failed"}); }); } else setPhase("dept"); };
   const switchBranch=(bid)=>{ if(bid===branch) return; setBranch(bid); setTick(t=>t+1); };
-  const onPickDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); corePromise.current=loadCore(d); corePromise.current.then(()=>setPhase("app")); };
+  const onPickDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); corePromise.current=loadCore(d); setPhase("app"); corePromise.current.catch(e=>{ setSync({ok:false,err:(e&&e.message)||"load failed"}); }); };
   const switchDept=(d)=>{ setDepartment(d); LS.set("hideout_ord_dept",d); setCore(null); corePromise.current=loadCore(d); corePromise.current.then(()=>setTick(t=>t+1)); };
 
   // generic core saver: mutate a key, persist, update state

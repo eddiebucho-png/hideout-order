@@ -2921,7 +2921,7 @@ function BoardTab(){
       <div>
         <div className="lab">The board</div>
         <p className="desc" style={{marginBottom:14}}>Pin a postcard, drop a photo, react to what the other stores posted. It opens as a layer over the app — close it and you are back here.</p>
-        <button type="button" className="btn2 p" style={{minHeight:56, fontSize:16}} onClick={()=>{ if(!open()) toast("The board is still loading — try again in a second",true); }}>{ready?"Open the staff board →":"Loading the board…"}</button>
+        <button type="button" className="btn2 p" style={{minHeight:56, fontSize:16}} onClick={()=>{ if(!open()) toast("The board is still loading — try again in a second",true); }}>Open the staff board →</button>
         <p className="desc" style={{marginTop:14}}>Your posts show your photo and display name from the right. Set them once — they are shared with RCC too.</p>
       </div>
       <div style={{borderLeft:"3px solid var(--color-ink)", paddingLeft:20}} className="board-profile">

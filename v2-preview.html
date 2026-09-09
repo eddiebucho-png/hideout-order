@@ -3222,7 +3222,6 @@ function App(){
             <div className="k">Go to</div>
             {TABS.filter(([k])=>!["daily","order","stock"].includes(k)).map(([k,l])=><button key={k} type="button" onClick={()=>{ setTab(k); setMore(false); }}>{l}</button>)}
             <div className="k">Tools</div>
-            <button type="button" onClick={()=>{ setMore(false); try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }}>Staff board</button>
             <button type="button" onClick={()=>{ setMore(false); refresh(); }}>Refresh data</button>
             <button type="button" onClick={()=>{ setMore(false); setSheet("apps"); }}>Switch app → RCC</button>
             <div className="k">Device</div>

@@ -646,7 +646,7 @@ function fsAuthReady(){
           if(u) fin();
           /* 로그인이 부팅 **후에** 일어나도(첫 방문 흐름) 빠른 경로를 되살린다 —
              probe 가 한 번 실패하면 세션 내내 느린 길로 고정되던 구멍. */
-          if(u && !cfg.fsDirect){ probeFsDirect().catch(function(){}); }
+          if(u && !cfg.fsDirect){ try{ localStorage.removeItem('hideout_ord_fsDirectFailedAt'); }catch(e){} probeFsDirect().catch(function(){}); }
         }); }catch(e){} });
       }
     }catch(e){}
@@ -675,11 +675,15 @@ async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collection
 // data (a non-empty 'locations'). A missing doc means we're pointed at the wrong Firestore project,
 // so we stay on Apps Script (which has the real data) rather than silently showing empty/defaults.
 async function probeFsDirect(){ if(!cfg.fsProjectId||!cfg.fsApiKey){ cfg.fsDirect=false; return false; }
+  fsAuthReady();   /* register the sign-in listener even when the stamp below short-circuits: it is what re-probes after login */
   /* The direct path has answered 403 since the 2026-08-25 rules lockdown. A failed probe is
      remembered for a day so the app stops paying for it on every open; a later success clears it. */
   try{ const bad=Number(localStorage.getItem('hideout_ord_fsDirectFailedAt')||0); if(bad && Date.now()-bad<86400000){ cfg.fsDirect=false; return false; } }catch(e){}
-  try{ const v=await fsDirectGet('locations'); cfg.fsDirect = (v!=null && v!==''); try{ if(cfg.fsDirect) localStorage.removeItem('hideout_ord_fsDirectFailedAt'); else localStorage.setItem('hideout_ord_fsDirectFailedAt',String(Date.now())); }catch(e){} }
-  catch(e){ cfg.fsDirect=false; try{ localStorage.setItem('hideout_ord_fsDirectFailedAt',String(Date.now())); }catch(e2){} } return cfg.fsDirect; }
+  await fsAuthReady();
+  let authed=false; try{ if(window.firebase&&firebase.apps){ for(const a of firebase.apps){ try{ if(a.auth().currentUser){ authed=true; break; } }catch(e){} } } }catch(e){}
+  const remember=()=>{ if(!authed) return; /* a 403 without a token says nothing about the signed-in path */ try{ localStorage.setItem('hideout_ord_fsDirectFailedAt',String(Date.now())); }catch(e){} };
+  try{ const v=await fsDirectGet('locations'); cfg.fsDirect = (v!=null && v!==''); try{ if(cfg.fsDirect) localStorage.removeItem('hideout_ord_fsDirectFailedAt'); else remember(); }catch(e){} }
+  catch(e){ cfg.fsDirect=false; remember(); } return cfg.fsDirect; }
 
 /* ---- KV primitives (GET-only against Apps Script, see original notes) ---- */
 async function kvGet(key){

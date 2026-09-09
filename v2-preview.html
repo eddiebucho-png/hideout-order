@@ -675,6 +675,7 @@ async function fsDirectList(prefix){ const q={structuredQuery:{from:[{collection
 // data (a non-empty 'locations'). A missing doc means we're pointed at the wrong Firestore project,
 // so we stay on Apps Script (which has the real data) rather than silently showing empty/defaults.
 async function probeFsDirect(){ if(!cfg.fsProjectId||!cfg.fsApiKey){ cfg.fsDirect=false; return false; }
+  fsAuthReady();   /* register the sign-in listener even when the stamp below short-circuits: it is what re-probes after login */
   /* The direct path has answered 403 since the 2026-08-25 rules lockdown. A failed probe is
      remembered for a day so the app stops paying for it on every open; a later success clears it. */
   try{ const bad=Number(localStorage.getItem('hideout_ord_fsDirectFailedAt')||0); if(bad && Date.now()-bad<86400000){ cfg.fsDirect=false; return false; } }catch(e){}

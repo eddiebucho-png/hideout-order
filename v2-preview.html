@@ -479,6 +479,8 @@
 /* ---- backend auth (must match API_SECRET in the .gs file) ---- */
 const API_SECRET = 'hideout-9f2a7c-orders';
 function withAuth(url){ return url + (url.indexOf('?') > -1 ? '&' : '?') + 'token=' + encodeURIComponent(API_SECRET); }
+/* 2026-09-09: a request that never answers (mobile radio, captive wifi, Apps Script stall) must fail, not hang the boot. */
+function fetchTimeoutSignal(ms){ try{ return (typeof AbortSignal!=='undefined' && AbortSignal.timeout) ? AbortSignal.timeout(ms) : undefined; }catch(e){ return undefined; } }
 
 /* ---- runtime config (backend URL + which department) ---- */
 // Default shared backend (same Web App the original app shipped with) so every device — and this
@@ -685,7 +687,7 @@ async function kvGet(key){
   let value=null;
   if(cfg.fsDirect){ try{ value=await fsDirectGet(key); cachePut('kv:'+key,value); return value; }catch(e){ if(!cfg.backendUrl && !hasArtifactStorage()) throw e; /* [FIX 2026-07-23 yearsim] read failure must THROW, not masquerade as empty — a null here poisoned the cache and made screens render "no data" on transient network blips, and anything saved from that screen truncated real data */ } }
   if(cfg.backendUrl){
-    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=get&key=${encodeURIComponent(key)}`),{cache:'no-store'}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
+    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=get&key=${encodeURIComponent(key)}`),{cache:'no-store',signal:fetchTimeoutSignal(15000)}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
     if(json&&json.error) throw new Error(json.error);
     value=(json&&json.value!==undefined)?json.value:null;
   }else if(hasArtifactStorage()){
@@ -697,7 +699,7 @@ async function kvGetFresh(key){ delete cfg.cache['kv:'+key]; return kvGet(key); 
 async function kvSet(key,value){
   if(cfg.fsDirect){ try{ await fsDirectSet(key,value); cachePut('kv:'+key,value); cacheClearPrefix('list:'); return true; }catch(e){ /* fall back */ } }
   if(cfg.backendUrl){
-    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=set&key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`),{cache:'no-store'}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
+    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=set&key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`),{cache:'no-store',signal:fetchTimeoutSignal(15000)}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
     if(json&&json.error) throw new Error(json.error);
   }else if(hasArtifactStorage()){ await window.storage.set(key,value,true); }
   else{ throw new Error('No shared storage connected — add a backend link under Settings.'); }
@@ -706,7 +708,7 @@ async function kvSet(key,value){
 async function kvDelete(key){
   if(cfg.fsDirect){ try{ await fsDirectDelete(key); delete cfg.cache['kv:'+key]; cacheClearPrefix('list:'); return true; }catch(e){ /* fall back */ } }
   if(cfg.backendUrl){
-    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=delete&key=${encodeURIComponent(key)}`),{cache:'no-store'}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
+    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=delete&key=${encodeURIComponent(key)}`),{cache:'no-store',signal:fetchTimeoutSignal(15000)}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
     if(json&&json.error) throw new Error(json.error);
   }else if(hasArtifactStorage()){ try{ await window.storage.delete(key,true); }catch(e){} }
   delete cfg.cache['kv:'+key]; cacheClearPrefix('list:'); return true;
@@ -716,7 +718,7 @@ async function kvListPrefix(prefix){
   let keys=[];
   if(cfg.fsDirect){ try{ keys=await fsDirectList(prefix); cachePut('list:'+prefix,keys); return keys; }catch(e){ /* fall back */ } }
   try{
-    if(cfg.backendUrl){ const res=await fetch(withAuth(`${cfg.backendUrl}?action=list&prefix=${encodeURIComponent(prefix)}`),{cache:'no-store'}); if(res.ok){ const json=await res.json(); keys=(json&&json.keys)?json.keys:[]; } }
+    if(cfg.backendUrl){ const res=await fetch(withAuth(`${cfg.backendUrl}?action=list&prefix=${encodeURIComponent(prefix)}`),{cache:'no-store',signal:fetchTimeoutSignal(15000)}); if(res.ok){ const json=await res.json(); keys=(json&&json.keys)?json.keys:[]; } }
     else if(hasArtifactStorage()&&window.storage.list){ const res=await window.storage.list(prefix,true); keys=(res&&res.keys)?res.keys:[]; }
   }catch(e){ keys=[]; }
   cachePut('list:'+prefix,keys); return keys;
@@ -728,7 +730,7 @@ async function kvGetBatch(keys){
   if(!missing.length) return out;
   if(cfg.fsDirect){ try{ const got=await fsDirectBatch(missing); missing.forEach(k=>{ out[k]=got[k]!==undefined?got[k]:null; cachePut('kv:'+k,out[k]); }); return out; }catch(e){ if(!cfg.backendUrl && !hasArtifactStorage()) throw e; /* [FIX 2026-07-23 yearsim] batch read failure must throw — null-filling made loadCore build an empty core and reseed/overwrite paths fire on good data */ } }
   if(cfg.backendUrl){
-    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=getBatch&keys=${encodeURIComponent(JSON.stringify(missing))}`),{cache:'no-store'}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
+    const json=await withRetry(async ()=>{ const res=await fetch(withAuth(`${cfg.backendUrl}?action=getBatch&keys=${encodeURIComponent(JSON.stringify(missing))}`),{cache:'no-store',signal:fetchTimeoutSignal(15000)}); if(!res.ok) throw new Error('Network error '+res.status); return res.json(); });
     if(json&&json.error) throw new Error(json.error);
     const values=(json&&json.values)?json.values:{};
     missing.forEach(k=>{ out[k]=values[k]!==undefined?values[k]:null; cachePut('kv:'+k,out[k]); });

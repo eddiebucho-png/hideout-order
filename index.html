@@ -1442,6 +1442,11 @@ function TodaySummary({ctx}){
   const data = orders.data || {};
   const submittedLocs = ctx.locations.filter(l=>{ const o=data[l.id]||{}; return Object.keys(o).filter(k=>k!=="_note").some(k=>Number(o[k].needed)>0); });
   const missingLocs = ctx.locations.filter(l=>!submittedLocs.includes(l));
+  /* 주문이 없는 지점 열은 접는다 (2026-09-09 주인: "주문이 없는 LOCATION 은 접어서 표기 안 해도 되게").
+     colIdx = 매트릭스에 실제로 그릴 지점의 인덱스. 기본은 주문 낸 지점만, 토글로 전부 펼친다.
+     perLoc/colSums 는 ctx.locations 순서의 배열이라 인덱스로 골라 써야 열과 값이 어긋나지 않는다. */
+  const [showEmptyLocs,setShowEmptyLocs]=useState(false);
+  const colIdx = ctx.locations.map((l,i)=>i).filter(i=>showEmptyLocs || submittedLocs.includes(ctx.locations[i]));
   const grandTotal = ctx.locations.reduce((a,l)=>{ const o=data[l.id]||{}; return a+Object.keys(o).reduce((s,k)=>s+(k==="_note"?0:(Number(o[k].needed)||0)),0); },0);
   // per-category matrix rows
   const groups=itemsByCat(ctx);
@@ -1521,6 +1526,14 @@ function TodaySummary({ctx}){
       {ctx.locations.map(l=>{ const ok=submittedLocs.includes(l); const by=data[l.id]&&data[l.id]._by; return <div key={l.id} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:999,fontSize:13,fontWeight:600,background:ok?"var(--color-canvas)":"rgba(180,83,9,.09)",border:"1px solid "+(ok?"var(--color-hairline-alpha)":"rgba(180,83,9,.2)"),color:ok?"var(--color-ink)":"#b45309"}}><span style={{width:8,height:8,borderRadius:"50%",background:ok?"#3f9e63":"#b45309"}}></span>{l.name.replace(/\s*\(.*\)/,"")} · {ok?(by?"by "+by:"submitted"):"pending"}</div>; })}
     </div>
 
+    {/* 주문 없는 지점 열 접기 토글 — 접힌 게 기본이라 몇 개가 숨었는지는 항상 보여준다 */}
+    {missingLocs.length>0 && !orders.loading && grandTotal>0 && <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10,marginTop:-6}}>
+      <button type="button" onClick={()=>setShowEmptyLocs(v=>!v)} aria-pressed={showEmptyLocs}
+        style={{background:"none",border:"1px solid var(--color-hairline-alpha)",borderRadius:999,padding:"5px 12px",fontSize:12,color:"var(--color-ink-muted-48)",cursor:"pointer",fontFamily:"inherit"}}>
+        {showEmptyLocs ? "Hide "+missingLocs.length+" branch"+(missingLocs.length===1?"":"es")+" with no orders" : "Show "+missingLocs.length+" hidden branch"+(missingLocs.length===1?"":"es")+" (no orders)"}
+      </button>
+    </div>}
+
     {/* notes from locations — floating card (2f design) */}
     {(()=>{ const withNotes=ctx.locations.filter(l=>data[l.id]&&data[l.id]._note); if(!withNotes.length) return null;
       return <div className="hb-notecard" style={{marginBottom:16,background:"#faf8f2",borderRadius:20,padding:"22px 24px 24px",boxShadow:"0 18px 40px -28px rgba(46,42,38,0.45)"}}>
@@ -1582,20 +1595,20 @@ function TodaySummary({ctx}){
           <span style={{marginLeft:"auto",fontSize:14,color:"var(--color-ink-muted-48)",transform:expanded?"rotate(180deg)":"none",transition:"transform .18s",flexShrink:0}}>⌄</span>
         </button>
         {expanded && <Card style={{padding:0,overflow:"hidden"}}>
-          <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:120+ctx.locations.length*74+80}}>
+          <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:120+colIdx.length*74+80}}>
             <thead><tr>
               <th style={{...th,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1}}>Item</th>
-              {ctx.locations.map(l=><th key={l.id} style={{...th,textAlign:"center",borderLeft:vline}}>{/* One bold line per venue. The id is the street number for the three shops (515 / 100 / 340) so it belongs in the label, but the coffee cart's id is an arbitrary 7393 that means nothing to anyone - anything longer than three characters is treated as an internal id and left out. */}<div style={{fontWeight:700,color:"var(--color-ink)",fontSize:11,textTransform:"none",letterSpacing:0,lineHeight:1.25}}>{(String(l.id).length<=3? String(l.id)+" " : "")+l.name.split(" (")[0]}</div></th>)}
+              {colIdx.map(ci=>{ const l=ctx.locations[ci]; return <th key={l.id} style={{...th,textAlign:"center",borderLeft:vline}}>{/* One bold line per venue. The id is the street number for the three shops (515 / 100 / 340) so it belongs in the label, but the coffee cart's id is an arbitrary 7393 that means nothing to anyone - anything longer than three characters is treated as an internal id and left out. */}<div style={{fontWeight:700,color:"var(--color-ink)",fontSize:11,textTransform:"none",letterSpacing:0,lineHeight:1.25}}>{(String(l.id).length<=3? String(l.id)+" " : "")+l.name.split(" (")[0]}</div></th>; })}
               <th style={{...th,textAlign:"center",borderLeft:vline}}>Total</th>
             </tr></thead>
             <tbody>{visible.map(({item,total,perLoc})=>(<tr key={item.id} className="row-live">
               <td style={{...td,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1}}><span style={{fontWeight:600}}>{familyNameNodes(item.name,dup)}</span> <span style={{fontSize:11,color:"var(--color-ink-muted-48)"}}>({item.unit})</span></td>
-              {perLoc.map((p,i)=><td key={i} style={{...td,textAlign:"center",borderLeft:vline,fontWeight:p.need>0?700:400,color:!p.submitted?"var(--color-ink-muted-48)":p.need===0?"#c9bda9":"var(--color-ink)"}}>{!p.submitted?"–":p.need}</td>)}
+              {colIdx.map(ci=>{ const p=perLoc[ci]||{}; return <td key={ci} style={{...td,textAlign:"center",borderLeft:vline,fontWeight:p.need>0?700:400,color:!p.submitted?"var(--color-ink-muted-48)":p.need===0?"#c9bda9":"var(--color-ink)"}}>{!p.submitted?"–":p.need}</td>; })}
               <td style={{...td,textAlign:"center",fontWeight:700,borderLeft:vline}}>{total>0?total:"·"}<span style={{fontSize:10,fontWeight:500,color:"var(--color-ink-muted-48)",marginLeft:2}}>{total>0?item.unit:""}</span></td>
             </tr>))}</tbody>
             <tfoot><tr style={{background:"var(--color-canvas)"}}>
               <td style={{...td,position:"sticky",left:0,background:"var(--color-canvas)",zIndex:1,fontWeight:800,borderTop:"2px solid var(--color-hairline)"}}>Category total</td>
-              {colSums.map((s,i)=><td key={i} style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800,color:s>0?"var(--color-ink)":"var(--color-ink-muted-48)"}}>{s>0?Math.round(s*1000)/1000:"·"}</td>)}
+              {colIdx.map(ci=>{ const s=colSums[ci]||0; return <td key={ci} style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800,color:s>0?"var(--color-ink)":"var(--color-ink-muted-48)"}}>{s>0?Math.round(s*1000)/1000:"·"}</td>; })}
               <td style={{...td,textAlign:"center",borderLeft:vline,borderTop:"2px solid var(--color-hairline)",fontWeight:800}}>{Math.round(catTotal*1000)/1000}<span style={{fontSize:10,fontWeight:500,color:catMixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={catMixed?"This category mixes units — total may be misleading":undefined}>{catUnit}</span></td>
             </tr></tfoot>
           </table></HScroll>
@@ -2199,10 +2212,16 @@ function LocationsCard({ctx}){
   const add=()=>{ const n=name.trim(); if(!n) return; const id=String(Date.now()).slice(-4); ctx.saveLocations([...ctx.locations,{id,name:n}]); setName(""); };
   const upd=(id,field,val)=>ctx.saveLocations(ctx.locations.map(l=>l.id===id?{...l,[field]:val}:l));
   const remove=(l)=>{ if(!confirm(`Remove branch "${l.name}"? Orders/stock takes stored under it stay in the backend but won't show.`)) return; ctx.saveLocations(ctx.locations.filter(x=>x.id!==l.id)); };
+  /* 순서 조정 (2026-09-09 주인: "순서 오른쪽 왼콽 조정할 수 있게"). locations 배열의 순서가 그대로
+     Today 매트릭스·Submit Order 의 열 순서라서, 여기서 한 칸 옮기면 모든 표가 같이 따라간다. */
+  const move=(id,dir)=>{ const arr=[...ctx.locations]; const i=arr.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; ctx.saveLocations(arr); };
+  const mv={background:"none",border:"1px solid var(--color-hairline-alpha)",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:13,color:"var(--color-ink)",display:"inline-flex",alignItems:"center",justifyContent:"center"};
   return <Card>
     <SectionLabel>Branches & passcodes</SectionLabel>
-    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:12}}>Each branch can have a numeric passcode required on login. Master key {MASTER} always works. Orders, Today’s Summary and Stock Take are tracked per branch.</p>
-    <div style={{display:"grid",gap:8}}>{ctx.locations.map(l=>(<div key={l.id} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:12}}>Each branch can have a numeric passcode required on login. Master key {MASTER} always works. Orders, Today’s Summary and Stock Take are tracked per branch. <b>◀ ▶ sets the column order</b> — the top branch here is the left-most column on Today and Submit Order.</p>
+    <div style={{display:"grid",gap:8}}>{ctx.locations.map((l,i)=>(<div key={l.id} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+      <button type="button" title="Move left (earlier column)" aria-label="Move left" disabled={i===0} onClick={()=>move(l.id,-1)} style={{...mv,opacity:i===0?.35:1}}>◀</button>
+      <button type="button" title="Move right (later column)" aria-label="Move right" disabled={i===ctx.locations.length-1} onClick={()=>move(l.id,1)} style={{...mv,opacity:i===ctx.locations.length-1?.35:1}}>▶</button>
       <input value={l.name} onChange={e=>upd(l.id,"name",e.target.value)} style={{...inp,flex:1,minWidth:150}} />
       <input inputMode="numeric" placeholder="Passcode" value={l.passcode||""} onChange={e=>upd(l.id,"passcode",e.target.value.replace(/\D/g,""))} style={{...inp,width:120}} />
       {ctx.locations.length>1 && <button onClick={()=>remove(l)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>remove</button>}

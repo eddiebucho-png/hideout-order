@@ -1446,19 +1446,26 @@ function TodaySummary({ctx}){
      colIdx = 매트릭스에 실제로 그릴 지점의 인덱스. 기본은 주문 낸 지점만, 토글로 전부 펼친다.
      perLoc/colSums 는 ctx.locations 순서의 배열이라 인덱스로 골라 써야 열과 값이 어긋나지 않는다. */
   const [showEmptyLocs,setShowEmptyLocs]=useState(false);
+  /* 총합 0인 품목 행 숨김 (2026-09-09 주인: "0으로 잡힌 아이템들은 표시 안 하게 — 너무 길고 보기 안 좋다").
+     예전 규칙은 "미제출 지점이 하나라도 있으면 전 품목 표시"였는데, 커피카트·교육처럼 늘 pending 인
+     지점이 있으니 사실상 매일 전부 보였다. 이제 기본은 주문 있는 품목만, 옆 토글로 전체 보기. */
+  const [showAllItems,setShowAllItems]=useState(false);
   const colIdx = ctx.locations.map((l,i)=>i).filter(i=>showEmptyLocs || submittedLocs.includes(ctx.locations[i]));
   const grandTotal = ctx.locations.reduce((a,l)=>{ const o=data[l.id]||{}; return a+Object.keys(o).reduce((s,k)=>s+(k==="_note"?0:(Number(o[k].needed)||0)),0); },0);
   // per-category matrix rows
   const groups=itemsByCat(ctx);
-  const cats = catsWithOrphans(ctx, groups).map(cat=>{
+  let cats = catsWithOrphans(ctx, groups).map(cat=>{   // let: 아래에서 hiddenItems 를 센 뒤 필터해 재할당한다
     const rows=(groups[cat.id]||[]).map(item=>{
       let total=0; const perLoc=ctx.locations.map(l=>{ const o=data[l.id]; if(!o) return {submitted:false,need:0}; const e=o[item.id]; const need=e?Number(e.needed)||0:0; total+=need; return {submitted:true,need}; });
       return {item,total,perLoc};
     }).sort((a,b)=>b.total-a.total);
-    // show all items when any branch is still missing, else only the ones actually ordered
-    const visible=rows.filter(r=>r.total>0 || missingLocs.length>0);
-    return {cat,visible};
-  }).filter(c=>c.visible.length);
+    // 기본은 실제 주문된 품목만. 0 행은 showAllItems 토글로만 펼친다 (미제출 지점 여부와 무관).
+    const visible=rows.filter(r=>r.total>0 || showAllItems);
+    return {cat,visible,hiddenCount:rows.length-visible.length};
+  });
+  // 숨긴 개수는 필터 전에 센다 — 전 품목이 0인 카테고리는 아래 filter 에서 통째로 빠지기 때문
+  const hiddenItems=cats.reduce((s,c)=>s+c.hiddenCount,0);
+  cats=cats.filter(c=>c.visible.length);
 
   return <div>
     <div style={{marginBottom:16}}>{(()=>{
@@ -1527,11 +1534,17 @@ function TodaySummary({ctx}){
     </div>
 
     {/* 주문 없는 지점 열 접기 토글 — 접힌 게 기본이라 몇 개가 숨었는지는 항상 보여준다 */}
-    {missingLocs.length>0 && !orders.loading && grandTotal>0 && <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10,marginTop:-6}}>
-      <button type="button" onClick={()=>setShowEmptyLocs(v=>!v)} aria-pressed={showEmptyLocs}
-        style={{background:"none",border:"1px solid var(--color-hairline-alpha)",borderRadius:999,padding:"5px 12px",fontSize:12,color:"var(--color-ink-muted-48)",cursor:"pointer",fontFamily:"inherit"}}>
+    {(missingLocs.length>0 || hiddenItems>0 || showAllItems) && !orders.loading && grandTotal>0 && <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginBottom:10,marginTop:-6}}>
+      {/* 색 강조(2026-09-09 주인: "버튼 색깔 강조해줘 보이기 쉽게") — 꺼짐: 레드 테두리·글자 / 켜짐: 레드 채움·흰 글자 */}
+      {missingLocs.length>0 && <button type="button" onClick={()=>setShowEmptyLocs(v=>!v)} aria-pressed={showEmptyLocs}
+        style={{background:showEmptyLocs?"var(--color-primary)":"#fff",border:"1.5px solid var(--color-primary)",borderRadius:999,padding:"7px 14px",fontSize:12.5,fontWeight:700,color:showEmptyLocs?"#fff":"var(--color-primary)",cursor:"pointer",fontFamily:"inherit",boxShadow:"0 1px 2px rgba(0,0,0,.06)"}}>
         {showEmptyLocs ? "Hide "+missingLocs.length+" branch"+(missingLocs.length===1?"":"es")+" with no orders" : "Show "+missingLocs.length+" hidden branch"+(missingLocs.length===1?"":"es")+" (no orders)"}
-      </button>
+      </button>}
+      {/* 주인 제안(2026-09-09): "이 버튼 옆에 전체 아이템 보이기" */}
+      {(hiddenItems>0 || showAllItems) && <button type="button" onClick={()=>setShowAllItems(v=>!v)} aria-pressed={showAllItems}
+        style={{background:showAllItems?"var(--color-primary)":"#fff",border:"1.5px solid var(--color-primary)",borderRadius:999,padding:"7px 14px",fontSize:12.5,fontWeight:700,color:showAllItems?"#fff":"var(--color-primary)",cursor:"pointer",fontFamily:"inherit",boxShadow:"0 1px 2px rgba(0,0,0,.06)"}}>
+        {showAllItems ? "Hide items with no orders" : "Show all items ("+hiddenItems+" with no orders)"}
+      </button>}
     </div>}
 
     {/* notes from locations — floating card (2f design) */}

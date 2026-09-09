@@ -425,6 +425,25 @@
   .errbox b{ color:var(--color-danger-text); }
   table th{ font-size:12px!important; letter-spacing:.08em!important; color:var(--color-ink-muted-80)!important; border-bottom:3px solid var(--color-ink)!important; padding:12px 10px!important; }
   table td{ font-size:16px!important; padding:11px 10px!important; border-bottom:1px solid var(--color-hairline)!important; }
+  /* settings: left nav + pane (same as RCC Settings v2) */
+  .navcol{ display:grid; grid-template-columns:240px minmax(0,1fr); } .navcol .nav{ border-right:3px solid var(--color-ink); background:#f3f1ec; padding:10px 0; }
+  .nav .g{ font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--color-ink-muted-80); padding:14px 16px 6px; }
+  .nav button{ display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; text-align:left; padding:11px 16px; border:0; background:transparent; font:inherit; font-weight:600; color:var(--color-ink); cursor:pointer; transition:background .15s,padding-left .2s; min-height:44px; }
+  .nav button:hover{ background:rgba(242,193,0,.25); padding-left:20px; } .nav button[aria-current="true"]{ background:var(--color-ink); color:#f3f1ec; }
+  .nav button .cnt2{ font-size:12px; font-weight:700; background:var(--color-warning); color:var(--color-ink); padding:2px 7px; } .nav button[aria-current="true"] .cnt2{ background:#f3f1ec; }
+  .nav button .lock{ font-size:11px; color:var(--color-ink-muted-80); } .nav button[aria-current="true"] .lock{ color:rgba(243,241,236,.7); }
+  .pane{ padding:18px 20px; min-width:0; } .pane h2{ margin:0 0 4px; font-size:24px; font-weight:700; } .pane .desc{ color:var(--color-ink-muted-80); font-weight:400; margin:0 0 16px; max-width:70ch; }
+  .pane .card{ border:0; padding:0; background:transparent; }
+  .lp{ display:grid; grid-template-columns:300px minmax(0,1fr); border:3px solid var(--color-ink); background:#fff; } .lp .list{ border-right:3px solid var(--color-ink); max-height:70vh; overflow:auto; }
+  .lp .list button{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:12px 14px; min-height:52px; border:0; border-bottom:1px solid var(--color-hairline); background:transparent; font:inherit; font-weight:600; cursor:pointer; color:var(--color-ink); transition:background .15s; }
+  .lp .list button:hover{ background:rgba(242,193,0,.22); } .lp .list button[aria-current="true"]{ background:var(--color-warning); } .lp .list small{ display:block; color:var(--color-ink-muted-80); font-weight:500; font-size:13px; margin-top:2px; }
+  .lp .list button.add{ background:var(--color-ink); color:#f3f1ec; } .lp .edit{ padding:16px 18px; min-width:0; }
+  .kv{ display:grid; grid-template-columns:1fr 1fr; gap:10px; } .lab{ font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--color-ink-muted-80); margin:0 0 5px; }
+  .swatch{ width:44px; height:44px; border:2px solid var(--color-ink); padding:0; cursor:pointer; background:#fff; }
+  .lockbox{ border:3px solid var(--color-ink); background:#fff; padding:18px; max-width:380px; }
+  .tbl{ width:100%; border-collapse:collapse; } .tbl th{ text-align:left; } .tbl td.num,.tbl th.num{ text-align:right; }
+  .tbl tbody tr:hover td{ background:rgba(242,193,0,.14); }
+  @media (max-width:900px){ .navcol{ grid-template-columns:minmax(0,1fr); } .navcol .nav{ border-right:0; border-bottom:3px solid var(--color-ink); display:flex; overflow-x:auto; padding:0; } .nav .g{ display:none; } .nav button{ width:auto; flex:none; } .lp{ grid-template-columns:minmax(0,1fr); } .lp .list{ border-right:0; border-bottom:3px solid var(--color-ink); max-height:40vh; } .kv{ grid-template-columns:1fr; } }
   @media (prefers-reduced-motion:reduce){ *,*::before,*::after{ animation:none!important; transition:none!important; } }
 </style>
 <template id="__bundler_thumbnail">
@@ -2316,17 +2335,19 @@ function ItemsCard({ctx}){
   };
   const units=Array.from(new Set((ctx.items||[]).map(i=>(i.unit||"").trim()).filter(Boolean))).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
 
-  return <Card>
-    <SectionLabel right={<div style={{display:"flex",gap:8,alignItems:"center"}}>{selIds.length>0&&<Btn size="sm" tone="danger" onClick={removeSelected}>Delete {selIds.length}</Btn>}<Btn size="sm" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</Btn></div>}>Items ({total===ctx.items.length?total:total+" / "+ctx.items.length})</SectionLabel>
-    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-      <input placeholder="Search name, unit, category…" value={q} onChange={e=>setQ(e.target.value)} style={{...inp,flex:"1 1 220px",width:"auto"}} />
-      <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{...inp,flex:"0 1 190px",width:"auto"}}>
+  return <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
+    <div className="bar2">
+      <input type="search" placeholder="Search name, unit, category, allergen" value={q} onChange={e=>setQ(e.target.value)} style={{...inp,flex:"1 1 220px",minWidth:160}} />
+      <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{...inp,flex:"0 1 200px",minWidth:150}}>
         <option value="all">All categories</option>
         {ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
         <option value="none">Uncategorised</option>
       </select>
-      {(q||catFilter!=="all")&&<Btn size="sm" tone="ghost" onClick={()=>{setQ("");setCatFilter("all");}}>Clear</Btn>}
+      <span className="cnt" style={{color:"var(--color-ink-muted-80)",whiteSpace:"nowrap"}}>{total===ctx.items.length?total:total+" / "+ctx.items.length} items</span>
+      {selIds.length>0&&<button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={removeSelected}>Delete {selIds.length}</button>}
+      <button type="button" className="btn2 p" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</button>
     </div>
+    <div className="chips2"><button type="button" className="chip2" aria-pressed={catFilter==="all"} onClick={()=>setCatFilter("all")}>All <span className="n">{ctx.items.length}</span></button>{ctx.categories.map(c=>{ const n=(ctx.items||[]).filter(i=>i.cat===c.id).length; return <button key={c.id} type="button" className="chip2" aria-pressed={catFilter===c.id} onClick={()=>setCatFilter(catFilter===c.id?"all":c.id)}><span className="sh s" style={{background:c.color||"var(--color-primary)"}}></span>{c.label} <span className="n">{n}</span></button>; })}{(ctx.items||[]).some(i=>!ctx.categories.some(c=>c.id===i.cat)) && <button type="button" className="chip2" aria-pressed={catFilter==="none"} onClick={()=>setCatFilter(catFilter==="none"?"all":"none")}><span className="sh t"></span>Uncategorised <span className="n hot">{(ctx.items||[]).filter(i=>!ctx.categories.some(c=>c.id===i.cat)).length}</span></button>}</div>
     <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:460}}>
       <thead><tr>
         <th style={{...th,width:30,paddingRight:0}}><input type="checkbox" checked={pageAllSelected} onChange={toggleAllOnPage} style={{cursor:"pointer",width:15,height:15}} title="Select page" /></th>
@@ -2337,14 +2358,14 @@ function ItemsCard({ctx}){
       </tr></thead>
       <tbody>{view.map(it=>(<tr key={it.id} style={sel[it.id]?{background:"var(--color-canvas-parchment)"}:null}>
         <td style={{...td,paddingRight:0}}><input type="checkbox" checked={!!sel[it.id]} onChange={()=>toggleOne(it.id)} style={{cursor:"pointer",width:15,height:15}} /></td>
-        <td style={td}><div style={{fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{it.name}{it.perishable?<span title="Daily item — leftovers are binned and counted as waste" style={{fontSize:9.5,fontWeight:700,color:"#c2410c",border:"1px solid rgba(194,65,12,.3)",borderRadius:4,padding:"1px 4px"}}>DAILY</span>:null}</div>{it.allergens&&<div style={{fontSize:11,color:"#b45309"}}>{it.allergens}</div>}</td>
-        <td style={{...td,color:"var(--color-ink-muted-48)"}}>{it.unit}</td>
-        <td style={{...td,color:"var(--color-ink-muted-48)"}}>{catLabel(it.cat)}</td>
-        <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }} style={{background:"none",border:"none",color:"var(--color-primary)",cursor:"pointer",fontSize:13,fontWeight:600,marginRight:10}}>Edit</button><button onClick={()=>removeItem(it)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>Delete</button></td>
+        <td style={{...td,cursor:"pointer"}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}><div style={{fontWeight:700,display:"flex",alignItems:"center",gap:8}}>{it.name}{it.perishable?<span className="badge2 warn" style={{fontSize:10,minHeight:20}} title="Daily item — leftovers are binned and counted as waste">daily</span>:null}{it.rccId?<span className="badge2 dim" style={{fontSize:10,minHeight:20}} title="Price follows RCC">RCC $</span>:null}</div>{it.allergens&&<div style={{fontSize:13,color:"var(--color-ink-muted-80)"}}><span className="sh t" style={{borderLeftWidth:5,borderRightWidth:5,borderBottomWidth:9,marginRight:5}}></span>{it.allergens}</div>}</td>
+        <td style={{...td,color:"var(--color-ink-muted-80)"}}>{it.unit}</td>
+        <td style={{...td,color:"var(--color-ink-muted-80)"}}>{(()=>{ const c=ctx.categories.find(c=>c.id===it.cat); return c?<span><span className="sh s" style={{background:c.color||"var(--color-primary)",marginRight:6,width:10,height:10}}></span>{c.label}</span>:<span className="badge2 bad">▲ none</span>; })()}</td>
+        <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,marginRight:6}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}>Edit</button><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={()=>removeItem(it)}>Delete</button></td>
       </tr>))}</tbody>
     </table></HScroll>
     {total===0 && <Empty>{ctx.items.length?"No items match this search.":"No items."}</Empty>}
-    {total>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,flexWrap:"wrap"}}>
+    {total>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 14px",borderTop:"3px solid var(--color-ink)",flexWrap:"wrap"}}>
       <div style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>{start+1}–{Math.min(start+size,total)} of {total}</div>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <select value={String(pageSize)} onChange={e=>setPageSize(e.target.value==="all"?"all":Number(e.target.value))} style={{...inp,width:"auto",fontSize:13,padding:"7px 9px"}}>
@@ -2401,7 +2422,7 @@ function ItemsCard({ctx}){
         <Field label={'Group (combines totals — e.g. "Croissant dough")'}><input value={edit.groupLabel||""} onChange={e=>setEdit({...edit,groupLabel:e.target.value})} style={inp} list="ord-group-options" placeholder="Optional — items sharing this label are summed in Today" /><datalist id="ord-group-options">{Array.from(new Set((ctx.items||[]).map(i=>(i.groupLabel||"").trim()).filter(Boolean))).map(g=><option key={g} value={g} />)}</datalist></Field>
       </div>
     </Modal>}
-  </Card>;
+  </div>;
 }
 
 /* ---------- Categories ---------- */
@@ -2411,15 +2432,33 @@ function CategoriesCard({ctx}){
   const rename=(id,label)=>ctx.saveCategories(ctx.categories.map(c=>c.id===id?{...c,label}:c));
   const setColor=(id,color)=>ctx.saveCategories(ctx.categories.map(c=>c.id===id?{...c,color}:c));
   const remove=(c)=>{ const used=(ctx.items||[]).some(i=>i.cat===c.id); if(used && !confirm(`"${c.label}" has items. Remove anyway? Those items keep their category id but won't show grouped.`)) return; if(!used && !confirm(`Remove "${c.label}"?`)) return; ctx.saveCategories(ctx.categories.filter(x=>x.id!==c.id)); };
-  return <Card>
-    <SectionLabel>Categories</SectionLabel>
-    <div style={{display:"grid",gap:8}}>{ctx.categories.map(c=>(<div key={c.id} style={{display:"flex",gap:8,alignItems:"center"}}>
-      <input type="color" value={c.color||"#C2693F"} onChange={e=>setColor(c.id,e.target.value)} style={{width:34,height:34,border:"1px solid var(--color-hairline-alpha)",borderRadius:8,background:"#fff",padding:2,cursor:"pointer"}} />
-      <input value={c.label} onChange={e=>rename(c.id,e.target.value)} style={{...inp,flex:1}} />
-      <button onClick={()=>remove(c)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>remove</button>
-    </div>))}</div>
-    <div style={{display:"flex",gap:8,marginTop:12}}><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="New category" style={{...inp,flex:1}} /><Btn onClick={add}>Add</Btn></div>
-  </Card>;
+  /* v2: list on the left, one editor on the right (same pattern as RCC Settings). Order = the order
+     categories appear in Submit Order / Today, so ▲▼ is here too. */
+  const [pick,setPick]=useState(null);
+  const cur=ctx.categories.find(c=>c.id===pick)||ctx.categories[0];
+  const countOf=c=>(ctx.items||[]).filter(i=>i.cat===c.id).length;
+  const move=(id,dir)=>{ const arr=[...ctx.categories]; const i=arr.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; ctx.saveCategories(arr); };
+  const orphan=(ctx.items||[]).filter(i=>!ctx.categories.some(c=>c.id===i.cat)).length;
+  return <div>
+    <div className="lp">
+      <div className="list">
+        <div style={{display:"flex",gap:8,padding:"10px 12px",borderBottom:"3px solid var(--color-ink)"}}><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="New category" style={{...inp,flex:1,minWidth:0}} /><button type="button" className="btn2 p" onClick={add}>Add</button></div>
+        {ctx.categories.map((c,i)=><button key={c.id} type="button" aria-current={cur&&cur.id===c.id} onClick={()=>setPick(c.id)}><span className="sh s" style={{background:c.color||"var(--color-primary)"}}></span><span style={{flex:1,minWidth:0}}>{c.label||<span className="desc">Untitled</span>}<small>{countOf(c)} item{countOf(c)===1?"":"s"} · position {i+1}</small></span></button>)}
+        {orphan>0 && <div style={{padding:"12px 14px",fontSize:14,color:"var(--color-danger-text)",fontWeight:700}}>▲ {orphan} item{orphan===1?"":"s"} in a removed category — reassign in Items.</div>}
+      </div>
+      <div className="edit">{cur ? <>
+        <div className="kv">
+          <div><div className="lab">Name</div><input value={cur.label} onChange={e=>rename(cur.id,e.target.value)} style={inp} /></div>
+          <div><div className="lab">Colour (marker)</div><div style={{display:"flex",gap:10,alignItems:"center"}}><input type="color" className="swatch" value={cur.color||"#C2693F"} onChange={e=>setColor(cur.id,e.target.value)} /><span className="badge2" style={{background:cur.color||"var(--color-primary)",color:"#fff",borderColor:cur.color||"var(--color-primary)"}}>{cur.label||"category"}</span></div></div>
+        </div>
+        <div className="lab" style={{marginTop:16}}>Position in lists</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}><button type="button" className="btn2" disabled={ctx.categories[0]&&ctx.categories[0].id===cur.id} onClick={()=>move(cur.id,-1)}>▲ Up</button><button type="button" className="btn2" disabled={ctx.categories[ctx.categories.length-1]&&ctx.categories[ctx.categories.length-1].id===cur.id} onClick={()=>move(cur.id,1)}>▼ Down</button><span className="desc" style={{margin:0}}>{ctx.categories.findIndex(c=>c.id===cur.id)+1} of {ctx.categories.length}</span></div>
+        <div className="lab" style={{marginTop:16}}>Items in this category · {countOf(cur)}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{(ctx.items||[]).filter(i=>i.cat===cur.id).slice(0,40).map(i=><span key={i.id} className="badge2 dim" style={{textTransform:"none",letterSpacing:0,fontWeight:600}}>{i.name}</span>)}{countOf(cur)>40&&<span className="desc">+{countOf(cur)-40} more</span>}{countOf(cur)===0&&<span className="desc" style={{margin:0}}>None yet — assign items in Items.</span>}</div>
+        <div style={{marginTop:22}}><button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={()=>remove(cur)}>Remove category</button></div>
+      </> : <div className="desc">Add a category on the left.</div>}</div>
+    </div>
+  </div>;
 }
 
 /* ---------- Locations & passcodes ---------- */
@@ -2432,18 +2471,23 @@ function LocationsCard({ctx}){
      Today 매트릭스·Submit Order 의 열 순서라서, 여기서 한 칸 옮기면 모든 표가 같이 따라간다. */
   const move=(id,dir)=>{ const arr=[...ctx.locations]; const i=arr.findIndex(x=>x.id===id); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; ctx.saveLocations(arr); };
   const mv={background:"none",border:"1px solid var(--color-hairline-alpha)",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:13,color:"var(--color-ink)",display:"inline-flex",alignItems:"center",justifyContent:"center"};
-  return <Card>
-    <SectionLabel>Branches & passcodes</SectionLabel>
-    <p style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:12}}>Each branch can have a numeric passcode required on login. Master key {MASTER} always works. Orders, Today’s Summary and Stock Take are tracked per branch. <b>◀ ▶ sets the column order</b> — the top branch here is the left-most column on Today and Submit Order.</p>
-    <div style={{display:"grid",gap:8}}>{ctx.locations.map((l,i)=>(<div key={l.id} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-      <button type="button" title="Move left (earlier column)" aria-label="Move left" disabled={i===0} onClick={()=>move(l.id,-1)} style={{...mv,opacity:i===0?.35:1}}>◀</button>
-      <button type="button" title="Move right (later column)" aria-label="Move right" disabled={i===ctx.locations.length-1} onClick={()=>move(l.id,1)} style={{...mv,opacity:i===ctx.locations.length-1?.35:1}}>▶</button>
-      <input value={l.name} onChange={e=>upd(l.id,"name",e.target.value)} style={{...inp,flex:1,minWidth:150}} />
-      <input inputMode="numeric" placeholder="Passcode" value={l.passcode||""} onChange={e=>upd(l.id,"passcode",e.target.value.replace(/\D/g,""))} style={{...inp,width:120}} />
-      {ctx.locations.length>1 && <button onClick={()=>remove(l)} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:13}}>remove</button>}
-    </div>))}</div>
-    <div style={{display:"flex",gap:8,marginTop:12}}><input value={name} onChange={e=>setName(e.target.value)} placeholder="New branch name" style={{...inp,flex:1}} /><Btn onClick={add}>Add branch</Btn></div>
-  </Card>;
+  /* v2: a table — column order (◀ ▶), name, passcode, remove. The top row is the left-most column on
+     Today and Submit Order. Master key always works, so no passcode is shown in clear here. */
+  return <div>
+    <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
+      <HScroll><table className="tbl">
+        <thead><tr><th style={{...th,width:110}}>Order</th><th style={th}>Branch</th><th style={{...th,width:170}}>Passcode</th><th style={{...th,width:120}}></th></tr></thead>
+        <tbody>{ctx.locations.map((l,i)=><tr key={l.id}>
+          <td style={td}><div style={{display:"flex",gap:6}}><button type="button" className="btn2" title="Move left (earlier column)" aria-label="Move left" disabled={i===0} onClick={()=>move(l.id,-1)} style={{padding:"6px 10px",minHeight:40}}>◀</button><button type="button" className="btn2" title="Move right (later column)" aria-label="Move right" disabled={i===ctx.locations.length-1} onClick={()=>move(l.id,1)} style={{padding:"6px 10px",minHeight:40}}>▶</button></div></td>
+          <td style={td}><div style={{display:"flex",gap:10,alignItems:"center"}}><span className="badge2 dim" style={{minWidth:44,justifyContent:"center"}}>{i+1}</span><input value={l.name} onChange={e=>upd(l.id,"name",e.target.value)} style={{...inp,minWidth:160}} aria-label="Branch name" /></div></td>
+          <td style={td}><input inputMode="numeric" placeholder="none" value={l.passcode||""} onChange={e=>upd(l.id,"passcode",e.target.value.replace(/\D/g,""))} style={{...inp,width:150,textAlign:"center",letterSpacing:2}} aria-label="Passcode" /></td>
+          <td style={{...td,textAlign:"right"}}>{ctx.locations.length>1 && <button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)",padding:"6px 10px",minHeight:40}} onClick={()=>remove(l)}>Remove</button>}</td>
+        </tr>)}</tbody>
+      </table></HScroll>
+      <div style={{display:"flex",gap:8,padding:"12px 14px",borderTop:"3px solid var(--color-ink)"}}><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="New branch name" style={{...inp,flex:1}} /><button type="button" className="btn2 p" onClick={add}>Add branch</button></div>
+    </div>
+    <p className="desc" style={{marginTop:12}}>A passcode is asked for on the branch gate; the master key always works. Orders, Today and Stock Take are tracked per branch — removing a branch hides its data but does not delete it.</p>
+  </div>;
 }
 
 /* ---------- Connection (Apps Script backend URL) ---------- */
@@ -2619,36 +2663,43 @@ function AiTrainingCard({ctx}){
 }
 
 /* ---------- Settings shell ---------- */
+/* Settings v2 (2026-09-09, owner: "RCC 설정과 같은 스타일") — left nav in 4 groups + one pane. Items,
+   Par levels, Categories and Profile stay open; the rest keep the settings-password gate, shown inline. */
 function Settings({ctx}){
   const [unlocked,setUnlocked]=useState(false); const [pw,setPw]=useState(""); const [err,setErr]=useState("");
-  const [sub,setSub]=useState("profile");
-  const OPEN=["profile","items","parlevels","categories"]; // day-to-day open sections (P5: Profile has no lock)
-  const SECTIONS=[["profile","Profile"],["items","Items"],["parlevels","Par Levels"],["categories","Categories"],["locations","Branches"],["users","Users"],["suppliers","Suppliers"],["delivery","Delivery"],["dailysummary","Daily Email"],["aitraining","AI Training"],["connection","Connection"]];
+  const [sub,setSub]=useState("items");
+  const OPEN=["profile","items","parlevels","categories"];
+  const NAV=[["Day to day",[["items","Items",(ctx.items||[]).length],["parlevels","Par levels",0],["categories","Categories",(ctx.categories||[]).length]]],["Stores & people",[["locations","Branches & passcodes",(ctx.locations||[]).length],["users","Users",0],["profile","My profile",0]]],["Automation",[["suppliers","Suppliers (auto-email)",(ctx.suppliers||[]).length],["delivery","Delivery roster",0],["dailysummary","Daily summary email",0],["aitraining","AI training",(ctx.qcNotes||[]).length]]],["System",[["connection","Connection",0]]]];
+  const TITLE={items:["Items","Everything the team can order — name, unit, category, cost link to RCC, daily/dispose flag, group label."],parlevels:["Par levels","How much each branch should hold per weekday. Submit Order fills Needed from these."],categories:["Categories","The groups Submit Order, Today and Stock Take are organised by. Colour shows as the marker."],locations:["Branches & passcodes","Order and name of the branches. ◀ ▶ sets the column order on Today and Submit Order."],users:["Users","Who can sign in and what they can see."],profile:["My profile","Your photo and name on the staff board."],suppliers:["Suppliers (auto-email)","Who gets the order emails, when, and the template."],delivery:["Delivery roster","Who is on delivery each weekday, plus one-off overrides."],dailysummary:["Daily summary email","The end-of-day summary — recipient, time, sender."],aitraining:["AI training","Q&A the assistant uses to answer staff."],connection:["Connection","Backend URL and the direct-Firestore speed setting."]};
   const gated = !OPEN.includes(sub) && !unlocked;
   const tryUnlock=()=>{ if(pw===SETTINGS_PASSWORD||pw===MASTER){ setUnlocked(true); setErr(""); } else setErr("Incorrect"); };
-  return <div>
-    <Card style={{marginBottom:14,padding:10}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{SECTIONS.map(([k,l])=>(<button key={k} onClick={()=>setSub(k)} className="vbtn-card" style={{border:"1px solid var(--color-hairline-alpha)",borderRadius:999,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",background:sub===k?"var(--color-surface-black)":"var(--color-canvas)",color:sub===k?"#fff":"var(--color-ink-muted-80)"}}>{l}{!OPEN.includes(k)&&!unlocked?" 🔒":""}</button>))}</div>
-    </Card>
-    {gated ? <Card style={{maxWidth:380,margin:"0 auto",textAlign:"center"}}>
-      <div style={{fontWeight:600,marginBottom:4}}>Settings locked</div>
-      <p style={{fontSize:12,color:"var(--color-ink-muted-48)",marginBottom:12}}>Enter the settings password (or master key).</p>
-      <input type="password" inputMode="numeric" value={pw} onChange={e=>{setPw(e.target.value.replace(/\D/g,""));setErr("");}} onKeyDown={e=>e.key==="Enter"&&tryUnlock()} style={{...inp,textAlign:"center",letterSpacing:4,marginBottom:8}} autoFocus />
-      {err && <div style={{fontSize:12,color:"#d70015",marginBottom:8}}>{err}</div>}
-      <Btn onClick={tryUnlock} style={{width:"100%"}}>Unlock</Btn>
-    </Card> : <>
-      {sub==="profile" && <ProfileCard />}
-      {sub==="items" && <ItemsCard ctx={ctx} />}
-      {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
-      {sub==="categories" && <CategoriesCard ctx={ctx} />}
-      {sub==="locations" && <LocationsCard ctx={ctx} />}
-      {sub==="users" && <UsersCard />}
-      {sub==="suppliers" && <SuppliersCard ctx={ctx} />}
-      {sub==="delivery" && <DeliveryCard ctx={ctx} />}
-      {sub==="dailysummary" && <DailySummaryCard ctx={ctx} />}
-      {sub==="aitraining" && <AiTrainingCard ctx={ctx} />}
-      {sub==="connection" && <ConnectionCard ctx={ctx} />}
-    </>}
+  return <div className="app-pad">
+    <div className="lbl"><span className="sh c"></span><span className="tag">Settings</span><span className="cnt">items · par levels · stores · automation</span></div>
+    <div className="screen navcol">
+      <div className="nav">{NAV.map(([g,items])=><div key={g}><div className="g">{g}</div>{items.map(([k,l,n])=><button key={k} type="button" aria-current={sub===k} onClick={()=>setSub(k)}><span>{l}</span><span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{n>0&&<span className="cnt2">{n}</span>}{!OPEN.includes(k)&&!unlocked&&<span className="lock" aria-label="locked">🔒</span>}</span></button>)}</div>)}</div>
+      <div className="pane" key={sub}>
+        <h2>{TITLE[sub][0]}</h2><p className="desc">{TITLE[sub][1]}</p>
+        {gated ? <div className="lockbox">
+          <div className="lab">Settings password</div>
+          <p className="desc" style={{marginBottom:10}}>This section changes shared data. Enter the settings password (or master key).</p>
+          <input type="password" inputMode="numeric" value={pw} onChange={e=>{setPw(e.target.value.replace(/\D/g,""));setErr("");}} onKeyDown={e=>e.key==="Enter"&&tryUnlock()} style={{...inp,textAlign:"center",letterSpacing:4,marginBottom:8}} autoFocus />
+          {err && <div style={{fontSize:14,color:"var(--color-danger-text)",fontWeight:700,marginBottom:8}}>▲ {err}</div>}
+          <button type="button" className="btn2 p" style={{width:"100%"}} onClick={tryUnlock}>Unlock</button>
+        </div> : <>
+          {sub==="profile" && <ProfileCard />}
+          {sub==="items" && <ItemsCard ctx={ctx} />}
+          {sub==="parlevels" && <ParLevelsCard ctx={ctx} />}
+          {sub==="categories" && <CategoriesCard ctx={ctx} />}
+          {sub==="locations" && <LocationsCard ctx={ctx} />}
+          {sub==="users" && <UsersCard />}
+          {sub==="suppliers" && <SuppliersCard ctx={ctx} />}
+          {sub==="delivery" && <DeliveryCard ctx={ctx} />}
+          {sub==="dailysummary" && <DailySummaryCard ctx={ctx} />}
+          {sub==="aitraining" && <AiTrainingCard ctx={ctx} />}
+          {sub==="connection" && <ConnectionCard ctx={ctx} />}
+        </>}
+      </div>
+    </div>
   </div>;
 }
 

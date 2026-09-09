@@ -2892,7 +2892,7 @@ function AiWidget({ctx}){
   </>;
 }
 
-window.OrderSettings = { Settings, AiWidget };
+window.OrderSettings = { Settings, AiWidget, ProfileCard };
 })();
 
 </script>
@@ -2904,7 +2904,7 @@ const { useState, useEffect, useRef } = React;
 const C = window.OrderCore;
 const { LS, cx, toast, ToastHost, Btn, Card, Field, Ico } = window.OUI;
 const T = window.OrderTabs;
-const { Settings, AiWidget } = window.OrderSettings;
+const { Settings, AiWidget, ProfileCard } = window.OrderSettings;
 const LOGO = window.HIDEOUT_LOGO || "";
 
 const TABS = [["daily","Today"],["order","Submit Order"],["stock","Stock Take"],["board","Staff board"],["period","Period Report"],["trends","Trends"],["settings","Settings"]];

@@ -279,6 +279,109 @@
 }
 
 </style>
+
+<!-- ==========================================================================================
+     Shared v2 chrome (2026-09-11) - popups, the ingredient dropdown, the handover card.
+     These MUST live here and not in v2Css: v2Css is rendered by the Today screen, so React tore
+     the stylesheet down whenever the user opened any other tab and the popups lost every rule.
+     Plain CSS in <head> cannot unmount, and unlike v2Css/RV2_CSS it is not inside a JS template
+     literal - so ordinary CSS (backticks included) is safe in here.
+     The tokens are repeated on the components themselves because the ingredient trigger sits in
+     the recipe editor, which is neither .tdv2 nor .rv2 - it had no --ink to inherit.
+     ========================================================================================== -->
+<style id="ui-v2-css">
+.tdv2,.md-panel,.idp-trigger,.idp-pop{--r:#ec3013;--b:#1e4fb0;--y:#f2c100;--ink:#141312;--paper:#f3f1ec;--muted:rgba(20,19,18,.62)}
+.tdv2{color:var(--ink);font-weight:500;min-width:0}
+/* the app's global reset is body *{font-family:var(--font-text)!important} - without our own
+   !important not one glyph of Jost reaches the screen */
+.tdv2,.tdv2 *,.md-panel,.md-panel *,.idp-trigger,.idp-pop,.idp-pop *{font-family:Jost,Archivo,system-ui,sans-serif!important}
+.tdv2 button,.tdv2 .row,.tdv2 .prep,.tdv2 .week{border-radius:0!important}
+/* ---- shared popup (Modal) ---------------------------------------------------------------
+   One spring curve for the whole app. Blur on the scrim so the page behind recedes instead of
+   just dimming. The panel grows from the tap point via transform-origin set inline. */
+.md-back{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;
+  padding:24px 16px;overflow:auto;background:rgba(20,19,18,.42);
+  -webkit-backdrop-filter:blur(18px) saturate(130%);backdrop-filter:blur(18px) saturate(130%);
+  animation:md-fade .18s ease both}
+.md-panel{background:var(--paper);color:var(--ink);border:3px solid var(--ink);border-radius:0;
+  box-shadow:10px 10px 0 var(--ink);margin:min(6vh,64px) 0 40px;
+  animation:md-grow .34s cubic-bezier(.32,.72,0,1) both}
+.md-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  background:var(--ink);color:#fff;padding:14px 18px}
+.md-title{font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;min-width:0}
+.md-x{background:none;border:0;color:#fff;font-size:26px;line-height:1;cursor:pointer;
+  padding:0 4px;min-height:auto;transition:transform .18s cubic-bezier(.32,.72,0,1)}
+.md-x:hover{transform:rotate(90deg) scale(1.1)}
+.md-body{padding:20px 18px 22px}
+@keyframes md-fade{from{opacity:0}to{opacity:1}}
+@keyframes md-grow{from{opacity:0;transform:scale(.86) translateY(-10px)}to{opacity:1;transform:none}}
+/* A kitchen tablet that asks for less motion gets none of it. */
+@media (prefers-reduced-motion:reduce){
+  .md-back,.md-panel{animation:none}
+  .md-x{transition:none}
+}
+/* ---- ingredient picker (portal, fixed) --------------------------------------------------
+   Lives on document.body so neither the row's stacking context nor the editor's overflow:auto
+   can touch it. Position is written inline from the trigger's rect. */
+.idp-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  font:inherit;font-weight:600;font-size:14px;text-align:left;text-transform:none;letter-spacing:0;
+  padding:9px 10px;min-height:42px;background:#fff;color:var(--ink);border:3px solid var(--ink);
+  border-radius:0;cursor:pointer;transition:box-shadow .18s cubic-bezier(.32,.72,0,1),transform .18s cubic-bezier(.32,.72,0,1)}
+.idp-trigger:hover{box-shadow:4px 4px 0 var(--ink);transform:translate(-2px,-2px)}
+.idp-trigger.ph{color:var(--muted)}
+.idp-trigger.warn{border-color:var(--r);color:var(--r)}
+.idp-tlabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.idp-caret{flex:none;font-size:12px;opacity:.6}
+.idp-pop{position:fixed;z-index:90;display:flex;flex-direction:column;background:var(--paper);
+  border:3px solid var(--ink);box-shadow:8px 8px 0 var(--ink);border-radius:0;overflow:hidden;
+  animation:idp-in .2s cubic-bezier(.32,.72,0,1) both}
+@keyframes idp-in{from{opacity:0;transform:scale(.97) translateY(-6px)}to{opacity:1;transform:none}}
+.idp-search{padding:10px;border-bottom:3px solid var(--ink);background:var(--paper)}
+.idp-input{font:inherit;font-weight:600;font-size:14px;width:100%;padding:8px 10px;
+  border:3px solid var(--ink);border-radius:0;background:#fff;color:var(--ink);outline:none}
+.idp-input:focus{box-shadow:3px 3px 0 var(--ink)}
+.idp-scroll{overflow:auto;-webkit-overflow-scrolling:touch}
+.idp-sec{font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);padding:10px 12px 4px}
+.idp-empty{font-size:13px;color:var(--muted);padding:4px 12px 10px}
+.idp-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  font:inherit;font-weight:500;font-size:14px;text-align:left;text-transform:none;letter-spacing:0;
+  padding:10px 12px;min-height:42px;background:none;border:0;border-radius:0;cursor:pointer;color:var(--ink)}
+/* highlight inverts rather than tinting - matches the rest of tdv2 */
+.idp-opt.on{background:var(--ink);color:#fff}
+.idp-opt.on .idp-cost{color:rgba(255,255,255,.72)}
+.idp-opt.sim{box-shadow:inset 4px 0 0 var(--y)}
+.idp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.idp-cost{flex:none;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idp-new{display:block;width:100%;font:inherit;font-weight:700;font-size:12px;letter-spacing:.1em;
+  text-transform:uppercase;text-align:left;padding:11px 12px;min-height:42px;cursor:pointer;
+  background:var(--y);color:var(--ink);border:0;border-bottom:3px solid var(--ink);border-radius:0}
+.idp-new:hover{background:var(--ink);color:var(--y)}
+/* ---- handover card ----------------------------------------------------------------------
+   Embedded on Today (.bare) the surrounding section supplies the heading and the rule, so this
+   draws no box of its own. Standalone on the Prep board it gets the tdv2 frame. */
+.hov-wrap{border:3px solid var(--ink);background:var(--paper);padding:14px 16px;margin-bottom:16px}
+.hov-wrap.bare{border:0;background:none;padding:0;margin:0}
+.hov-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.hov-wrap.bare .hov-head{margin-bottom:6px}
+.hov-title{font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}
+.hov-count{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hov-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
+.hov-link{font:inherit;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  background:none;border:0;color:var(--r);cursor:pointer;padding:4px 0;min-height:auto}
+.hov-link:hover{text-decoration:underline}
+.hov-add{width:30px;height:30px;min-height:30px;flex:none;font:inherit;font-size:20px;line-height:1;
+  font-weight:700;background:var(--r);color:#fff;border:0;border-radius:0;cursor:pointer;
+  transition:transform .18s cubic-bezier(.32,.72,0,1),box-shadow .18s cubic-bezier(.32,.72,0,1)}
+.hov-add:hover{transform:translate(-2px,-2px) rotate(90deg);box-shadow:3px 3px 0 var(--ink)}
+.hov-add:active{transform:scale(.94)}
+@media (prefers-reduced-motion:reduce){ .hov-add{transition:none} .hov-add:hover{transform:none} }
+@media (prefers-reduced-motion:reduce){
+  .idp-pop{animation:none}
+  .idp-trigger{transition:none}
+  .idp-trigger:hover{transform:none}
+}
+</style>
 <script>
 /* @ds-bundle: {"format":4,"namespace":"VitrineDesignSystem_d2ec5c","components":[{"name":"Button","sourcePath":"components/buttons/Button.jsx"},{"name":"IconButton","sourcePath":"components/buttons/IconButton.jsx"},{"name":"TextLink","sourcePath":"components/buttons/TextLink.jsx"},{"name":"SearchInput","sourcePath":"components/forms/SearchInput.jsx"},{"name":"Footer","sourcePath":"components/navigation/Footer.jsx"},{"name":"GlobalNav","sourcePath":"components/navigation/GlobalNav.jsx"},{"name":"SubNav","sourcePath":"components/navigation/SubNav.jsx"},{"name":"ConfiguratorChip","sourcePath":"components/tiles/ConfiguratorChip.jsx"},{"name":"ProductTile","sourcePath":"components/tiles/ProductTile.jsx"},{"name":"StoreCard","sourcePath":"components/tiles/StoreCard.jsx"}],"sourceHashes":{"assets/image-slot.js":"0394ad34f685","components/buttons/Button.jsx":"d7cac3e4217a","components/buttons/IconButton.jsx":"9aee6e44781b","components/buttons/TextLink.jsx":"78c4d63c4411","components/forms/SearchInput.jsx":"d1b716cb9161","components/navigation/Footer.jsx":"e35069e8b65d","components/navigation/GlobalNav.jsx":"6f4245912e5d","components/navigation/SubNav.jsx":"c7fad3c1a933","components/tiles/ConfiguratorChip.jsx":"2622817b7727","components/tiles/ProductTile.jsx":"a519dccb4bd3","components/tiles/StoreCard.jsx":"c378a103d798","ui_kits/showcase/Showcase.jsx":"3ad4fa41012f","ui_kits/store/Store.jsx":"5b15d0ac10ae"},"inlinedExternals":[],"unexposedExports":[]} */
 
@@ -4682,14 +4785,42 @@ function Btn({children, onClick, tone="primary", size="md", disabled}){
   if(tone==="amber") style.color="#8a5300";
   return <VButton variant={map[tone]||"primary"} disabled={disabled} onClick={onClick} style={style}>{children}</VButton>;
 }
-function Modal({title, children, onClose, wide, sheet}){
-  // `sheet` = full-bleed size for A4 documents (catering prep sheets): 3xl is narrower than an A4
-  // page, which made the sheet render as a thin column.
-  return ReactDOM.createPortal(<div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-auto z-50 modal-back">
-    <div className={`card p-4 sm:p-6 mt-6 sm:mt-14 mb-6 modal-pop ${sheet?"max-w-[950px]":wide?"max-w-3xl":"max-w-2xl"} w-full`} onClick={e=>e.stopPropagation()}>
-      <div className="flex justify-between items-center mb-4"><div className="font-semibold text-stone-800">{title}</div><button onClick={onClose} className="text-stone-400 text-2xl leading-none" style={{background:"none",border:"none",cursor:"pointer"}}>×</button></div>
-      {children}
-    </div></div>, document.body);
+/* Every popup in the app goes through this one component - 24 of them. It used to be a rounded
+   Tailwind card with a flat black scrim, which is why the whole app read as "new design with old
+   popups on top". Now it speaks tdv2: 3px ink border, hard offset shadow, square corners, Jost,
+   uppercase title on the ink bar.
+
+   Motion (Apple-ish, deliberately restrained):
+     - the panel grows FROM the spot that was tapped, not from the middle of the screen. Whoever
+       opens it passes the click point via openAt(); without one it falls back to centre-top.
+     - one spring curve for everything: cubic-bezier(.32,.72,0,1) - leaves fast, settles soft.
+     - the backdrop blurs rather than just darkening, so the page behind reads as "pushed back".
+     - closing is NOT animated on purpose: a dialog that lingers on the way out feels slow.
+   `sheet` keeps its meaning: full-bleed width for A4 catering documents. */
+function Modal({title, children, onClose, wide, sheet, origin}){
+  /* Esc closes. Every popup got this for free the moment it lived in one component - before, not
+     one of the 24 handled the key. */
+  useEffect(()=>{ const h=e=>{ if(e.key==="Escape"){ e.stopPropagation(); onClose&&onClose(); } };
+    window.addEventListener("keydown",h,true); return ()=>window.removeEventListener("keydown",h,true); },[onClose]);
+  const o = origin || Modal._lastOrigin;
+  const org = o ? (o.x+"px "+o.y+"px") : "50% 0%";
+  const w = sheet?"min(950px,100%)" : wide?"min(768px,100%)" : "min(672px,100%)";
+  return ReactDOM.createPortal(
+    <div className="tdv2 modal-back md-back" onMouseDown={e=>{ if(e.target===e.currentTarget) onClose&&onClose(); }}>
+      <div className="md-panel" style={{width:w, transformOrigin:org}} onMouseDown={e=>e.stopPropagation()}>
+        <div className="md-bar">
+          <div className="md-title">{title}</div>
+          <button onClick={onClose} aria-label="Close" className="md-x">&times;</button>
+        </div>
+        <div className="md-body">{children}</div>
+      </div>
+    </div>, document.body);
+}
+/* Trigger buttons call this on click so the next Modal knows where to grow from. Kept as a module
+   value rather than threaded through 24 call sites - the popup always follows the last real click. */
+Modal.openAt = e => { try{ Modal._lastOrigin = {x:e.clientX, y:e.clientY}; }catch(err){} };
+if(typeof window!=="undefined"){
+  window.addEventListener("pointerdown", e=>{ Modal._lastOrigin={x:e.clientX,y:e.clientY}; }, true);
 }
 function Field({label, children}){ return <label className="block"><div className="text-xs text-stone-500 mb-1">{label}</div>{children}</label>; }
 function ImportExport({onImport, onExport}){
@@ -6374,21 +6505,21 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
   const ago=t=>{ if(!t) return "";
     const d=Math.floor((new Date().setHours(0,0,0,0)-new Date(Number(t)).setHours(0,0,0,0))/86400000);
     return d<=0?"today":d===1?"yesterday":(d+" days ago"); };
-  return <div className="mb-4 rounded-[18px] p-4" style={{background:"var(--color-canvas)", border:"1px solid var(--color-hairline-alpha)"}}>
-    <div className="flex items-center justify-between gap-3 mb-2.5 flex-wrap">
-      <div className="text-[11px] font-semibold" style={{letterSpacing:"0.18em", textTransform:"uppercase", color:"var(--color-ink)"}}>
-        Note for tomorrow&rsquo;s chef{open.length? (" \u00b7 "+open.length):""}
-      </div>
-      <div className="flex items-center gap-3">
-        {clearedAll.length>0 && <button onClick={()=>setShowDone(v=>!v)} className="text-[11px]"
-          style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>
+  /* `composer` doubles as "am I embedded?". On Today the surrounding tdv2 section already prints
+     the label, so repeating it here gave the screenshot two identical headings and wrapped the only
+     rounded grey box on an otherwise square page. Embedded = no chrome, no title, just the lines. */
+  const embedded = !composer;
+  return <div className={"tdv2 hov-wrap"+(embedded?" bare":"")}>
+    <div className="hov-head">
+      {!embedded && <div className="hov-title">Note for tomorrow&rsquo;s chef{open.length? (" \u00b7 "+open.length):""}</div>}
+      {embedded && <div className="hov-count">{open.length? (open.length+(open.length>1?" notes":" note")) : ""}</div>}
+      <div className="hov-actions">
+        {clearedAll.length>0 && <button onClick={()=>setShowDone(v=>!v)} className="hov-link">
           {showDone?"Hide cleared":"Show cleared ("+clearedAll.length+")"}
         </button>}
         {/* the full card (multi-line + photos) is reachable from both surfaces; the inline box on
             the Prep board stays for the one-line-and-go case */}
-        {<button onClick={openNew} aria-label="Leave a note for tomorrow"
-          style={{width:30, height:30, borderRadius:8, border:"none", background:"var(--color-primary)",
-            color:"#fff", fontSize:19, lineHeight:1, cursor:"pointer", flexShrink:0}}>+</button>}
+        <button onClick={openNew} aria-label="Leave a note for tomorrow" className="hov-add">+</button>
       </div>
     </div>
     {composer && <div className="flex gap-2 items-center mb-3">
@@ -8395,41 +8526,102 @@ function pickerSimilar(rawName, ings){
 }
 function IngredientPicker({item, activeIngs, subRecipes, onPick, onCreate, seed}){
   const [open,setOpen]=useState(false); const [q,setQ]=useState(""); const [nf,setNf]=useState(null);
+  const [pos,setPos]=useState(null);      // fixed-position box for the portal list
+  const [hi,setHi]=useState(0);           // keyboard highlight
+  const btnRef=useRef(null), listRef=useRef(null);
   const cur = item.subRecipeId? subRecipes.find(r=>r.id===item.subRecipeId) : (item.ingredientId? activeIngs.find(g=>g.id===item.ingredientId):null);
   const unmatched = item.rawName && !item.ingredientId && !item.subRecipeId;
-  const label = cur? (item.subRecipeId?("▸ "+cur.name):cur.name) : (unmatched? ("⚠ "+item.rawName) : "Select ingredient…");
+  const label = cur? (item.subRecipeId?("\u25b8 "+cur.name):cur.name) : (unmatched? ("\u26a0 "+item.rawName) : "Select ingredient\u2026");
   const ql=q.trim().toLowerCase();
   const sims = useMemo(()=> (open && item.rawName)? pickerSimilar(item.rawName, activeIngs) : [], [open, item.rawName, activeIngs]);
   const fIngs=(ql? activeIngs.filter(g=>(g.name||"").toLowerCase().includes(ql)) : activeIngs).slice(0,60);
   const fSubs=(ql? subRecipes.filter(r=>(r.name||"").toLowerCase().includes(ql)) : subRecipes).slice(0,25);
+  /* one flat list behind the sections, so the arrow keys can walk the whole thing */
+  const flat=[].concat(ql?[]:sims.map(g=>({k:"sim",id:g.id,name:g.name,g})), fIngs.map(g=>({k:"ing",id:g.id,name:g.name,g})), fSubs.map(r=>({k:"sub",id:"rec:"+r.id,name:r.name})));
+
+  /* Measure the trigger and pin the list to it. Fixed + portal is the only placement that survives
+     the editor: the row makes its own stacking context (animation) and the editor body scrolls
+     with overflow:auto, so an absolutely positioned child gets both covered and clipped. */
+  const place=()=>{ const b=btnRef.current; if(!b) return;
+    const r=b.getBoundingClientRect(), gap=6, want=Math.min(380, Math.round(window.innerHeight*0.55));
+    const below=window.innerHeight-r.bottom-gap, above=r.top-gap;
+    const up = below < Math.min(240,want) && above > below;
+    setPos({ left:Math.round(r.left), width:Math.round(r.width),
+             top: up? null : Math.round(r.bottom+gap),
+             bottom: up? Math.round(window.innerHeight-r.top+gap) : null,
+             maxH: Math.max(180, Math.round((up?above:below)-8)), up });
+  };
+  useEffect(()=>{ if(!open) return; place();
+    const on=()=>place();
+    window.addEventListener("scroll",on,true); window.addEventListener("resize",on);
+    return ()=>{ window.removeEventListener("scroll",on,true); window.removeEventListener("resize",on); };
+  },[open]);
+  useEffect(()=>{ if(open) setHi(0); },[open,ql]);
+  /* click-away has to be capture-phase: the editor stops propagation on several containers */
+  useEffect(()=>{ if(!open) return;
+    const away=e=>{ const l=listRef.current,b=btnRef.current;
+      if(l&&!l.contains(e.target)&&b&&!b.contains(e.target)) setOpen(false); };
+    document.addEventListener("pointerdown",away,true);
+    return ()=>document.removeEventListener("pointerdown",away,true);
+  },[open]);
+
   function pick(v){ onPick(v); setOpen(false); setQ(""); setNf(null); }
   /* Creating an ingredient from here opens the SAME Add Ingredient modal the Ingredients tab uses -
      see the render below. `nf` is therefore a blank ingredient record, not a cut-down form state. */
   function startNew(){ const nm=(q.trim()||item.rawName||"").trim();
+    setOpen(false);
     setNf({id:"", name:nm, category:"",
       purchaseUnit:(seed&&seed.purchaseUnit)||"", useUnit:(seed&&seed.useUnit)||"g",
       purchaseQty:(seed&&Number(seed.purchaseQty)>0)?Number(seed.purchaseQty):1,
       purchasePrice:(seed&&Number(seed.purchasePrice)>0)?Number(seed.purchasePrice):0,
       gramsPerEach:0, allergens:[], suppliers:[], costHistory:[], archived:false}); }
-  return <div className="relative">
-    <button type="button" onClick={()=>setOpen(o=>!o)} className={`inp text-left w-full ${unmatched?"border-amber-300 text-amber-700":(!cur?"text-stone-400":"")}`}>{label}<span className="float-right text-stone-300">▾</span></button>
-    {open && <div className="absolute z-50 mt-1 w-full bg-white border border-stone-200 rounded-lg p-2" style={{maxHeight:"400px",overflow:"auto"}}>
-      <>
-        <input autoFocus className="inp w-full mb-2" placeholder="Search ingredients…" value={q} onChange={e=>setQ(e.target.value)} />
+  const onKey=e=>{
+    if(!open) return;
+    if(e.key==="Escape"){ e.preventDefault(); setOpen(false); return; }
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){ e.preventDefault();
+      setHi(h=>{ const n=flat.length; if(!n) return 0; return (h+(e.key==="ArrowDown"?1:-1)+n)%n; }); return; }
+    if(e.key==="Enter"){ const t=flat[hi]; if(t){ e.preventDefault(); pick(t.id); } }
+  };
+
+  const rowCls=(i)=>"idp-opt"+(i===hi?" on":"");
+  const list = open && pos ? ReactDOM.createPortal(
+    <div ref={listRef} className="tdv2 idp-pop" style={{left:pos.left, width:pos.width,
+        top:pos.top!=null?pos.top:undefined, bottom:pos.bottom!=null?pos.bottom:undefined,
+        maxHeight:pos.maxH, transformOrigin:pos.up?"50% 100%":"50% 0%"}}>
+      <div className="idp-search">
+        <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={onKey}
+          placeholder="Search ingredients…" className="idp-input" />
+      </div>
+      <div className="idp-scroll">
+        <button type="button" onClick={startNew} className="idp-new">
+          + Create new ingredient{(q||item.rawName)?(" \u201c"+(q||item.rawName)+"\u201d"):""}
+        </button>
         {!ql && sims.length>0 && <>
-          <div className="text-[10px] uppercase tracking-wide text-emerald-700 px-1 mb-1">Similar to this line ({sims.length})</div>
-          {sims.map(g=><button key={"sim-"+g.id} type="button" onClick={()=>pick(g.id)} className="block w-full text-left text-sm px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 truncate mb-0.5">{g.name}<span className="text-stone-400 text-xs"> · {money(unitCost(g))}/{g.useUnit}</span></button>)}
+          <div className="idp-sec">Similar to this line ({sims.length})</div>
+          {sims.map((g,i)=><button key={"sim-"+g.id} type="button" onClick={()=>pick(g.id)}
+            onMouseEnter={()=>setHi(i)} className={rowCls(i)+" sim"}>
+            <span className="idp-name">{g.name}</span><span className="idp-cost">{money(unitCost(g))}/{g.useUnit}</span></button>)}
         </>}
-        {!ql && item.rawName && sims.length===0 && <div className="text-xs text-amber-600 px-1 py-1 mb-1">No similar ingredient found — create it below (details pre-filled from this invoice line).</div>}
-        <button type="button" onClick={startNew} className="block w-full text-left text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md px-2 py-1.5 mb-2 truncate">+ Create new ingredient{(q||item.rawName)?(" \""+(q||item.rawName)+"\""):""}</button>
-        <div className="border-t border-stone-100 my-2"></div>
-        <div className="text-[10px] uppercase tracking-wide text-stone-400 px-1 mb-1">Ingredients ({fIngs.length})</div>
-        {fIngs.length===0 && <div className="text-xs text-stone-400 px-1 py-1">no match — create it above</div>}
-        {fIngs.map(g=><button key={g.id} type="button" onClick={()=>pick(g.id)} className="block w-full text-left text-sm px-2 py-1 rounded hover:bg-stone-100 truncate">{g.name}<span className="text-stone-400 text-xs"> · {money(unitCost(g))}/{g.useUnit}</span></button>)}
-        {fSubs.length>0 && <><div className="text-[10px] uppercase tracking-wide text-stone-400 px-1 mt-2 mb-1">Sub-recipes ({fSubs.length})</div>
-        {fSubs.map(r=><button key={r.id} type="button" onClick={()=>pick("rec:"+r.id)} className="block w-full text-left text-sm px-2 py-1 rounded hover:bg-stone-100 truncate">▸ {r.name}</button>)}</>}
-      </>}
-    </div>}
+        <div className="idp-sec">Ingredients ({fIngs.length})</div>
+        {fIngs.length===0 && <div className="idp-empty">no match — create it above</div>}
+        {fIngs.map((g,i)=>{ const idx=(ql?0:sims.length)+i;
+          return <button key={g.id} type="button" onClick={()=>pick(g.id)} onMouseEnter={()=>setHi(idx)} className={rowCls(idx)}>
+            <span className="idp-name">{g.name}</span><span className="idp-cost">{money(unitCost(g))}/{g.useUnit}</span></button>; })}
+        {fSubs.length>0 && <>
+          <div className="idp-sec">Sub-recipes ({fSubs.length})</div>
+          {fSubs.map((r,i)=>{ const idx=(ql?0:sims.length)+fIngs.length+i;
+            return <button key={r.id} type="button" onClick={()=>pick("rec:"+r.id)} onMouseEnter={()=>setHi(idx)} className={rowCls(idx)}>
+              <span className="idp-name">{"\u25b8 "+r.name}</span></button>; })}
+        </>}
+      </div>
+    </div>, document.body) : null;
+
+  return <div className="relative">
+    <button ref={btnRef} type="button" onClick={()=>setOpen(o=>!o)} onKeyDown={onKey}
+      className={"idp-trigger"+(unmatched?" warn":"")+(!cur?" ph":"")}>
+      <span className="idp-tlabel">{label}</span><span className="idp-caret">{open?"\u25b4":"\u25be"}</span>
+    </button>
+    {list}
     {/* The create form IS the Add Ingredient modal - one component, so the fields, the unit
         dropdowns, the pack-size validation and the allergen/supplier rows can never drift apart
         again. It used to be a cut-down emerald card with free-text units and no allergens, which

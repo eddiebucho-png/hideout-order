@@ -7250,8 +7250,9 @@ function allergenVocab(){
   const seen=new Map();
   const add=list=>(list||[]).forEach(x=>{ const t=String(x||"").trim(); if(!t) return;
     if(ALLERGEN_NONE(t)) return;               // "none" is a state, not an allergen
-    const k=t.toLowerCase(), e=seen.get(k);
-    if(e) e.n++; else seen.set(k,{label:t,n:1}); });
+    const c=allergenCanon(t); if(!c) return;
+    const k=c.toLowerCase(), e=seen.get(k);
+    if(e) e.n++; else seen.set(k,{label:c,n:1}); });
   const st=_VOCAB_STATE||{};
   (st.ingredients||[]).forEach(i=>add(i.allergens));
   (st.recipes||[]).forEach(r=>add(r.allergens));
@@ -7260,7 +7261,9 @@ function allergenVocab(){
 function AllergenPicker({value, onChange}){
   const sel=(value||[]).map(x=>String(x).trim()).filter(Boolean);
   const isNone = sel.length===1 && ALLERGEN_NONE(sel[0]);
-  const picked = isNone? [] : sel.filter(x=>!ALLERGEN_NONE(x));
+  /* canonical from here down: a record holding "eggs" lights up the EGG chip, and clicking any
+     chip writes the canonical spelling back, so the record cleans itself up on save */
+  const picked = isNone? [] : allergenList(sel);
   const low = picked.map(x=>x.toLowerCase());
   const key = low.join("|");
   /* anything already on this record but not in the shared vocabulary still gets a chip, so an old
@@ -7273,9 +7276,11 @@ function AllergenPicker({value, onChange}){
   const toggle=t=>{ const k=t.toLowerCase();
     onChange(low.indexOf(k)>=0 ? picked.filter(x=>x.toLowerCase()!==k) : picked.concat(t)); };
   const addNew=()=>{ const t=nw.trim(); if(!t){ setAdding(false); return; }
-    /* fold onto the registered spelling when it is the same word - that is the whole point */
-    const hit=vocab.find(v=>v.toLowerCase()===t.toLowerCase());
-    const label=hit||t;
+    /* fold onto the canonical name, then onto an already-registered spelling - typing "eggs" or
+       "Milk" must not create a second allergen */
+    const c=allergenCanon(t);
+    const hit=vocab.find(v=>v.toLowerCase()===c.toLowerCase());
+    const label=hit||c;
     if(low.indexOf(label.toLowerCase())<0) onChange(picked.concat(label));
     setNw(""); setAdding(false); };
   return <div className="alp">
@@ -7414,7 +7419,61 @@ function RecipeEditorV2({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDe
    status filter, 56px done button with undo, "Fire first" block, handover folded at the bottom.
    All branch/department state helpers reused; legacy kanban stays as "Board view". */
 const ALLERGEN_NONE=t=>/^(none|no|nil|-|n\/a)$/i.test(String(t||"").trim());
-const rv2Allergens=r=>{ const a=(r.allergens||[]).map(x=>String(x).trim()).filter(Boolean); if(!a.length) return {state:"unknown", list:[]}; if(a.length===1&&/^(none|no|nil|-|n\/a)$/i.test(a[0])) return {state:"none", list:[]}; return {state:"set", list:a}; };
+/* ---- one name per allergen ------------------------------------------------------------------
+   Free text gave this kitchen EGG and EGGS, MILK and DAIRY, NUT/NUTS/TREE NUTS/TRACES OF ALMONDS,
+   and MUSHROOM next to the typo MUSRHROOM. Four ways to write one allergen means a cook scanning
+   for one of them walks past the other three.
+
+   ALLERGEN_MAP is the deliberate part: synonyms, this kitchen's typos, and the groupings that are
+   the same allergen in practice (sesame oil is sesame, almonds are tree nuts). Peanut stays out of
+   tree nuts on purpose - they are separate allergens and separate avoidance.
+   Anything not in the table still gets case, punctuation and a trailing plural stripped, so new
+   words self-merge without waiting for someone to extend the table.
+   A phrase longer than three words is a note somebody typed, not an allergen name - left alone. */
+const ALLERGEN_MAP={
+  gluten:"Gluten", wheat:"Gluten", cereal:"Gluten",
+  dairy:"Dairy", milk:"Dairy", lactose:"Dairy", cheese:"Dairy", butter:"Dairy", cream:"Dairy",
+  egg:"Egg", eggwhite:"Egg", eggyolk:"Egg",
+  soy:"Soy", soya:"Soy", soybean:"Soy", soyabean:"Soy",
+  fish:"Fish", anchovy:"Fish", anchovie:"Fish",
+  shellfish:"Shellfish", mollusc:"Shellfish", mollusk:"Shellfish",
+  crustacean:"Crustacean", crustacea:"Crustacean", crustation:"Crustacean", prawn:"Crustacean", shrimp:"Crustacean",
+  "treenut":"Tree nuts", nut:"Tree nuts", almond:"Tree nuts", "traceofalmond":"Tree nuts", "tracesofalmond":"Tree nuts",
+  cashew:"Tree nuts", walnut:"Tree nuts", hazelnut:"Tree nuts", pistachio:"Tree nuts", macadamia:"Tree nuts",
+  peanut:"Peanut", groundnut:"Peanut",
+  sesame:"Sesame", sesameoil:"Sesame", sesameseed:"Sesame", tahini:"Sesame",
+  mushroom:"Mushroom", musrhroom:"Mushroom", musroom:"Mushroom",
+  corn:"Corn", maize:"Corn",
+  gelatine:"Gelatine", gelatin:"Gelatine",
+  sulphite:"Sulphites", sulfite:"Sulphites",
+  alcohol:"Alcohol", lupin:"Lupin", seed:"Seeds", pork:"Pork", potato:"Potato", sprout:"Sprout"
+};
+function allergenCanon(raw){
+  const t=String(raw||"").trim();
+  if(!t) return "";
+  if(t.split(/\s+/).length>3) return t;                 // a sentence, not an allergen name
+  let k=t.toLowerCase().replace(/[^a-z]/g,"");           // "Sesame oil" -> "sesameoil"
+  if(ALLERGEN_MAP[k]) return ALLERGEN_MAP[k];
+  if(k.slice(-1)==="s" && ALLERGEN_MAP[k.slice(0,-1)]) return ALLERGEN_MAP[k.slice(0,-1)];  // plural
+  if(k.slice(-1)==="s") k=k.slice(0,-1);
+  /* unknown word: keep the kitchen's own wording, just settled on one case */
+  const w=t.replace(/\s+/g," ").trim();
+  return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
+}
+/* de-duplicated canonical list for a record */
+function allergenList(arr){
+  const out=[], seen=new Set();
+  (arr||[]).forEach(x=>{ if(ALLERGEN_NONE(x)) return; const c=allergenCanon(x); if(!c) return;
+    const k=c.toLowerCase(); if(seen.has(k)) return; seen.add(k); out.push(c); });
+  return out;
+}
+/* Cards print canonical names, so a record stored years ago as "milk" reads DAIRY today without
+   anyone editing it - and two dishes never disagree about what the same allergen is called. */
+const rv2Allergens=r=>{ const a=(r.allergens||[]).map(x=>String(x).trim()).filter(Boolean);
+  if(!a.length) return {state:"unknown", list:[]};
+  if(a.length===1&&ALLERGEN_NONE(a[0])) return {state:"none", list:[]};
+  const list=allergenList(a);
+  return list.length? {state:"set", list} : {state:"none", list:[]}; };
 const rv2Steps=rec=>{ const raw=((rec.procedure||"").trim()||bakedProc(rec.name)); const out=[]; raw.split("\n").forEach(ln=>{ if(/^\s/.test(ln)){ const c=ln.trim(); if(!c) return; if(out.length) out[out.length-1]+=" "+c; else out.push(c); } else { const t=ln.replace(/^\s*\d+[.)](?=\s|$)\s*/,"").trim(); if(t) out.push(t); } }); return out; };
 function DeptSeg({dept,setDept,depts}){ return <div className="seg" role="group" aria-label="Department">{depts.map(([k,l])=><button key={k} type="button" aria-pressed={dept===k} onClick={()=>setDept(k)}>{l}</button>)}</div>; }
 function DishDetailV2({rec, ingMap, onClose, onEdit, onMove, cats, onRemove, removeLabel, onPhoto}){
@@ -7695,60 +7754,674 @@ function TeamMeetingsV2({state, update, branch, branches}){
     {guide && <Modal wide title="How to run this meeting" onClose={()=>setGuide(false)}><MeetingGuide /></Modal>}
   </div>;
 }
+/* AIV3-START — AI Invoice v3 (2026-09-11, Ju An: "가격동향 + 품목 업데이트를 더 똑똑하게")
+   ════════════════════════════════════════════════════════════════════════════════════
+   Four things on top of the 2026-09-09 v2 screen:
+     1. TRENDS    input-cost index, month-by-month bars, a top-movers diagram, per-item
+                  sparklines — so a price creep is visible before it eats the margin.
+     2. SUPPLIERS the same item bought from two suppliers, side by side, with the gap.
+     3. MATCHING  confidence-scored suggestions for unlinked invoice lines + bulk link.
+                  The scorer encodes the substring bug from _hermes/supplier-invoice-rules.md
+                  ("Soy Milk" must never match "Milk") as an explicit qualifier clash.
+     4. GUARD     an anomaly scan over prices the robot already applied, with one-click
+                  revert — the silent-wrong-cost case the audit cannot see.
+   Everything is derived from state.invoiceLog / invoiceUnmatched / ingredients. No new
+   pipeline field is required; `qty` on a log line is USED when present and skipped when
+   not, so the 07:00 / 09:04 tasks can start logging it whenever convenient.
+   ════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Type qualifiers — the words that make two similar names DIFFERENT products. A candidate
+   that has one the invoice line lacks (or vice versa) is penalised hard: this is exactly
+   how "Soy Milk"→"Milk" and "Rice Flour"→"Flour" got mislinked in July. */
+const AIV_QUAL = new Set(["soy","almond","oat","rice","coconut","lactose","skim","gluten","vegan",
+  "frozen","fz","fresh","smoked","salted","unsalted","organic","diced","sliced","shredded","minced",
+  "ground","dried","light","thickened","pure","double","wholemeal","baby","decaf","unsweetened",
+  "free","white","brown","red","green","dark","raw","cooked"]);
+const AIV_STOP = {in:1,of:1,the:1,a:1,and:1,with:1,per:1,kg:1,g:1,gm:1,gms:1,ml:1,l:1,lt:1,ltr:1,
+  x:1,ea:1,each:1,ctn:1,carton:1,box:1,pk:1,pkt:1,pack:1,tin:1,can:1,jar:1,tub:1,bag:1,btl:1,
+  bottle:1,punnet:1,bunch:1,tray:1,dozen:1,rw:1,ap:1,approx:1};
+function aivToks(s){
+  return String(s||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").split(/\s+/)
+    .filter(t=>t && !AIV_STOP[t] && !/^\d/.test(t) && (t.length>=3 || AIV_QUAL.has(t)))
+    .map(t=>t.replace(/s$/,""));
+}
+/* Names repeat across hundreds of scorings per render - tokenise each one once. */
+const AIV_TOKCACHE={};
+function aivToksC(s){ const k=String(s||""); if(AIV_TOKCACHE[k]) return AIV_TOKCACHE[k]; const v=aivToks(k); if(Object.keys(AIV_TOKCACHE).length<6000) AIV_TOKCACHE[k]=v; return v; }
+function aivDayDiff(a,b){ const x=Date.parse(a), y=Date.parse(b); return (!isFinite(x)||!isFinite(y))?0:Math.round((x-y)/86400000); }
+const aivNorm = s => aivToksC(s).slice().sort().join(" ");
+
+/* Score one unlinked invoice line against one ingredient. 0-100; null when unscoreable.
+   Deliberately additive and readable — every point is explained back to the user in `why`,
+   because a score nobody can audit is just a prettier guess. */
+function aivScore(line, g){
+  const rt=aivToksC(line.rawName), it=aivToksC(g.name);
+  if(!rt.length || !it.length) return null;
+  let sc=0; const why=[];
+
+  if(aivNorm(line.rawName) === aivNorm(g.name)){ sc+=30; why.push("name matches exactly"); }
+
+  const shared=rt.filter(t=>it.indexOf(t)>=0);
+  const uni={}; rt.concat(it).forEach(t=>{ uni[t]=1; });
+  const jac=shared.length/Math.max(1,Object.keys(uni).length);
+  sc += Math.round(jac*46);
+  if(shared.length) why.push(shared.length+" word"+(shared.length>1?"s":"")+" in common ("+shared.join(", ")+")");
+
+  const near=rt.filter(t=>it.indexOf(t)<0 && it.some(w=>(w.length>=4&&w.indexOf(t)===0)||(t.length>=4&&t.indexOf(w)===0)));
+  if(near.length) sc += Math.min(10, near.length*4);
+
+  // supplier order code already recorded on this ingredient — close to proof
+  const code=String(line.orderCode||"");
+  if(code){
+    const sup=String(line.supplier||"").toLowerCase().slice(0,5);
+    const hit=(g.suppliers||[]).filter(sp=>String(sp.orderCode||"")===code);
+    if(hit.length){
+      const sameSup=hit.some(sp=>sup && String(sp.name||"").toLowerCase().indexOf(sup)>=0);
+      sc += sameSup?45:30;
+      why.push(sameSup? "order code "+code+" already on this ingredient for "+(line.supplier||"this supplier")
+                      : "order code "+code+" already on this ingredient");
+    }
+  }
+
+  // the qualifier gate — the guard against the July substring mislinks
+  const qa=rt.filter(t=>AIV_QUAL.has(t)), qb=it.filter(t=>AIV_QUAL.has(t));
+  const clash=qa.filter(t=>qb.indexOf(t)<0).concat(qb.filter(t=>qa.indexOf(t)<0));
+  if(clash.length){ sc -= 22*Math.min(2,clash.length); why.push("different type: "+clash.join(", ")); }
+
+  const lu=line.useUnit||line.unit||"", gu=g.useUnit||"";
+  if(lu && gu){
+    if(unitsComparable(lu,gu)){ sc+=8; }
+    else { sc-=18; why.push("unit "+lu+" does not convert to "+gu); }
+  }
+
+  const cur=unitCost(g), p0=Number(line.perUnitPrice!=null?line.perUnitPrice:line.new);
+  if(cur>0 && p0>0 && lu && gu && unitsComparable(lu,gu)){
+    const p=toUnit(p0, gu, lu), r=p/cur;                       // a price rate converts inverted
+    if(r>=0.6 && r<=1.6){ sc+=14; why.push(Math.abs(1-r)<0.005? "price matches the current one" : "price is within "+Math.max(1,Math.round(Math.abs(1-r)*100))+"% of the current one"); }
+    else if(r>3 || r<0.34){ sc-=16; why.push("price is "+(r>1? r.toFixed(1)+"× dearer" : (1/r).toFixed(1)+"× cheaper")+" than the current one"); }
+  }
+  return {g:g, sc:Math.max(0,Math.min(100,sc)), why:why};
+}
+function aivSuggest(line, ings){
+  return ings.map(g=>aivScore(line,g)).filter(x=>x && x.sc>=25).sort((a,b)=>b.sc-a.sc).slice(0,3);
+}
+const aivTier = sc => sc>=70? "hi" : sc>=45? "md" : "lo";
+const aivTierName = sc => sc>=70? "high" : sc>=45? "maybe" : "low";
+const aivKey = (sup,code,raw) => (sup||"?")+"|"+(code||raw||"");
+
+/* Write one invoice line's price onto an ingredient. Mirrors applyPriceTo() inside
+   InvoiceItemCard: the line price is per line-unit, the ingredient stores per purchaseQty
+   of its OWN unit, and an unconvertible pair is refused rather than guessed (the $22,500
+   box-vs-each bug). Call inside update(). */
+function aivApply(s, line, tgtId, note){
+  const g=(s.ingredients||[]).find(x=>x.id===tgtId); if(!g) return {ok:false, why:"ingredient not found"};
+  const price=Number(line.perUnitPrice!=null? line.perUnitPrice : line.new);
+  if(!(price>0)) return {ok:false, why:"no price on this line"};
+  const qty=Math.abs(Number(g.purchaseQty))||1;
+  const from=line.useUnit||line.unit||g.useUnit||"", to=g.useUnit||from;
+  if(!unitsComparable(from,to)) return {ok:false, why:"can't convert "+(from||"?")+" → "+(to||"?"), name:g.name};
+  const perUse=toUnit(price, to, from);
+  if(!(perUse>0)) return {ok:false, why:"unit mismatch", name:g.name};
+  const next=+(perUse*qty).toFixed(4), old=Number(g.purchasePrice)||0;
+  if(next===old) return {ok:false, why:"same price", old:old, next:next, name:g.name, unit:g.useUnit, qty:qty};
+  g.purchasePrice=next;
+  g.costHistory=(g.costHistory||[]).concat([{date:today(), price:next, note:note||"AI Invoice"}]);
+  if(line.orderCode){
+    g.suppliers=g.suppliers||[];
+    if(!g.suppliers.some(sp=>String(sp.orderCode||"")===String(line.orderCode))) g.suppliers.push({name:line.supplier||"", orderCode:line.orderCode});
+  }
+  return {ok:true, old:old, next:next, unit:g.useUnit, qty:qty, name:g.name};
+}
+
+/* Per-ingredient price series out of the run log.
+   Two deliberate exclusions, both about comparing like with like:
+   - manual-link entries store the TOTAL pack price in `new`, not the per-unit rate, so they
+     would put a fake cliff in every chart;
+   - if an item's logged unit ever changes, only the dominant unit is kept — a kg-to-g switch
+     is a 1000x step, not a price move. */
+function aivSeries(log){
+  const by={};
+  (log||[]).forEach(e=>{
+    if(/^Manual link by staff/.test(String(e.analysis||""))) return;
+    (e.updated||[]).forEach(u=>{
+      const k=u.id||("n:"+String(u.name||""));
+      (by[k]=by[k]||[]).push({key:k, id:u.id||"", name:u.name||"", date:e.date||"", ts:e.ts||0,
+        supplier:e.supplier||"", invoiceNo:e.invoiceNo||"", unit:u.unit||"",
+        old:(u.old==null? null : Number(u.old)), price:Number(u.new), qty:Number(u.qty)||0, code:u.orderCode||""});
+    });
+  });
+  Object.keys(by).forEach(k=>{
+    const rows=by[k], cnt={};
+    rows.forEach(r=>{ cnt[r.unit]=(cnt[r.unit]||0)+1; });
+    const main=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+    by[k]=rows.filter(r=>r.unit===main && r.price>0).sort((a,b)=>String(a.date).localeCompare(String(b.date))||a.ts-b.ts);
+  });
+  return by;
+}
+/* Ratio of what one unit of each moved item costs now vs at the start of the window.
+   Equal-weighted on purpose: without purchase volumes any other weighting would be invented.
+   Items that tripled or fell by two thirds inside the window are dropped, not averaged in —
+   at that size it is a pack/unit error rather than a price, and one of them is enough to
+   write the headline number on its own. The guard lists them separately; `skipped` says
+   how many were left out so the figure is never quietly trimmed. */
+function aivBasket(series, from, to){
+  let a=0, b=0, n=0, skipped=0;
+  Object.keys(series).forEach(k=>{
+    const rows=series[k].filter(r=>r.date>=from && r.date<=to);
+    if(!rows.length) return;
+    const first=rows[0], last=rows[rows.length-1];
+    const start=(first.old!=null && first.old>0)? first.old : first.price;
+    if(!(start>0) || !(last.price>0)) return;
+    const r=last.price/start;
+    if(r>3 || r<0.34){ skipped++; return; }
+    a+=start; b+=last.price; n++;
+  });
+  return n? {pct:(b-a)/a*100, n:n, skipped:skipped} : null;
+}
+
+function AivStyle(){
+  useEffect(()=>{
+    let el=document.getElementById("aiv3-css");
+    if(!el){ el=document.createElement("style"); el.id="aiv3-css"; document.head.appendChild(el); }
+    if(el.textContent!==AIV_CSS) el.textContent=AIV_CSS;
+  }, []);
+  return null;
+}
+/* NOTE: template literal — never put a backtick inside this string. */
+const AIV_CSS = `
+  .rv2 .sum.aiv5{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .rv2 .sum>div.tap{cursor:pointer;transition:background .15s} .rv2 .sum>div.tap:hover{background:rgba(242,193,0,.28)}
+  .rv2 .aiv-spark{display:inline-block;vertical-align:middle}
+  .rv2 .aiv-note{padding:2px 14px 16px;color:var(--muted);font-size:14px;font-weight:400;max-width:84ch}
+  .rv2 .aiv-hero{display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap;padding:16px 14px 6px}
+  .rv2 .aiv-hero .big{font-size:52px;font-weight:700;line-height:.86;letter-spacing:-.03em;animation:rv2-pop .5s cubic-bezier(.2,.8,.2,1) both}
+  .rv2 .aiv-hero .big.up{color:var(--rt)} .rv2 .aiv-hero .big.down{color:var(--ok)}
+  .rv2 .aiv-hero .cap{font-size:14px;color:var(--muted);font-weight:400;max-width:46ch;line-height:1.45}
+  .rv2 .aiv-mo{display:flex;gap:10px;padding:14px 14px 6px;align-items:flex-end}
+  .rv2 .aiv-mo .c{flex:1;min-width:0;text-align:center}
+  .rv2 .aiv-mo .zone{position:relative;height:128px}
+  .rv2 .aiv-mo .zone::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;margin-top:-1.5px;background:var(--ink)}
+  .rv2 .aiv-mo .zone i{position:absolute;left:16%;right:16%;border:2px solid var(--ink);animation:rv2-rise .5s cubic-bezier(.2,.8,.2,1) both}
+  .rv2 .aiv-mo .zone i.up{bottom:50%;background:var(--rt)} .rv2 .aiv-mo .zone i.dn{top:50%;background:var(--ok)}
+  .rv2 .aiv-mo .vv{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:8px}
+  .rv2 .aiv-mo .lb{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+  .rv2 .aiv-mv{padding:10px 14px 18px;display:grid;gap:9px}
+  .rv2 .aiv-mv .b{display:grid;grid-template-columns:minmax(96px,206px) minmax(0,1fr) 78px;gap:12px;align-items:center;cursor:pointer;animation:rv2-slide .4s cubic-bezier(.2,.8,.2,1) both}
+  .rv2 .aiv-mv .b:hover .nm{text-decoration:underline;text-underline-offset:3px}
+  .rv2 .aiv-mv .nm{font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rv2 .aiv-mv .tr{position:relative;height:24px;background:#f3f1ec;border:2px solid var(--ink)}
+  .rv2 .aiv-mv .tr i{position:absolute;top:0;bottom:0;animation:rv2-wipe .55s cubic-bezier(.2,.8,.2,1) both}
+  .rv2 .aiv-mv .tr i.up{left:50%;background:var(--rt);transform-origin:left}
+  .rv2 .aiv-mv .tr i.dn{right:50%;background:var(--ok);transform-origin:right}
+  .rv2 .aiv-mv .tr em{position:absolute;left:50%;top:-2px;bottom:-2px;width:3px;margin-left:-1.5px;background:var(--ink)}
+  .rv2 .aiv-mv .vl{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .rv2 .aiv-cf{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:0 8px;min-height:26px;border:2px solid var(--ink);white-space:nowrap}
+  .rv2 .aiv-cf.hi{background:var(--ok);border-color:var(--ok);color:#fff}
+  .rv2 .aiv-cf.md{background:var(--y);border-color:var(--y);color:var(--ink)}
+  .rv2 .aiv-cf.lo{border-color:var(--line);color:var(--muted)}
+  .rv2 .aiv-why{display:block;color:var(--muted);font-size:13px;font-weight:400;margin-top:3px;line-height:1.35}
+  .rv2 .aiv-sug{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .rv2 .aiv-chart{width:100%;height:auto;display:block;border:2px solid var(--ink);background:#fff}
+  @media (max-width:900px){
+    .rv2 .sum.aiv5{grid-template-columns:1fr 1fr}
+    .rv2 .aiv-mv .b{grid-template-columns:minmax(80px,1fr) minmax(0,1.2fr) 62px;gap:8px}
+    .rv2 .aiv-hero .big{font-size:40px}
+  }
+`;
+
+/* Inline sparkline — square end marker, no smoothing, ink weight. Matches the flat
+   3px-border language of the rest of the screen rather than importing a chart library. */
+function AivSpark({pts, w, h}){
+  w=w||92; h=h||26;
+  const v=(pts||[]).filter(p=>p>0);
+  if(v.length<2) return <span className="sub" style={{display:"inline"}}>—</span>;
+  const mn=Math.min.apply(null,v), mx=Math.max.apply(null,v), sp=(mx-mn)||Math.abs(mx)||1;
+  const d=v.map((p,i)=>[ (i/(v.length-1))*(w-4)+2, h-3-((p-mn)/sp)*(h-6) ]);
+  const up=v[v.length-1]>=v[0], col=up?"var(--rt)":"var(--ok)";
+  const last=d[d.length-1];
+  return <svg className="aiv-spark" width={w} height={h} viewBox={"0 0 "+w+" "+h} aria-hidden="true">
+    <polyline points={d.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")} fill="none" stroke={col} strokeWidth="2" vectorEffect="non-scaling-stroke"/>
+    <rect x={(last[0]-2.5).toFixed(1)} y={(last[1]-2.5).toFixed(1)} width="5" height="5" fill={col}/>
+  </svg>;
+}
+
+/* Full price history for one ingredient — the big version of the sparkline, with the
+   cheapest and dearest price called out so it reads without an axis. */
+function AivHistChart({rows}){
+  const v=(rows||[]).filter(r=>r && r.price>0);
+  if(v.length<2) return null;
+  const W=520, H=132, PADX=10, PADT=16, PADB=22;
+  const ps=v.map(r=>r.price), mn=Math.min.apply(null,ps), mx=Math.max.apply(null,ps), sp=(mx-mn)||Math.abs(mx)||1;
+  const X=i=>PADX+(i/(v.length-1))*(W-PADX*2);
+  const Y=p=>PADT+(1-(p-mn)/sp)*(H-PADT-PADB);
+  const up=ps[ps.length-1]>=ps[0], col=up?"var(--rt)":"var(--ok)";
+  return <svg className="aiv-chart" viewBox={"0 0 "+W+" "+H} role="img"
+    aria-label={"Price history: "+money(ps[0])+" to "+money(ps[ps.length-1])+" across "+v.length+" invoices"}>
+    <line x1={PADX} y1={H-PADB} x2={W-PADX} y2={H-PADB} stroke="var(--ink)" strokeWidth="2"/>
+    <polyline points={v.map((r,i)=>X(i).toFixed(1)+","+Y(r.price).toFixed(1)).join(" ")} fill="none" stroke={col} strokeWidth="3" vectorEffect="non-scaling-stroke"/>
+    {v.map((r,i)=><rect key={i} x={(X(i)-3).toFixed(1)} y={(Y(r.price)-3).toFixed(1)} width="6" height="6" fill="var(--ink)"><title>{r.date+" · "+(r.supplier||"?")+" · "+money(r.price)+(r.unit?"/"+r.unit:"")}</title></rect>)}
+    <text x={PADX} y={H-7} fontSize="11" fontWeight="700" fill="var(--muted)">{v[0].date}</text>
+    <text x={W-PADX} y={H-7} fontSize="11" fontWeight="700" textAnchor="end" fill="var(--muted)">{v[v.length-1].date}</text>
+    <text x={W-PADX} y={12} fontSize="11" fontWeight="700" textAnchor="end" fill="var(--muted)">{"high "+money(mx)+"  ·  low "+money(mn)}</text>
+  </svg>;
+}
+
+function AivMovers({rows, onPick}){
+  if(!rows.length) return <div className="empty">Nothing moved enough to chart in this window.</div>;
+  const max=Math.max.apply(null,[10].concat(rows.map(r=>Math.abs(r.pct))));
+  return <div className="aiv-mv">
+    {rows.map((r,i)=>{
+      const w=(Math.abs(r.pct)/max*50).toFixed(1)+"%";
+      // Same threshold the basket uses to drop a line: at this size it is a pack or unit
+      // error, and it should not read as a real price move just because it is on a chart.
+      const bad=Math.abs(r.pct)>200;
+      return <div className="b" key={i} style={{animationDelay:(Math.min(i,10)*0.04)+"s"}} onClick={()=>onPick&&onPick(r)}>
+        <span className="nm" title={r.name}>{r.name}{bad? <span className="badge warn" style={{marginLeft:8}}>check</span> : null}</span>
+        <span className="tr"><i className={r.pct>=0?"up":"dn"} style={{width:w}}></i><em></em></span>
+        <span className={"vl "+(r.pct>=0?"up":"down")}>{(r.pct>=0?"+":"−")+Math.abs(r.pct).toFixed(0)+"%"}</span>
+      </div>;
+    })}
+  </div>;
+}
+
+function AivMonths({rows}){
+  if(rows.length<2) return null;
+  const max=Math.max.apply(null,[2].concat(rows.map(r=>Math.abs(r.pct))));
+  return <div className="aiv-mo">
+    {rows.map((r,i)=>{
+      const h=(Math.abs(r.pct)/max*46).toFixed(1)+"%";
+      return <div className="c" key={i}>
+        <div className="zone">{r.n? <i className={r.pct>=0?"up":"dn"} style={{height:h, animationDelay:(i*0.05)+"s"}}></i> : null}</div>
+        <div className="vv">{r.n? ((r.pct>=0?"+":"−")+Math.abs(r.pct).toFixed(1)+"%") : "—"}</div>
+        <div className="lb">{r.label}</div>
+      </div>;
+    })}
+  </div>;
+}
+
+
+/* One row of the "needs linking" queue: the supplier line, what the app thinks it is, and
+   how sure it is. Nothing is applied until someone presses a button — the pipeline already
+   refuses to guess (supplier-invoice-rules.md §매칭 우선순위) and so does this. */
+function AivUnmatchedRow({item, onLink, onOpen}){
+  const u=item.u, top=item.cands[0];
+  return <tr className="row">
+    <td style={{width:150}}>{top
+      ? <span className={"aiv-cf "+aivTier(top.sc)}>{aivTierName(top.sc)+" · "+top.sc}</span>
+      : <span className="badge bad">▲ no idea</span>}</td>
+    <td>
+      <span className="name">{u.rawName}</span>
+      <span className="sub">{u.supplier}{u.orderCode?" · "+u.orderCode:""}{u.date?" · "+u.date:""}</span>
+      {top
+        ? <React.Fragment>
+            <span className="aiv-why">Best guess <b>{top.g.name}</b> — {top.why.slice(0,3).join("; ")}.</span>
+            <span className="aiv-sug">
+              {item.cands.map((c,j)=><button key={j} type="button" className="btn sm" onClick={()=>onLink(u, c.g.id, c.g.name)}>
+                {(j===0?"Link → ":"or ")+c.g.name+" ("+c.sc+")"}
+              </button>)}
+              <button type="button" className="link" onClick={()=>onOpen(u)}>Something else ›</button>
+            </span>
+          </React.Fragment>
+        : <span className="aiv-why">No ingredient in the app looks like this line — open it to create one.</span>}
+    </td>
+    <td className="num">{u.perUnitPrice!=null? money(u.perUnitPrice):"–"}{u.useUnit? <span className="sub" style={{display:"inline"}}>/{u.useUnit}</span>:null}</td>
+    <td className="num"><button type="button" className="link" onClick={()=>onOpen(u)}>Open ›</button></td>
+  </tr>;
+}
+
 function InvoicesV2({state, update, ingMap}){
-  const log=(state.invoiceLog||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.ts||0)-(a.ts||0));
-  const unmatched=(state.invoiceUnmatched||[]);
-  const [card,setCard]=useState(null); const [open,setOpen]=useState(null); const [days,setDays]=useState(7);
-  const cut=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
-  const recent=log.filter(r=>String(r.date||"")>=cut);
-  const changes=[]; recent.forEach(r=>(r.updated||[]).forEach(u=>{ const pct=(u.old>0&&u.new!=null)?(u.new-u.old)/u.old*100:null; changes.push({r,u,pct}); }));
+  const rawLog = state.invoiceLog||[];
+  const log = rawLog.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.ts||0)-(a.ts||0));
+  const unmatched = state.invoiceUnmatched||[];
+  const checked = state.invoiceChecked||{};
+  const ings = useMemo(()=>(state.ingredients||[]).filter(g=>!g.archived), [state.ingredients]);
+  const [card,setCard]=useState(null);
+  const [open,setOpen]=useState(null);
+  const [days,setDays]=useState(30);
+  const [view,setView]=useState("queue");
+  const cut = new Date(Date.now()-days*86400000).toISOString().slice(0,10);
+  const tod = today();
+  const recent = log.filter(r=>String(r.date||"")>=cut);
+
+  const changes=[];
+  recent.forEach(r=>(r.updated||[]).forEach(u=>{
+    const p=(u.old>0 && u.new!=null)? (u.new-u.old)/u.old*100 : null;
+    changes.push({r:r, u:u, pct:p});
+  }));
   changes.sort((a,b)=>Math.abs(b.pct||0)-Math.abs(a.pct||0));
-  const big=changes.filter(c=>c.pct!=null&&Math.abs(c.pct)>=10);
-  const flagged=[]; recent.forEach(r=>(r.flagged||[]).forEach(f=>flagged.push({r,f})));
+  const big=changes.filter(c=>c.pct!=null && Math.abs(c.pct)>=10);
+  const flagged=[]; recent.forEach(r=>(r.flagged||[]).forEach(f=>flagged.push({r:r, f:f})));
   const last=log[0];
+
+  const series = useMemo(()=>aivSeries(rawLog), [rawLog]);
+  const basket = useMemo(()=>aivBasket(series, cut, tod), [series, cut, tod]);
+
+  /* Month buckets are built from local calendar parts, not toISOString() — in AEST the UTC
+     slice of the 1st of a month lands in the previous month and shifts every bar. */
+  const months = useMemo(()=>{
+    const out=[], now=new Date();
+    for(let i=5;i>=0;i--){
+      const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const y=d.getFullYear(), m=d.getMonth();
+      const pad=n=>(n<10?"0":"")+n;
+      const from=y+"-"+pad(m+1)+"-01";
+      const to=y+"-"+pad(m+1)+"-"+pad(new Date(y, m+1, 0).getDate());
+      const b=aivBasket(series, from, to);
+      out.push({label:["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m], pct:b?b.pct:0, n:b?b.n:0});
+    }
+    return out;
+  }, [series]);
+
+  const movers = useMemo(()=>{
+    const out=[];
+    Object.keys(series).forEach(k=>{
+      const rows=series[k].filter(r=>r.date>=cut);
+      if(!rows.length) return;
+      const first=rows[0], lastR=rows[rows.length-1];
+      const start=(first.old!=null && first.old>0)? first.old : first.price;
+      if(!(start>0) || !(lastR.price>0)) return;
+      const p=(lastR.price-start)/start*100;
+      if(Math.abs(p)<1) return;
+      out.push({key:k, name:lastR.name||"?", pct:p, from:start, to:lastR.price, row:lastR,
+        pts:series[k].map(r=>r.price)});
+    });
+    return out.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
+  }, [series, cut]);
+
+  /* Same item, two suppliers. The saving is stated per unit unless the run log carries a
+     `qty` for the line — the invoice parser does not log purchase volume yet, and inventing
+     one would turn a real gap into a fake dollar figure. */
+  const cheaper = useMemo(()=>{
+    const out=[];
+    Object.keys(series).forEach(k=>{
+      const rows=series[k];
+      if(rows.length<2) return;
+      const bySup={};
+      rows.forEach(r=>{ const s=r.supplier||"?"; if(!bySup[s] || String(r.date)>=String(bySup[s].date)) bySup[s]=r; });
+      const list=Object.keys(bySup).map(s=>bySup[s]).filter(r=>r.price>0);
+      if(list.length<2) return;
+      const sorted=list.slice().sort((a,b)=>a.price-b.price);
+      const best=sorted[0], dear=sorted[sorted.length-1];
+      if(!(dear.price>best.price)) return;
+      const gapPct=(dear.price-best.price)/dear.price*100;
+      if(gapPct<3) return;
+      const cur=rows[rows.length-1];
+      const save=cur.price-best.price;
+      if(!(save>0)) return;
+      const vol=rows.filter(r=>r.date>=cut && r.supplier===cur.supplier).reduce((n,r)=>n+(r.qty||0),0);
+      out.push({key:k, name:cur.name||"?", unit:cur.unit, best:best, dear:dear, cur:cur,
+        gapPct:gapPct, save:save, vol:vol, gapDays:Math.abs(aivDayDiff(best.date, cur.date)), row:cur,
+        others:sorted});
+    });
+    return out.sort((a,b)=>b.gapPct-a.gapPct);
+  }, [series, cut]);
+
+  /* Prices the robot already wrote that do not look right. This is the case the Audit tab
+     cannot see: the number is present and well-formed, it is just wrong. */
+  const anomalies = useMemo(()=>{
+    const out=[];
+    recent.forEach(r=>{
+      if(/^Manual link by staff/.test(String(r.analysis||""))) return;
+      (r.updated||[]).forEach(u=>{
+        const key=(r.date||"")+"|"+(r.invoiceNo||"")+"|"+(u.id||u.name||"");
+        if(checked[key]) return;
+        const g=(u.id && ings.find(x=>x.id===u.id)) || ings.find(x=>(x.name||"")===(u.name||"")) || null;
+        const oldv=(u.old==null? null : Number(u.old)), nv=Number(u.new);
+        const reasons=[];
+        /* A cent-or-two per unit is only suspicious on a countable unit. Per gram and per
+           millilitre that IS the normal price — flagging it there turned every meat and
+           dairy line into a false alarm. */
+        const countable = u.unit && !unitsComparable(u.unit,"g") && !unitsComparable(u.unit,"ml");
+        if(nv>0 && nv<=0.02 && countable) reasons.push(money(nv)+" a unit — reads like a promo or freebie line, not a real cost");
+        if(oldv>0 && nv>0){
+          const mult=nv/oldv, fmtX=v=>v>=10? v.toFixed(0) : v.toFixed(1);
+          if(mult>=8) reasons.push("jumped "+fmtX(mult)+"× in one invoice — usually a pack-size or unit mix-up");
+          else if(mult<=0.125) reasons.push("dropped to 1/"+fmtX(1/mult)+" of the previous price — usually a pack-size or unit mix-up");
+          else { const p=(nv-oldv)/oldv*100; if(Math.abs(p)>=40) reasons.push("moved "+(p>0?"+":"−")+Math.abs(p).toFixed(0)+"% in one invoice"); }
+        }
+        if(!g) reasons.push("this ingredient is not in the app any more");
+        else if(u.unit && g.useUnit && !unitsComparable(u.unit, g.useUnit)) reasons.push("invoice unit "+u.unit+" does not convert to the ingredient's "+g.useUnit);
+        const hist=(series[u.id||("n:"+(u.name||""))]||[]).filter(x=>x.date<(r.date||"9999")).map(x=>x.price).filter(p=>p>0);
+        if(hist.length>=3 && nv>0){
+          const sd=hist.slice().sort((a,b)=>a-b), med=sd[Math.floor(sd.length/2)];
+          if(med>0 && (nv/med>=5 || med/nv>=5)) reasons.push("well away from its usual "+money(med)+(u.unit?"/"+u.unit:""));
+        }
+        if(reasons.length) out.push({key:key, r:r, u:u, g:g, reasons:reasons});
+      });
+    });
+    return out;
+  }, [recent, ings, series, checked]);
+
+  const suggestions = useMemo(()=>unmatched.map(u=>({u:u, cands:aivSuggest(u, ings)})), [unmatched, ings]);
+  /* Auto-linkable only when the winner is both confident AND clearly ahead of the runner-up.
+     A 71-vs-70 pair is a coin toss, and a coin toss is what put "Soy Milk" on "Milk". */
+  const autoLink = suggestions.filter(x=>x.cands.length && x.cands[0].sc>=70 && (x.cands.length<2 || x.cands[0].sc-x.cands[1].sc>=12));
+
+  function openLine(u){
+    setCard({row:{name:u.rawName, rawName:u.rawName, orderCode:u.orderCode, new:u.perUnitPrice, unit:u.useUnit, old:null},
+             entry:{supplier:u.supplier, invoiceNo:u.invoiceNo, date:u.date}});
+  }
+
+  /* Link one or many supplier lines in a single state write: alias saved (so the 09:04 run
+     reuses it), line removed from the queue, price applied, one audit row in the run log. */
+  function doLink(items){
+    const done=[], same=[], fail=[];
+    update(s=>{
+      s.invoiceAliases=s.invoiceAliases||{};
+      const upd=[], flg=[];
+      items.forEach(it=>{
+        const k=aivKey(it.u.supplier, it.u.orderCode, it.u.rawName);
+        s.invoiceAliases[k]=it.gId;
+        s.invoiceUnmatched=(s.invoiceUnmatched||[]).filter(x=>aivKey(x.supplier, x.orderCode, x.rawName)!==k);
+        const res=aivApply(s, it.u, it.gId, "AI Invoice (linked in app) "+(it.u.supplier||"")+(it.u.invoiceNo?" "+it.u.invoiceNo:""));
+        if(res.ok){
+          upd.push({id:it.gId, name:res.name, old:res.old, new:res.next, unit:res.unit, orderCode:it.u.orderCode||""});
+          done.push(it.u.rawName+" → "+res.name+"  "+money(res.old)+" → "+money(res.next));
+        } else if(res.why==="same price"){
+          // The link is the point; the ingredient simply already carries this price. Not a
+          // failure, and putting it in `flagged` filled the review queue with non-problems.
+          same.push(it.u.rawName+" → "+res.name);
+        } else {
+          flg.push("\""+it.u.rawName+"\" is now linked to "+(res.name||"?")+" but the price was not applied ("+res.why+") — set it by hand.");
+          fail.push(it.u.rawName+" → "+(res.name||"?")+"  ("+res.why+")");
+        }
+      });
+      s.invoiceLog=s.invoiceLog||[];
+      s.invoiceLog.unshift({ts:Date.now(), date:today(),
+        supplier:(items.length===1? (items[0].u.supplier||"") : "Multiple"), invoiceNo:"",
+        analysis:"Manual link by staff — "+items.length+" supplier line"+(items.length>1?"s":"")+" mapped in the app. Future automatic runs use these mappings.",
+        updated:upd, added:[], flagged:flg});
+    });
+    setTimeout(()=>{
+      alert("Linked "+items.length+" line"+(items.length>1?"s":"")+".\n\n"
+        + (done.length? done.join("\n")+"\n" : "")
+        + (same.length? "\nAlready at that price — linked, nothing to change:\n"+same.join("\n")+"\n" : "")
+        + (fail.length? "\nPrice NOT applied — set these by hand:\n"+fail.join("\n")+"\n" : "")
+        + "\nFuture automatic runs use these mappings.");
+    },0);
+  }
+  function linkAll(){
+    if(!autoLink.length) return;
+    const txt=autoLink.map(x=>"• "+x.u.rawName+"  →  "+x.cands[0].g.name+"   ("+x.cands[0].sc+"/100)").join("\n");
+    if(!confirm("Link these "+autoLink.length+" lines and apply their prices?\n\n"+txt+"\n\nEach one is also saved as a rule for future runs.")) return;
+    doLink(autoLink.map(x=>({u:x.u, gId:x.cands[0].g.id})));
+  }
+
+  function markChecked(k){ update(s=>{ s.invoiceChecked=s.invoiceChecked||{}; s.invoiceChecked[k]=today(); }); }
+  function revertPrice(a){
+    if(!a.g){ alert("That ingredient is not in the app any more — nothing to revert."); return; }
+    if(a.u.old==null){ alert("No previous price was recorded for this line, so there is nothing to go back to."); return; }
+    if(!confirm("Put "+a.g.name+" back to "+money(a.u.old)+(a.u.unit?"/"+a.u.unit:"")+"?\n\nThe invoice price "+money(a.u.new)+" will be undone and the change logged.")) return;
+    let res=null;
+    update(s=>{
+      res=aivApply(s, {perUnitPrice:a.u.old, useUnit:a.u.unit, supplier:a.r.supplier}, a.g.id,
+        "Reverted — flagged by the invoice guard ("+(a.r.supplier||"?")+(a.r.invoiceNo?" "+a.r.invoiceNo:"")+")");
+      s.invoiceChecked=s.invoiceChecked||{}; s.invoiceChecked[a.key]=today();
+      s.invoiceLog=s.invoiceLog||[];
+      s.invoiceLog.unshift({ts:Date.now(), date:today(), supplier:a.r.supplier||"", invoiceNo:a.r.invoiceNo||"",
+        analysis:"Manual link by staff — price reverted on "+a.g.name+" after the guard flagged it.",
+        updated:(res&&res.ok)? [{id:a.g.id, name:res.name, old:res.old, new:res.next, unit:res.unit, orderCode:a.u.orderCode||""}] : [],
+        added:[], flagged:(res && !res.ok && res.why!=="same price")? ["Could not revert "+a.g.name+" ("+res.why+") — set it by hand."] : []});
+    });
+    setTimeout(()=>{
+      alert(res&&res.ok? (a.g.name+" is back to "+money(res.next)+" per "+res.qty+" "+res.unit+".")
+        : (res&&res.why==="same price")? (a.g.name+" is already at "+money(a.u.old)+(a.u.unit?"/"+a.u.unit:"")+" — nothing to undo. Marked as checked.")
+        : ("Could not revert — "+((res&&res.why)||"?")+". Set the price by hand."));
+    },0);
+  }
+
+  const queueN = unmatched.length + flagged.length + anomalies.length;
+  const go = v => () => setView(v);
+
   return <div className="rv2">
-    <RV2Style />
-    <div className="lbl"><span className="sh c"></span><span className="tag">AI invoice</span><span className="c2">prices updated automatically from supplier invoices every morning · fix what it couldn’t</span></div>
+    <RV2Style /><AivStyle />
+    <div className="lbl"><span className="sh c"></span><span className="tag">AI invoice</span><span className="c2">prices updated automatically from supplier invoices every morning · fix what it couldn’t, and watch what it costs you</span></div>
     <div className="screen">
-      <div className="bar"><span className="cnt" style={{fontWeight:700, color:"var(--ink)"}}>Last run {last?(last.date+" · "+(last.supplier||"?")):"— none yet"}</span><span style={{flex:1}}></span><span className="cnt">Window</span><div className="seg" role="group">{[7,30,90].map(d=><button key={d} type="button" aria-pressed={days===d} onClick={()=>setDays(d)}>{d}d</button>)}</div></div>
-      <div className="sum">
-        <div><div className="v">{changes.length}</div><div className="l">price updates · {days}d</div></div>
-        <div className={big.length?"hot":""}><div className="v">{big.length}</div><div className="l">moved ≥ 10%</div></div>
-        <div className={unmatched.length?"bad":""}><div className="v">{unmatched.length}</div><div className="l">needs linking</div></div>
-        <div className={flagged.length?"hot":""}><div className="v">{flagged.length}</div><div className="l">needs review</div></div>
+      <div className="bar">
+        <span className="cnt" style={{fontWeight:700, color:"var(--ink)"}}>Last run {last? (last.date+" · "+(last.supplier||"?")) : "— none yet"}</span>
+        <span style={{flex:1}}></span>
+        <div className="seg" role="group" aria-label="Section">
+          <button type="button" aria-pressed={view==="queue"} onClick={go("queue")}>To fix{queueN? " ("+queueN+")":""}</button>
+          <button type="button" aria-pressed={view==="trend"} onClick={go("trend")}>Trends</button>
+          <button type="button" aria-pressed={view==="log"} onClick={go("log")}>Log</button>
+        </div>
+        <span className="cnt">Window</span>
+        <div className="seg" role="group" aria-label="Window">{[7,30,90].map(d=><button key={d} type="button" aria-pressed={days===d} onClick={()=>setDays(d)}>{d}d</button>)}</div>
       </div>
-      {(unmatched.length>0||flagged.length>0) && <><div className="grp" style={{padding:"18px 14px 8px"}}><span className="sh s" style={{marginRight:8}}></span>Work queue <span className="n">{unmatched.length+flagged.length}</span></div>
-        <table><tbody>
-          {unmatched.map((u,i)=><tr key={"u"+i} className="row" onClick={()=>setCard({row:{name:u.rawName, rawName:u.rawName, orderCode:u.orderCode, new:u.perUnitPrice, unit:u.useUnit, old:null}, entry:{supplier:u.supplier, invoiceNo:u.invoiceNo, date:u.date}})}><td style={{width:150}}><span className="badge bad">▲ not linked</span></td><td><span className="name">{u.rawName}</span><span className="sub">{u.supplier}{u.orderCode?" · "+u.orderCode:""}{u.date?" · "+u.date:""}</span></td><td className="num">{u.perUnitPrice!=null?money(u.perUnitPrice):"–"}{u.useUnit?<span className="sub" style={{display:"inline"}}>/{u.useUnit}</span>:null}</td><td className="num"><span className="link">Link ›</span></td></tr>)}
-          {flagged.map(({r,f},i)=><tr key={"f"+i}><td style={{width:150}}><span className="badge warn">▲ review</span></td><td colSpan={3}><span className="name" style={{fontWeight:500}}>{f}</span><span className="sub">{r.supplier} · {r.date}</span></td></tr>)}
-        </tbody></table></>}
-      <div className="grp" style={{padding:"18px 14px 8px"}}>Price changes · {days}d <span className="n">{changes.length}</span></div>
-      <div style={{overflowX:"auto"}}><table>
-        <thead><tr><th>Ingredient</th><th>Supplier</th><th className="num">Was</th><th className="num">Now</th><th className="num">Change</th><th>Date</th></tr></thead>
-        <tbody>
-          {changes.length===0 && <tr><td colSpan={6} className="empty">No price updates in the last {days} days.</td></tr>}
-          {changes.slice(0,200).map(({r,u,pct},i)=><tr key={i} className="row" style={{animationDelay:(Math.min(i,12)*0.03)+"s"}} onClick={()=>setCard({row:u, entry:r})}><td><span className="name">{u.name}</span></td><td>{r.supplier||"?"}{r.invoiceNo?<span className="sub" style={{display:"inline"}}> · {r.invoiceNo}</span>:null}</td><td className="num">{u.old!=null?money(u.old):"–"}</td><td className="num" style={{fontWeight:700}}>{money(u.new)}<span className="sub" style={{display:"inline"}}>{u.unit?("/"+u.unit):""}</span></td><td className={"num "+(pct==null?"":pct>0?"up":"down")}>{pct==null?"new":((pct>0?"↑ ":"↓ ")+Math.abs(pct).toFixed(0)+"%")}</td><td>{r.date}</td></tr>)}
-        </tbody>
-      </table></div>
-      <div className="grp" style={{padding:"18px 14px 8px"}}>Run log <span className="n">{log.length}</span></div>
-      <div style={{overflowX:"auto"}}><table>
-        <thead><tr><th>Date</th><th>Supplier · invoice</th><th className="num">Updated</th><th className="num">New</th><th className="num">Review</th><th></th></tr></thead>
-        <tbody>
-          {log.length===0 && <tr><td colSpan={6} className="empty">No runs logged yet. Automatic runs appear here by date.</td></tr>}
-          {log.slice(0,120).map((r,i)=><React.Fragment key={i}><tr className={"row"+(open===i?" open":"")} onClick={()=>setOpen(open===i?null:i)}><td><span className="name">{r.date}</span></td><td>{r.supplier||"?"}{r.invoiceNo?<span className="sub" style={{display:"inline"}}> · {r.invoiceNo}</span>:null}</td><td className="num">{(r.updated||[]).length}</td><td className="num">{(r.added||[]).length||"—"}</td><td className="num">{(r.flagged||[]).length?<span className="badge warn">{(r.flagged||[]).length}</span>:"—"}</td><td className="num"><span className="link">{open===i?"close":"details ›"}</span></td></tr>
-            {open===i && <tr className="exp"><td colSpan={6}>
-              {r.analysis && <div className="impact calm" style={{marginTop:0}}><b>Price trends</b> — {r.analysis}</div>}
-              {(r.added||[]).length>0 && <div style={{marginTop:12}}><div className="lab">New ingredients ({r.added.length})</div><div className="chips" style={{border:0, padding:0}}>{r.added.map((a,j)=><span key={j} className="chip">{a}</span>)}</div></div>}
-              {(r.flagged||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Needs review</div>{r.flagged.map((f,j)=><div key={j} style={{padding:"4px 0"}}><span className="sh t" style={{marginRight:8}}></span>{f}</div>)}</div>}
-              {(r.updated||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Price updates ({r.updated.length})</div><table className="mini"><tbody>{r.updated.map((u,j)=><tr key={j} className="row" onClick={()=>setCard({row:u, entry:r})}><td>{u.name}</td><td className="num">{u.old!=null?money(u.old):"–"} → <b>{money(u.new)}</b>{u.unit?"/"+u.unit:""}</td></tr>)}</tbody></table></div>}
-            </td></tr>}
-          </React.Fragment>)}
-        </tbody>
-      </table></div>
+
+      <div className="sum aiv5">
+        <div className="tap" onClick={go("log")}><div className="v">{changes.length}</div><div className="l">price updates · {days}d</div></div>
+        <div className={"tap "+(basket&&basket.pct>=2?"hot":"")} onClick={go("trend")}>
+          <div className="v">{basket? ((basket.pct>=0?"+":"−")+Math.abs(basket.pct).toFixed(1)+"%") : "—"}</div>
+          <div className="l">input cost · {days}d</div>
+        </div>
+        <div className={"tap "+(big.length?"hot":"")} onClick={go("trend")}><div className="v">{big.length}</div><div className="l">moved ≥ 10%</div></div>
+        <div className={"tap "+(unmatched.length?"bad":"")} onClick={go("queue")}><div className="v">{unmatched.length}</div><div className="l">needs linking</div></div>
+        <div className={"tap "+(anomalies.length||flagged.length?"hot":"")} onClick={go("queue")}><div className="v">{anomalies.length+flagged.length}</div><div className="l">needs a check</div></div>
+      </div>
+
+      {view==="queue" && <React.Fragment>
+        <div className="grp" style={{padding:"18px 14px 8px"}}>
+          <span className="sh s" style={{marginRight:8}}></span>Needs linking <span className="n">{unmatched.length}</span>
+          {autoLink.length>0 && <button type="button" className="btn sm p" style={{marginLeft:"auto"}} onClick={linkAll}>Link {autoLink.length} sure one{autoLink.length>1?"s":""}</button>}
+        </div>
+        <div className="aiv-note">Each line is scored against every ingredient in the app on name, supplier order code, unit and price. Nothing is applied until you press a button, and whatever you press is remembered — the 09:04 run reuses it from then on.</div>
+        <div style={{overflowX:"auto"}}><table><tbody>
+          {unmatched.length===0 && <tr><td colSpan={4} className="empty">Nothing waiting — every invoice line found its ingredient.</td></tr>}
+          {suggestions.map((it,i)=><AivUnmatchedRow key={"u"+i} item={it} onOpen={openLine}
+            onLink={(u,gid,nm)=>{ if(confirm("Link \""+u.rawName+"\" to \""+nm+"\" and apply "+money(u.perUnitPrice)+(u.useUnit?"/"+u.useUnit:"")+"?\n\nSaved as a rule for future runs.")) doLink([{u:u, gId:gid}]); }} />)}
+        </tbody></table></div>
+
+        <div className="grp" style={{padding:"18px 14px 8px"}}><span className="sh t" style={{marginRight:8}}></span>Needs a second look <span className="n">{anomalies.length+flagged.length}</span></div>
+        <div className="aiv-note">Prices the robot already wrote that do not look right — a tenfold jump, a unit it could not convert, a one-cent promo line. The Audit tab cannot catch these: the number is there and well formed, it is just wrong.</div>
+        <div style={{overflowX:"auto"}}><table><tbody>
+          {anomalies.length===0 && flagged.length===0 && <tr><td colSpan={4} className="empty">Nothing suspicious in the last {days} days.</td></tr>}
+          {anomalies.map((a,i)=><tr key={"a"+i}>
+            <td style={{width:150}}><span className="badge warn">▲ check</span></td>
+            <td>
+              <span className="name">{a.u.name||"?"}</span>
+              <span className="sub">{(a.r.supplier||"?")+(a.r.invoiceNo?" · "+a.r.invoiceNo:"")+" · "+(a.r.date||"")}</span>
+              <span className="aiv-why">{a.reasons.join(" · ")}</span>
+            </td>
+            <td className="num">{a.u.old!=null? money(a.u.old):"–"} → <b>{money(a.u.new)}</b>{a.u.unit? <span className="sub" style={{display:"inline"}}>/{a.u.unit}</span>:null}</td>
+            <td className="num" style={{whiteSpace:"nowrap"}}>
+              <button type="button" className="btn sm" onClick={()=>setCard({row:a.u, entry:a.r})}>Open</button>{" "}
+              {a.u.old!=null && a.g && <React.Fragment><button type="button" className="btn sm" onClick={()=>revertPrice(a)}>Undo</button>{" "}</React.Fragment>}
+              <button type="button" className="link" onClick={()=>markChecked(a.key)}>Fine</button>
+            </td>
+          </tr>)}
+          {flagged.map((x,i)=><tr key={"f"+i}>
+            <td style={{width:150}}><span className="badge warn">▲ review</span></td>
+            <td colSpan={3}><span className="name" style={{fontWeight:500}}>{x.f}</span><span className="sub">{x.r.supplier} · {x.r.date}</span></td>
+          </tr>)}
+        </tbody></table></div>
+      </React.Fragment>}
+
+      {view==="trend" && <React.Fragment>
+        <div className="aiv-hero">
+          <div>
+            <div className={"big "+(basket? (basket.pct>=0?"up":"down") : "")}>{basket? ((basket.pct>=0?"+":"−")+Math.abs(basket.pct).toFixed(1)+"%") : "—"}</div>
+          </div>
+          <div className="cap">What one unit of each of the {basket? basket.n : 0} items that moved in the last {days} days costs now, against what it cost at the start of the window. Every item counts the same — the run log does not record how much of each you buy, so any weighting would be made up.{basket&&basket.skipped? <span> <b>{basket.skipped} item{basket.skipped>1?"s":""}</b> left out as a pack or unit error — see <button type="button" className="link" onClick={go("queue")}>needs a second look</button>.</span> : null}</div>
+        </div>
+        <div className="grp" style={{padding:"14px 14px 4px"}}>Month by month <span className="n">input cost</span></div>
+        {months.filter(m=>m.n).length>=2
+          ? <AivMonths rows={months} />
+          : <div className="empty">Not enough history yet — this fills in as the morning runs pile up.</div>}
+        <div className="aiv-note">Each bar is that calendar month on its own: how far the items invoiced that month moved, up (red) or down (green).</div>
+
+        <div className="grp" style={{padding:"18px 14px 4px"}}>Biggest movers · {days}d <span className="n">{movers.length}</span></div>
+        <AivMovers rows={movers.slice(0,12)} onPick={m=>setCard({row:{id:m.row.id, name:m.name, orderCode:m.row.code, old:m.from, new:m.row.price, unit:m.row.unit}, entry:{supplier:m.row.supplier, invoiceNo:m.row.invoiceNo, date:m.row.date}})} />
+
+        <div className="grp" style={{padding:"18px 14px 8px"}}><span className="sh c" style={{marginRight:8}}></span>Cheaper somewhere else <span className="n">{cheaper.length}</span></div>
+        <div className="aiv-note">Items two or more suppliers have invoiced. The gap is per unit: the run log does not carry how many you bought, so a monthly dollar figure would be invented — it shows one only where a quantity was actually logged.</div>
+        <div style={{overflowX:"auto"}}><table>
+          <thead><tr><th>Ingredient</th><th>Buying from now</th><th>Cheapest seen</th><th className="num">Gap</th><th className="num">Saving</th></tr></thead>
+          <tbody>
+            {cheaper.length===0 && <tr><td colSpan={5} className="empty">No item has been invoiced by two different suppliers yet.</td></tr>}
+            {cheaper.slice(0,40).map((c,i)=><tr key={i} className="row" style={{animationDelay:(Math.min(i,12)*0.03)+"s"}}
+              onClick={()=>setCard({row:{id:c.row.id, name:c.name, orderCode:c.row.code, old:null, new:c.row.price, unit:c.row.unit}, entry:{supplier:c.row.supplier, invoiceNo:c.row.invoiceNo, date:c.row.date}})}>
+              <td><span className="name">{c.name}</span>{c.gapDays>45? <span className="sub">prices {c.gapDays} days apart — may not be comparable</span>:null}</td>
+              <td>{c.cur.supplier||"?"}<span className="sub">{money(c.cur.price)}{c.unit?"/"+c.unit:""} · {c.cur.date}</span></td>
+              <td>{c.best.supplier||"?"}<span className="sub">{money(c.best.price)}{c.unit?"/"+c.unit:""} · {c.best.date}</span></td>
+              <td className="num down">−{c.gapPct.toFixed(0)}%</td>
+              <td className="num">{money(c.save)}<span className="sub" style={{display:"inline"}}>/{c.unit||"unit"}</span>{c.vol>0? <span className="sub">≈ {money(c.save*c.vol)} per {days}d</span>:null}</td>
+            </tr>)}
+          </tbody>
+        </table></div>
+      </React.Fragment>}
+
+      {view==="log" && <React.Fragment>
+        <div className="grp" style={{padding:"18px 14px 8px"}}>Price changes · {days}d <span className="n">{changes.length}</span></div>
+        <div style={{overflowX:"auto"}}><table>
+          <thead><tr><th>Ingredient</th><th>Trend</th><th>Supplier</th><th className="num">Was</th><th className="num">Now</th><th className="num">Change</th><th>Date</th></tr></thead>
+          <tbody>
+            {changes.length===0 && <tr><td colSpan={7} className="empty">No price updates in the last {days} days.</td></tr>}
+            {changes.slice(0,200).map((c,i)=>{
+              const k=c.u.id||("n:"+(c.u.name||""));
+              return <tr key={i} className="row" style={{animationDelay:(Math.min(i,12)*0.03)+"s"}} onClick={()=>setCard({row:c.u, entry:c.r})}>
+                <td><span className="name">{c.u.name}</span></td>
+                <td><AivSpark pts={(series[k]||[]).map(r=>r.price)} /></td>
+                <td>{c.r.supplier||"?"}{c.r.invoiceNo? <span className="sub" style={{display:"inline"}}> · {c.r.invoiceNo}</span>:null}</td>
+                <td className="num">{c.u.old!=null? money(c.u.old):"–"}</td>
+                <td className="num" style={{fontWeight:700}}>{money(c.u.new)}<span className="sub" style={{display:"inline"}}>{c.u.unit?("/"+c.u.unit):""}</span></td>
+                <td className={"num "+(c.pct==null?"":c.pct>0?"up":"down")}>{c.pct==null? "new" : ((c.pct>0?"↑ ":"↓ ")+Math.abs(c.pct).toFixed(0)+"%")}</td>
+                <td>{c.r.date}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table></div>
+
+        <div className="grp" style={{padding:"18px 14px 8px"}}>Run log <span className="n">{log.length}</span></div>
+        <div style={{overflowX:"auto"}}><table>
+          <thead><tr><th>Date</th><th>Supplier · invoice</th><th className="num">Updated</th><th className="num">New</th><th className="num">Review</th><th></th></tr></thead>
+          <tbody>
+            {log.length===0 && <tr><td colSpan={6} className="empty">No runs logged yet. Automatic runs appear here by date.</td></tr>}
+            {log.slice(0,120).map((r,i)=><React.Fragment key={i}>
+              <tr className={"row"+(open===i?" open":"")} onClick={()=>setOpen(open===i?null:i)}>
+                <td><span className="name">{r.date}</span></td>
+                <td>{r.supplier||"?"}{r.invoiceNo? <span className="sub" style={{display:"inline"}}> · {r.invoiceNo}</span>:null}</td>
+                <td className="num">{(r.updated||[]).length}</td>
+                <td className="num">{(r.added||[]).length||"—"}</td>
+                <td className="num">{(r.flagged||[]).length? <span className="badge warn">{(r.flagged||[]).length}</span>:"—"}</td>
+                <td className="num"><span className="link">{open===i?"close":"details ›"}</span></td>
+              </tr>
+              {open===i && <tr className="exp"><td colSpan={6}>
+                {r.analysis && <div className="impact calm" style={{marginTop:0}}><b>Price trends</b> — {r.analysis}</div>}
+                {(r.added||[]).length>0 && <div style={{marginTop:12}}><div className="lab">New ingredients ({r.added.length})</div><div className="chips" style={{border:0, padding:0}}>{r.added.map((a,j)=><span key={j} className="chip">{a}</span>)}</div></div>}
+                {(r.flagged||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Needs review</div>{r.flagged.map((f,j)=><div key={j} style={{padding:"4px 0"}}><span className="sh t" style={{marginRight:8}}></span>{f}</div>)}</div>}
+                {(r.updated||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Price updates ({r.updated.length})</div><table className="mini"><tbody>{r.updated.map((u,j)=><tr key={j} className="row" onClick={()=>setCard({row:u, entry:r})}><td>{u.name}</td><td>{<AivSpark pts={(series[u.id||("n:"+(u.name||""))]||[]).map(x=>x.price)} w={70} h={22} />}</td><td className="num">{u.old!=null? money(u.old):"–"} → <b>{money(u.new)}</b>{u.unit?"/"+u.unit:""}</td></tr>)}</tbody></table></div>}
+              </td></tr>}
+            </React.Fragment>)}
+          </tbody>
+        </table></div>
+      </React.Fragment>}
     </div>
     {card && <InvoiceItemCard row={card.row} entry={card.entry} state={state} update={update} onClose={()=>setCard(null)} />}
   </div>;
 }
+/* AIV3-END */
+
 function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr, meEmail, ingMap, onReset}){
   const DAYS=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
   const [sec,setSec]=useState("notices"); const [pick,setPick]=useState(null); const [catDept,setCatDept]=useState(null);
@@ -8882,7 +9555,7 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
   const hist=[];
   (state.invoiceLog||[]).forEach(e=>(e.updated||[]).forEach(u=>{
     const same = (row.id && u.id===row.id) || (!row.id && (u.name||"")===(row.name||""));
-    if(same) hist.push({date:e.date, supplier:e.supplier, invoiceNo:e.invoiceNo, old:u.old, new:u.new, unit:u.unit});
+    if(same) hist.push({date:e.date, supplier:e.supplier, invoiceNo:e.invoiceNo, old:u.old, new:u.new, unit:u.unit, manual:/^Manual link by staff/.test(String(e.analysis||""))});
   }));
   hist.sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
   // Create a brand-new ingredient straight from the picker (same schema as the app's
@@ -8981,6 +9654,7 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
 
       <div>
         <div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Price history ({hist.length})</div>
+        <AivHistChart rows={hist.slice().reverse().filter(h=>!h.manual && Number(h.new)>0).map(h=>({date:h.date, supplier:h.supplier, unit:h.unit, price:Number(h.new)}))} />
         {hist.length===0? <div className="text-stone-400 text-xs">No history logged yet.</div> :
           <div className="space-y-0.5 max-h-48 overflow-auto">
             {hist.map((h,i)=><div key={i} className="flex justify-between gap-3 text-xs">

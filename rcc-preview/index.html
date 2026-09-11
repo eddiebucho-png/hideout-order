@@ -3204,8 +3204,10 @@ body{
   background:#fff;color:var(--ink);border-radius:0;cursor:pointer;
   transition:transform .14s cubic-bezier(.32,.72,0,1),background .14s,color .14s}
 .alp-chip:hover,.alp-new:hover,.alp-ok:hover,.alp-more:hover{transform:translateY(-2px)}
-.alp-more{border-style:dotted;color:var(--muted)}
-.alp-more[aria-expanded="true"]{background:var(--ink);color:#fff;border-style:solid}
+/* never filled: a filled chip means "selected allergen" and nothing else */
+.alp-more{border-style:dotted;background:transparent;color:var(--muted)}
+.alp-more[aria-expanded="true"]{background:transparent;color:var(--ink);border-style:dotted}
+.alp-more:hover{color:var(--ink)}
 .alp-chip:active{transform:scale(.96)}
 .alp-chip[aria-pressed="true"]{background:var(--ink);color:#fff}
 .alp-chip.none{border-style:dashed}
@@ -3275,6 +3277,56 @@ body{
 /* tokens have to resolve outside a .tdv2/.rv2 ancestor - Audit, Archive and the older cards
    are neither */
 #root{--r:#ec3013;--b:#1e4fb0;--y:#f2c100;--ink:#141312;--paper:#f3f1ec;--muted:rgba(20,19,18,.62)}
+/* ---- menu categories, laid out ------------------------------------------------------------
+   Each department is a block you can read at a glance instead of a button that hides a popup. */
+#root .catmap{display:grid;gap:14px;margin-top:4px}
+#root .catgrp{border:3px solid var(--ink);background:#fff;padding:14px 16px}
+#root .cathead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+#root .catname{font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+#root .catn{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-right:auto}
+#root .catlist{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+#root .catpill{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--ink);
+  padding:6px 10px;font-size:12px;font-weight:600;background:var(--paper);color:var(--ink)}
+#root .catpill b{font-size:11px;font-weight:700;background:var(--ink);color:#fff;padding:1px 6px;min-width:20px;text-align:center}
+#root .catpill b:empty{display:none}
+@media (min-width:900px){ #root .catmap{grid-template-columns:1fr 1fr} }
+/* ---- settings nav stays a sidebar on anything that is not a phone -------------------------
+   The shared 900px breakpoint turned it into a strip on narrow laptop windows and side panels,
+   which reads as a different layout from the same build. */
+@media (min-width:640px){
+  #root .rv2 .navcol{grid-template-columns:240px minmax(0,1fr)}
+  #root .rv2 .navcol .nav{border-right:3px solid var(--ink);border-bottom:0;display:block;
+    overflow:visible;padding:10px 0}
+  #root .rv2 .navcol .nav .g{display:block}
+  #root .rv2 .navcol .nav button{width:100%;flex:none}
+}
+/* ---- mobile chrome ------------------------------------------------------------------------
+   The bottom bar is position:fixed, so without the padding the last card sits underneath it. */
+@media (max-width:639px){
+  body{padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))}
+  .hdr2 .bnav{transition:transform .24s cubic-bezier(.32,.72,0,1)}
+  body.chrome-hidden .hdr2 .bnav{transform:translateY(calc(100% + env(safe-area-inset-bottom,0px)))}
+  /* the sticky sub-row travels up with it; the black title bar stays put so you keep your place */
+  .hdr2 .row2{transition:transform .24s cubic-bezier(.32,.72,0,1)}
+  body.chrome-hidden .hdr2 .row2{transform:translateY(-110%)}
+
+  /* the grip - a drawer handle sitting on the bar */
+  #chrome-grip{position:fixed;left:50%;z-index:81;display:flex;align-items:center;justify-content:center;
+    gap:7px;width:104px;height:26px;margin-left:-52px;
+    bottom:calc(58px + env(safe-area-inset-bottom,0px));
+    background:#141312;color:#f2c100;border:0;cursor:pointer;touch-action:none;
+    font:700 10px/1 Jost,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;
+    transition:bottom .24s cubic-bezier(.32,.72,0,1),transform .12s ease}
+  #chrome-grip::before{content:"";width:26px;height:3px;background:currentColor}
+  #chrome-grip .cg-t{opacity:.85}
+  #chrome-grip:active{transform:scale(.96)}
+  body.chrome-hidden #chrome-grip{bottom:0}
+  body.chrome-dragging #chrome-grip,body.chrome-dragging .hdr2 .bnav{transition:none}
+}
+@media (min-width:640px){ #chrome-grip{display:none} }
+@media (prefers-reduced-motion:reduce){
+  .hdr2 .bnav,.hdr2 .row2,#chrome-grip{transition:none}
+}
 </style>
 </head>
 <body>
@@ -5778,24 +5830,11 @@ function fetchDeadline(u, ms){
   const c=new AbortController(); const t=setTimeout(()=>{ try{ c.abort(); }catch(e){} }, ms||9000);
   return fetch(u,{cache:"no-store", signal:c.signal}).finally(()=>clearTimeout(t));
 }
-function DailyReminder({state, ingMap, update, setTab, branch, branchName, fbRef, meEmail}){
-  const [ics,setIcs]=useState(()=>loadIcs(branch));
-  const [draft,setDraft]=useState("");
-  const [events,setEvents]=useState(null);
-  const [status,setStatus]=useState("");
-  const [showCfg,setShowCfg]=useState(false); const [doc,setDoc]=useState(""); const [showRoutine,setShowRoutine]=useState(false);
-  const [sheet,setSheet]=useState(null);
-  const [notice,setNotice]=useState(null);      // notice opened from the board
-  const [calAnchor,setCalAnchor]=useState(null); // month shown in the grid; null = follow the viewed day
-  const [staleAt,setStaleAt]=useState(0);        // >0 = showing a cached calendar from this timestamp
-  const calFullRef=useRef(false);                // true once a whole-calendar .ics load has landed
-  const calSeqRef=useRef(0);                     // GPT review: only the LATEST fetch may write events (fast day/branch switching)
-  const calBranchRef=useRef(branch);
-  /* Sheet HTML lives in its OWN Firestore doc (hideout_app/sheet_{id}), not in the app state.
-     At ~19KB a sheet, keeping them in the shared state document would fill Firestore's 1MB limit
-     within a few months at 6–10 caterings a month. So the list carries metadata only and the HTML is
-     fetched on demand when the popup opens (also keeps app load fast). Older entries that still have
-     an inline `html` field keep working — see the fallback in the loader. */
+/* The catering sheet viewer. It used to live inline in the Today screen holding its own state,
+   which is why the Settings list could only delete a sheet - there was no way to open one from
+   anywhere else. Same behaviour, now addressable: page images render straight from Cloudinary,
+   a full HTML sheet is fetched on demand and scaled to fill the popup, and both can print. */
+function CateringSheetViewer({sheet, fbRef, onClose}){
   const [sheetHtml,setSheetHtml]=useState({state:"idle", html:"", pages:null, err:""});
   useEffect(()=>{
     if(!sheet){ setSheetHtml({state:"idle", html:"", pages:null, err:""}); return; }
@@ -5832,6 +5871,76 @@ function DailyReminder({state, ingMap, update, setTab, branch, branchName, fbRef
     const t=setTimeout(fit,60); window.addEventListener("resize",fit);
     return ()=>{ clearTimeout(t); window.removeEventListener("resize",fit); };
   },[sheet, sheetHtml.state]);
+  return <Modal title={(sheet.title||sheet.client||"Catering sheet")+(sheet.date?" — "+sheet.date:"")} onClose={onClose} wide sheet>
+      {/* "idle" counts as loading: the effect runs after this first paint, so treating idle as empty
+          would flash "no sheet attached" for one frame every time the popup opens. */}
+      {/* the loading/error states hold the A4 popup's height so it doesn't collapse to a thin strip
+          and then jump when the sheet lands. */}
+      {(sheetHtml.state==="loading"||sheetHtml.state==="idle") ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Loading sheet…</p></div>
+        : sheetHtml.state==="error" ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm text-center px-6" style={{color:"#d70015"}}>Couldn't load the sheet ({sheetHtml.err}).<br/>Check the connection and try again.</p></div>
+        : (sheetHtml.state==="ready" && sheetHtml.pages)
+        ? <div>
+            {/* Page images need none of the A4 scaling below - each one already IS a page, so it
+                just fills the popup width and scrolls. */}
+            <div className="flex justify-end items-center gap-3 mb-2">
+              <span className="text-xs" style={{color:"var(--color-ink-muted-48)"}}>{sheetHtml.pages.length} page{sheetHtml.pages.length===1?"":"s"}</span>
+              <a href={sheetHtml.pages[0].url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{color:"var(--color-primary)"}}>Open in new tab</a>
+              <Btn size="sm" onClick={()=>printSheetPages(sheetHtml.pages, sheet.title||sheet.client)}>Print</Btn>
+            </div>
+            <div style={{width:"100%", maxHeight:"78vh", overflow:"auto", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}>
+              {sheetHtml.pages.map((p,i)=>(<img key={i} src={cld(p.url,900)} alt={"Page "+(i+1)} loading={i?"lazy":"eager"}
+                style={{width:"100%", display:"block", borderBottom:(i<sheetHtml.pages.length-1)?"1px solid var(--color-hairline-alpha)":"none"}} />))}
+            </div>
+          </div>
+        : sheetHtml.state==="ready"
+        ? <div ref={sheetWrapRef}>
+            <div className="flex justify-end items-center gap-2 mb-2">
+              <span className="text-xs" style={{color:"var(--color-ink-muted-48)"}}>{Math.round(sheetZoom*100)}%</span>
+              <Btn size="sm" tone="ghost" onClick={()=>setSheetZoom(z=>Math.max(0.4, +(z-0.1).toFixed(2)))}>–</Btn>
+              <Btn size="sm" tone="ghost" onClick={()=>setSheetZoom(z=>Math.min(2, +(z+0.1).toFixed(2)))}>+</Btn>
+              <Btn size="sm" onClick={()=>{ try{ const w=document.getElementById("cateringSheetFrame"); if(w&&w.contentWindow){ w.contentWindow.focus(); w.contentWindow.print(); } }catch(e){ alert("Couldn't open the print dialog — open the sheet in a new tab instead."); } }}>Print</Btn>
+            </div>
+            {/* sandbox without allow-scripts: the sheet is plain HTML/CSS, so blocking scripts costs
+                nothing and stops a pasted sheet from touching app data. allow-same-origin +
+                allow-modals keep contentWindow.print() working. */}
+            {/* The sheet is an A4 document (210mm ≈ 794px). Rendered at natural width inside a narrow
+                modal it looks like a thin column, so scale it to fill the popup: render the iframe at
+                A4 width and transform-scale it to the available width. Keeps text crisp (vector) and
+                the whole page readable at a glance instead of needing two scrollbars. */}
+            <div style={{width:"100%", maxHeight:"78vh", overflow:"auto", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}>
+              {/* scaled iframe leaves its original box behind, so the wrapper below carries the scaled
+                  height — otherwise you'd get a tall blank gap under the sheet. */}
+              <div style={{width:794*sheetZoom, height:1123*sheetZoom, position:"relative"}}>
+                <iframe id="cateringSheetFrame" title="Catering sheet" srcDoc={sheetHtml.html}
+                  sandbox="allow-same-origin allow-modals" scrolling="no"
+                  style={{width:794, height:1123, border:"none", background:"#fff", position:"absolute", top:0, left:0,
+                    transform:"scale("+sheetZoom+")", transformOrigin:"top left", display:"block"}} />
+              </div>
+            </div>
+          </div>
+        : sheet.text ? <MiniDoc text={sheet.text} />
+        : <p className="text-sm text-stone-500">This entry has no sheet attached yet — ask Claude to publish the catering sheet for this order.</p>}
+    </Modal>;
+}
+
+function DailyReminder({state, ingMap, update, setTab, branch, branchName, fbRef, meEmail}){
+  const [ics,setIcs]=useState(()=>loadIcs(branch));
+  const [draft,setDraft]=useState("");
+  const [events,setEvents]=useState(null);
+  const [status,setStatus]=useState("");
+  const [showCfg,setShowCfg]=useState(false); const [doc,setDoc]=useState(""); const [showRoutine,setShowRoutine]=useState(false);
+  const [sheet,setSheet]=useState(null);
+  const [notice,setNotice]=useState(null);      // notice opened from the board
+  const [calAnchor,setCalAnchor]=useState(null); // month shown in the grid; null = follow the viewed day
+  const [staleAt,setStaleAt]=useState(0);        // >0 = showing a cached calendar from this timestamp
+  const calFullRef=useRef(false);                // true once a whole-calendar .ics load has landed
+  const calSeqRef=useRef(0);                     // GPT review: only the LATEST fetch may write events (fast day/branch switching)
+  const calBranchRef=useRef(branch);
+  /* Sheet HTML lives in its OWN Firestore doc (hideout_app/sheet_{id}), not in the app state.
+     At ~19KB a sheet, keeping them in the shared state document would fill Firestore's 1MB limit
+     within a few months at 6–10 caterings a month. So the list carries metadata only and the HTML is
+     fetched on demand when the popup opens (also keeps app load fast). Older entries that still have
+     an inline `html` field keep working — see the fallback in the loader. */
   /* Catering sheets to surface on Today: today + tomorrow (prep usually starts the day before),
      filtered to this venue when the entry names one.
      NOTE: do NOT call the global today() here — this component declares its own `today` (the list of
@@ -6451,56 +6560,7 @@ function DailyReminder({state, ingMap, update, setTab, branch, branchName, fbRef
         </div>
       </div></div>
     </Modal>}
-    {sheet && <Modal title={(sheet.title||sheet.client||"Catering sheet")+(sheet.date?" — "+sheet.date:"")} onClose={()=>setSheet(null)} wide sheet>
-      {/* "idle" counts as loading: the effect runs after this first paint, so treating idle as empty
-          would flash "no sheet attached" for one frame every time the popup opens. */}
-      {/* the loading/error states hold the A4 popup's height so it doesn't collapse to a thin strip
-          and then jump when the sheet lands. */}
-      {(sheetHtml.state==="loading"||sheetHtml.state==="idle") ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm" style={{color:"var(--color-ink-muted-48)"}}>Loading sheet…</p></div>
-        : sheetHtml.state==="error" ? <div style={{minHeight:"60vh", display:"grid", placeItems:"center", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}><p className="text-sm text-center px-6" style={{color:"#d70015"}}>Couldn't load the sheet ({sheetHtml.err}).<br/>Check the connection and try again.</p></div>
-        : (sheetHtml.state==="ready" && sheetHtml.pages)
-        ? <div>
-            {/* Page images need none of the A4 scaling below - each one already IS a page, so it
-                just fills the popup width and scrolls. */}
-            <div className="flex justify-end items-center gap-3 mb-2">
-              <span className="text-xs" style={{color:"var(--color-ink-muted-48)"}}>{sheetHtml.pages.length} page{sheetHtml.pages.length===1?"":"s"}</span>
-              <a href={sheetHtml.pages[0].url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{color:"var(--color-primary)"}}>Open in new tab</a>
-              <Btn size="sm" onClick={()=>printSheetPages(sheetHtml.pages, sheet.title||sheet.client)}>Print</Btn>
-            </div>
-            <div style={{width:"100%", maxHeight:"78vh", overflow:"auto", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}>
-              {sheetHtml.pages.map((p,i)=>(<img key={i} src={cld(p.url,900)} alt={"Page "+(i+1)} loading={i?"lazy":"eager"}
-                style={{width:"100%", display:"block", borderBottom:(i<sheetHtml.pages.length-1)?"1px solid var(--color-hairline-alpha)":"none"}} />))}
-            </div>
-          </div>
-        : sheetHtml.state==="ready"
-        ? <div ref={sheetWrapRef}>
-            <div className="flex justify-end items-center gap-2 mb-2">
-              <span className="text-xs" style={{color:"var(--color-ink-muted-48)"}}>{Math.round(sheetZoom*100)}%</span>
-              <Btn size="sm" tone="ghost" onClick={()=>setSheetZoom(z=>Math.max(0.4, +(z-0.1).toFixed(2)))}>–</Btn>
-              <Btn size="sm" tone="ghost" onClick={()=>setSheetZoom(z=>Math.min(2, +(z+0.1).toFixed(2)))}>+</Btn>
-              <Btn size="sm" onClick={()=>{ try{ const w=document.getElementById("cateringSheetFrame"); if(w&&w.contentWindow){ w.contentWindow.focus(); w.contentWindow.print(); } }catch(e){ alert("Couldn't open the print dialog — open the sheet in a new tab instead."); } }}>Print</Btn>
-            </div>
-            {/* sandbox without allow-scripts: the sheet is plain HTML/CSS, so blocking scripts costs
-                nothing and stops a pasted sheet from touching app data. allow-same-origin +
-                allow-modals keep contentWindow.print() working. */}
-            {/* The sheet is an A4 document (210mm ≈ 794px). Rendered at natural width inside a narrow
-                modal it looks like a thin column, so scale it to fill the popup: render the iframe at
-                A4 width and transform-scale it to the available width. Keeps text crisp (vector) and
-                the whole page readable at a glance instead of needing two scrollbars. */}
-            <div style={{width:"100%", maxHeight:"78vh", overflow:"auto", border:"1px solid var(--color-hairline-alpha)", borderRadius:8, background:"#fff"}}>
-              {/* scaled iframe leaves its original box behind, so the wrapper below carries the scaled
-                  height — otherwise you'd get a tall blank gap under the sheet. */}
-              <div style={{width:794*sheetZoom, height:1123*sheetZoom, position:"relative"}}>
-                <iframe id="cateringSheetFrame" title="Catering sheet" srcDoc={sheetHtml.html}
-                  sandbox="allow-same-origin allow-modals" scrolling="no"
-                  style={{width:794, height:1123, border:"none", background:"#fff", position:"absolute", top:0, left:0,
-                    transform:"scale("+sheetZoom+")", transformOrigin:"top left", display:"block"}} />
-              </div>
-            </div>
-          </div>
-        : sheet.text ? <MiniDoc text={sheet.text} />
-        : <p className="text-sm text-stone-500">This entry has no sheet attached yet — ask Claude to publish the catering sheet for this order.</p>}
-    </Modal>}
+    {sheet && <CateringSheetViewer sheet={sheet} fbRef={fbRef} onClose={()=>setSheet(null)} />}
     {doc && <Modal title={doc.title} onClose={()=>setDoc("")} wide><MiniDoc text={doc.text} /></Modal>}
     {notice && <Modal title={notice.title||"Notice"} onClose={()=>setNotice(null)} wide>
       <div className="text-[11px] mb-3 pb-2" style={{color:"var(--color-ink-muted-48)", letterSpacing:"0.08em", textTransform:"uppercase", borderBottom:"1px solid var(--color-hairline-alpha)"}}>
@@ -7356,7 +7416,7 @@ function AllergenPicker({value, onChange}){
         <button key={t} type="button" className="alp-chip" aria-pressed={low.indexOf(t.toLowerCase())>=0}
           onClick={()=>toggle(t)}>{t}</button>)}
       <button type="button" className="alp-more" aria-expanded={openAll} onClick={()=>setOpenAll(v=>!v)}>
-        {openAll? "Done" : "Choose \u00b7 "+vocab.length}
+        {openAll? "\u2227 Hide list" : "\u2228 Choose \u00b7 "+vocab.length}
       </button>
       {openAll && !adding && <button type="button" className="alp-new" onClick={()=>setAdding(true)}>+ New</button>}
     </div>
@@ -8524,6 +8584,7 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
   const localYmd=()=>new Date().toLocaleDateString("en-CA");
   const notices=Array.isArray(state.notices)?state.notices:[]; const autoNotices=meetingNotices(state);
   const routine=state.dailyRoutine||{}; const docs=state.infoDocs||[]; const sheets=state.cateringSheets||[];
+  const [viewSheet,setViewSheet]=useState(null);
   const auditCount=useMemo(()=>{ try{ const g=auditData(state, ingMap||{}); return Object.keys(g).reduce((n,k)=>n+g[k].length,0); }catch(e){ return 0; } }, [state, ingMap]);
   const setNoticeField=(id,k,v)=>update(s=>{ const n=(s.notices||[]).find(x=>x.id===id); if(n) n[k]=v; });
   const addNotice=()=>{ const id=rid("nt"); update(s=>{ if(!Array.isArray(s.notices)) s.notices=[]; s.notices.unshift({id, title:"", body:"", from:localYmd(), until:"", pin:false, tone:"info", branch:"", archived:false}); }); setPick(id); };
@@ -8575,11 +8636,33 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
           <h2>Catering sheets</h2><p className="desc">Published by the catering agent (or uploaded below). Each shows on Today from its date; this list is for checking and clearing out.</p>
           <table><thead><tr><th>Sheet</th><th>Date</th><th>Store</th><th>Details</th><th></th></tr></thead><tbody>
             {sheets.length===0 && <tr><td colSpan={5} className="empty">Nothing published yet.</td></tr>}
-            {sheets.map((c,i)=><tr key={c.id||i}><td><span className="name">{c.title||c.client||"Catering sheet"}</span>{c.client&&c.client!==c.title&&<span className="sub">{c.client}</span>}</td><td>{c.date}</td><td>{c.branch||"—"}</td><td><span className="sub" style={{display:"inline"}}>{[c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, (c.pages&&c.pages.length)?(c.pages.length+" page image"+(c.pages.length===1?"":"s")):(c.sheetDoc||c.html)?"sheet attached":"no sheet yet"].filter(Boolean).join(" · ")}</span></td><td className="num"><button type="button" className="btn sm" style={{borderColor:"var(--rt)", color:"var(--rt)"}} onClick={()=>removeSheet(i)}>Remove</button></td></tr>)}
+            {sheets.map((c,i)=><tr key={c.id||i} className="row" style={{cursor:"pointer"}} title="Open the sheet" onClick={()=>setViewSheet(c)}><td><span className="name">{c.title||c.client||"Catering sheet"}</span>{c.client&&c.client!==c.title&&<span className="sub">{c.client}</span>}</td><td>{c.date}</td><td>{c.branch||"—"}</td><td><span className="sub" style={{display:"inline"}}>{[c.pax?c.pax+" pax":null, c.pricePP?("$"+c.pricePP+"pp"):null, c.pickup, (c.pages&&c.pages.length)?(c.pages.length+" page image"+(c.pages.length===1?"":"s")):(c.sheetDoc||c.html)?"sheet attached":"no sheet yet"].filter(Boolean).join(" · ")}</span></td><td className="num"><button type="button" className="btn sm" onClick={e=>{ e.stopPropagation(); setViewSheet(c); }}>Open</button>{" "}<button type="button" className="btn sm" style={{borderColor:"var(--rt)", color:"var(--rt)"}} onClick={e=>{ e.stopPropagation(); removeSheet(i); }}>Remove</button></td></tr>)}
           </tbody></table>
           <div style={{marginTop:18, borderTop:"3px solid var(--ink)", paddingTop:14}}><div className="lab">Upload a sheet made elsewhere (PDF → page images)</div><CateringSheetUpload state={state} update={update} /></div>
         </>}
-        {sec==="cats" && <><h2>Menu categories</h2><p className="desc">Columns and filters on the Dishes menu — one set per department.</p><div className="chips" style={{border:0, padding:0}}>{[["kitchen","Kitchen"],["bakery","Bakery"],["barista","Barista"],["catering","Catering"]].map(([k,l])=><button key={k} type="button" className="btn" onClick={()=>setCatDept(k)}>{l} categories</button>)}</div></>}
+        {/* Four buttons, each hiding its categories behind a popup, meant you could not see how the
+            menu is organised without opening four dialogs. The whole structure is on the page now;
+            the popup is still there for reordering and renaming. */}
+        {sec==="cats" && <><h2>Menu categories</h2><p className="desc">How the Dishes menu is grouped — one set per department. Counts are live dishes in each group.</p>
+          <div className="catmap">
+            {[["kitchen","Kitchen"],["bakery","Bakery"],["barista","Barista"],["catering","Catering"]].map(([k,l])=>{
+              const list=((state.dishCats||{})[k])||[];
+              const live=(state.recipes||[]).filter(r=>!r.archived);
+              const count=c=>live.filter(r=>(r.category||"").trim()===c).length;
+              const loose=live.filter(r=>!(r.category||"").trim()).length;
+              return <div key={k} className="catgrp">
+                <div className="cathead">
+                  <span className="catname">{l}</span>
+                  <span className="catn">{list.length} {list.length===1?"group":"groups"}</span>
+                  <button type="button" className="btn sm" onClick={()=>setCatDept(k)}>Edit</button>
+                </div>
+                {list.length===0
+                  ? <p className="desc" style={{margin:"8px 0 0"}}>No groups yet — everything shows as one list.</p>
+                  : <div className="catlist">{list.map(c=><span key={c} className="catpill">{c}<b>{count(c)}</b></span>)}</div>}
+                {k==="kitchen" && loose>0 && <p className="desc" style={{margin:"8px 0 0"}}>{loose} dishes have no group and fall to the bottom of the menu.</p>}
+              </div>;
+            })}
+          </div></>}
         {sec==="branches" && <><h2>Branches & passcodes</h2><p className="desc">Add, rename or remove branches and set each branch’s numeric passcode. Today, Dishes and Prep are tracked per branch.</p><button type="button" className="btn p" onClick={openBranches}>Manage branches</button></>}
         {sec==="team" && <><h2>Team access</h2>{isMgr ? <><p className="desc">Approve Google emails and set each person’s role and stores. Manager = full app · Staff = Today, Prep & Dishes.</p><TeamAccess fbRef={fbRef} branches={state.branches||[]} meEmail={meEmail} /></> : <p className="desc">Managers only — ask a manager to change who has access.</p>}</>}
         {sec==="audit" && <><h2>Audit</h2><p className="desc">Live scan of your data for errors, fixes and suggestions. Fix ▸ opens the editor.</p><Audit state={state} ingMap={ingMap} setTab={setTab} update={update} /></>}
@@ -8594,6 +8677,7 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
       </div>
     </div>
     {catDept && <CatManager state={state} update={update} dept={catDept} onClose={()=>setCatDept(null)} />}
+    {viewSheet && <CateringSheetViewer sheet={viewSheet} fbRef={fbRef} onClose={()=>setViewSheet(null)} />}
   </div>;
 }
 
@@ -10567,6 +10651,74 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   // both buttons are injected after load (the chatbot on sign-in, postcards from its own script)
   try{ new MutationObserver(scan).observe(document.body, {childList:true}); }catch(e){}
   [800, 2500, 6000].forEach(function(ms){ setTimeout(scan, ms); });
+})();
+</script>
+<script>
+/* Collapsible mobile chrome. Plain DOM on purpose: React never re-renders for this, and a class
+   toggle on <body> cannot fight the app's own state. */
+(function(){
+  var TH=8, TOP=120, ticking=false, locked=false;   // locked = the person decided, not the scroll
+  var body=document.body;
+  /* seed from where the page actually is - starting at 0 made the first scroll event on an
+     already-scrolled page look like one huge downward move and the bar opened collapsed */
+  var last=window.pageYOffset||document.documentElement.scrollTop||0;
+  function set(hidden){ body.classList.toggle("chrome-hidden", !!hidden); paint(); }
+  function hidden(){ return body.classList.contains("chrome-hidden"); }
+
+  /* ---- 1+2. follow the scroll, unless the grip was used ---- */
+  function apply(){
+    ticking=false;
+    if(window.innerWidth>=640){ body.classList.remove("chrome-hidden"); return; }
+    if(locked) return;
+    var y=window.pageYOffset||document.documentElement.scrollTop||0, d=y-last;
+    if(Math.abs(d)<TH) return;
+    var atBottom=(y+window.innerHeight)>=(document.documentElement.scrollHeight-4);
+    var canScroll=document.documentElement.scrollHeight>window.innerHeight+40;
+    set(canScroll && !(y<TOP || atBottom || d<0));
+    last=y;
+  }
+  window.addEventListener("scroll", function(){ if(!ticking){ ticking=true; requestAnimationFrame(apply); } }, {passive:true});
+  window.addEventListener("resize", function(){ if(window.innerWidth>=640) body.classList.remove("chrome-hidden"); }, {passive:true});
+
+  /* ---- 3. the grip: tap to toggle, drag down to put away ---- */
+  var grip=document.createElement("button");
+  grip.id="chrome-grip"; grip.type="button";
+  grip.innerHTML='<span class="cg-t"></span>';
+  grip.setAttribute("aria-label","Hide or show the menu bar");
+  function paint(){
+    var h=hidden();
+    grip.querySelector(".cg-t").textContent = h? "Menu" : "Hide";
+    grip.setAttribute("aria-expanded", h? "false":"true");
+  }
+  document.body.appendChild(grip); paint();
+
+  var y0=null, moved=0;
+  grip.addEventListener("pointerdown", function(e){
+    y0=e.clientY; moved=0; locked=true;
+    body.classList.add("chrome-dragging");
+    try{ grip.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  grip.addEventListener("pointermove", function(e){
+    if(y0===null) return;
+    moved=e.clientY-y0;
+    /* live drag: 24px of travel in either direction settles the drawer */
+    if(moved>24 && !hidden()) set(true);
+    if(moved<-24 && hidden()) set(false);
+  });
+  function end(){
+    if(y0===null) return;
+    body.classList.remove("chrome-dragging");
+    if(Math.abs(moved)<=24) set(!hidden());   // a tap, not a drag
+    y0=null;
+    /* the scroll rule takes over again once the page is back at the top */
+    last=window.pageYOffset||0;
+  }
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+  /* scrolling back to the very top hands control back to the scroll rule */
+  window.addEventListener("scroll", function(){
+    if(locked && (window.pageYOffset||0)<TOP && !hidden()) locked=false;
+  }, {passive:true});
 })();
 </script>
 </body>

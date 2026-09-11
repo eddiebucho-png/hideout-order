@@ -3339,6 +3339,57 @@ body{
 #root .rv2 .nav .gcar{font-size:13px;line-height:1;width:10px;flex:none}
 #root .rv2 .nav .gt{margin-right:auto}
 #root .rv2 .nav .ng.shut button.g{padding-bottom:12px}
+/* ---- the post editor ----------------------------------------------------------------------
+   Same frame as every other field, with a toolbar welded on top so the box reads as one control
+   rather than a strip of buttons floating above a textarea. */
+.ned{display:block;border:3px solid var(--ink);background:#fff;min-width:0}
+.ned-bar{display:flex;flex-wrap:wrap;gap:0;background:var(--paper);border-bottom:3px solid var(--ink)}
+.ned-b{font:inherit;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:9px 11px;min-height:36px;background:none;border:0;border-right:2px solid rgba(20,19,18,.18);
+  color:var(--ink);cursor:pointer;transition:background .12s,color .12s}
+.ned-b:hover{background:var(--y)}
+.ned-b:active{background:var(--ink);color:#fff}
+.ned-b.bold{font-weight:900}
+.ned-b.ital{font-style:italic}
+.ned-b.prev{margin-left:auto;border-right:0;border-left:2px solid rgba(20,19,18,.18)}
+.ned-b.prev.on{background:var(--ink);color:#fff}
+.ned-ta{display:block;width:100%;box-sizing:border-box;border:0;outline:none;resize:vertical;
+  font:inherit;font-size:16px;line-height:1.6;padding:12px 14px;min-height:170px;
+  background:#fff;color:var(--ink)}
+.ned-ta::placeholder{color:var(--muted)}
+.ned-prev{box-sizing:border-box;padding:14px;min-height:170px;background:#fff;overflow-wrap:anywhere;min-width:0}
+.ned-empty{font-size:13px;color:var(--muted)}
+/* posted text must never run out through the side of its card */
+.minidoc,.minidoc *{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+@media (prefers-reduced-motion:reduce){ .ned-b{transition:none} }
+/* ---- Audit ---------------------------------------------------------------------------------
+   Was the last screen still wearing rounded Tailwind cards. Same findings, house parts.
+   The detail column WRAPS on purpose: it is the reason for the finding, and the old ellipsis
+   cut exactly the words that explained the problem. */
+#root .rv2.aud .screen{background:#fff}
+#root .rv2 .audh{font-size:17px;font-weight:700;letter-spacing:-0.01em}
+#root .rv2 .audchip{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--ink);
+  padding:7px 11px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:#fff}
+#root .rv2 .audchip i{width:11px;height:11px;flex:none;display:inline-block}
+#root .rv2 .audchip b{font-size:12px;background:var(--ink);color:#fff;padding:1px 7px;font-variant-numeric:tabular-nums}
+#root .rv2 .audmsg{margin:0 14px 14px;border:3px solid #1e7a46;background:#eaf6ef;color:#14532d;
+  padding:10px 12px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+#root .rv2 .audempty{padding:36px 20px;text-align:center;color:var(--muted);font-size:14px;max-width:62ch;margin:0 auto}
+#root .rv2 .audgrp{border-top:3px solid var(--ink)}
+#root .rv2 .audgh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;background:var(--paper)}
+#root .rv2 .audsev{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#fff;padding:3px 8px;flex:none}
+#root .rv2 .audtitle{font-size:14px;font-weight:700;min-width:0;overflow-wrap:anywhere}
+#root .rv2 .audn{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;margin-right:auto}
+#root .rv2 .audrow{display:grid;grid-template-columns:minmax(120px,34%) minmax(0,1fr) auto;gap:12px;
+  align-items:start;padding:9px 14px;border-bottom:1px solid rgba(20,19,18,.14);font-size:14px}
+#root .rv2 .audrow:last-child{border-bottom:0}
+#root .rv2 .audrow.go{cursor:pointer}
+#root .rv2 .audrow.go:hover{background:rgba(242,193,0,.22)}
+#root .rv2 .auditem{font-weight:600;overflow-wrap:anywhere;min-width:0}
+#root .rv2 .auddet{color:var(--muted);font-size:13px;line-height:1.45;overflow-wrap:anywhere;min-width:0}
+#root .rv2 .audfix{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--r);flex:none;white-space:nowrap}
+#root .rv2 .audmore{padding:9px 14px;font-size:12px;color:var(--muted)}
+@media (max-width:640px){ #root .rv2 .audrow{grid-template-columns:minmax(0,1fr);gap:3px} }
 </style>
 </head>
 <body>
@@ -5703,37 +5754,44 @@ function Audit({state, ingMap, setTab, update}){
   const createIng=(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; };
   const doAutoFix=()=>{ let res={alg:0,wt:0,link:0}; update(n=>{ res=runAutoFix(n); }); setMsg(`AI auto-fix — allergens added: ${res.alg}, grams-per-each set: ${res.wt}, ingredients linked: ${res.link}. Anything still listed needs info AI can't guess.`); };
   const Metric=({n,sev})=>{ const s=AUDIT_SEV[sev]; return <div className="rounded-[14px] p-3.5" style={{background:s.bg, border:"1px solid var(--color-hairline-alpha)"}}><div className="text-2xl font-semibold" style={{color:s.c, fontFamily:"var(--font-display)", lineHeight:1}}>{n}</div><div className="text-xs mt-1" style={{color:"var(--color-ink-muted-80)"}}>{sev==="error"?"Errors — blocking":sev==="warn"?"To fix soon":"Suggestions"}</div></div>; };
-  return <div>
-    <div className="card p-5 mb-4">
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div><div className="font-semibold text-stone-800">{total===0?"All clear ✓":"Health check — "+total+" item"+(total>1?"s":"")+" to review"}</div>
-        <div className="text-xs text-stone-400 mt-0.5">Live scan of your data & menu for errors, fixes and improvements.</div></div>
-        <button onClick={doAutoFix} className="shrink-0 text-sm px-4 py-2 rounded-full text-white vbtn-card" style={{background:"var(--color-primary)", border:"none", cursor:"pointer"}}>AI Auto-fix</button>
-      </div>
-      <div className="grid grid-cols-3 gap-3"><Metric n={nE} sev="error" /><Metric n={nW} sev="warn" /><Metric n={nT} sev="tip" /></div>
-      {msg && <div className="text-xs bg-emerald-50 text-emerald-700 rounded-lg p-2.5 mt-3">{msg}</div>}
-    </div>
-    {total===0 && <div className="card p-8 text-center text-sm text-stone-400">Nothing needs attention right now. This page flags unlinked ingredients, missing prices, dishes without photos or methods, low-margin items, unused ingredients and duplicates.</div>}
-    {sortedKeys.map(k=>{ const sev=groups[k][0].sev; const s=AUDIT_SEV[sev]; const go=groups[k][0].go; const goInfo=go&&AUDIT_GO[go];
-      return <div key={k} className="card p-0 mb-3 overflow-hidden">
-        <div className="flex" >
-          <div style={{width:4, background:s.c, flexShrink:0}}></div>
-          <div className="flex-1 p-4">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0" style={{background:s.bg, color:s.c, textTransform:"uppercase", letterSpacing:"0.04em"}}>{s.label}</span>
-                <span className="font-medium text-stone-700 truncate">{k}</span>
-                <span className="text-stone-400 shrink-0">({groups[k].length})</span>
-              </div>
-              {goInfo && <button onClick={()=>setTab(goInfo[0])} className="text-xs font-semibold shrink-0" style={{background:"none", border:"none", color:"var(--color-primary)", cursor:"pointer"}}>Fix in {goInfo[1]} ›</button>}
-            </div>
-            <div className="space-y-0.5">
-              {groups[k].slice(0,150).map((x,i)=>(<div key={i} onClick={x.ref?()=>openRef(x.ref):undefined} className="text-sm flex items-center justify-between gap-3 py-1.5 border-b border-stone-100 last:border-0" style={x.ref?{cursor:"pointer"}:undefined} title={x.ref?"Click to open & fix":undefined}><span className="text-stone-700 truncate shrink-0 max-w-[45%]">{x.item}</span><span className="text-xs text-stone-400 text-right flex-1 min-w-0 truncate">{x.detail}</span>{x.ref&&<span className="text-xs font-semibold shrink-0" style={{color:"var(--color-primary)"}}>Fix ›</span>}</div>))}
-              {groups[k].length>150 && <div className="text-xs text-stone-400 pt-1">… +{groups[k].length-150} more</div>}
-            </div>
-          </div>
+  return <div className="rv2 aud">
+    <RV2Style />
+    <div className="screen">
+      <div className="bar">
+        <div style={{minWidth:0}}>
+          <div className="audh">{total===0?"All clear":"Health check \u2014 "+total+" item"+(total>1?"s":"")+" to review"}</div>
+          <div className="cnt">Live scan of your data and menu for errors, fixes and improvements.</div>
         </div>
-      </div>; })}
+        <button type="button" className="btn p" style={{marginLeft:"auto"}} onClick={doAutoFix}>AI auto-fix</button>
+      </div>
+      <div className="chips">
+        {[["error",nE],["warn",nW],["tip",nT]].map(([sv,n])=>{ const d=AUDIT_SEV[sv];
+          return <span key={sv} className="audchip"><i style={{background:d.c}} aria-hidden="true"></i>{d.label}<b>{n}</b></span>; })}
+      </div>
+      {msg && <div className="audmsg">{msg}</div>}
+      {total===0
+        ? <div className="audempty">Nothing needs attention right now. This page flags unlinked ingredients, missing prices, dishes without photos or methods, low-margin items, unused ingredients and duplicates.</div>
+        : sortedKeys.map(k=>{ const sev=groups[k][0].sev; const d=AUDIT_SEV[sev];
+            const go=groups[k][0].go; const goInfo=go&&AUDIT_GO[go];
+            return <div key={k} className="audgrp">
+              <div className="audgh" style={{borderLeft:"8px solid "+d.c}}>
+                <span className="audsev" style={{background:d.c}}>{d.label}</span>
+                <span className="audtitle">{k}</span>
+                <span className="audn">{groups[k].length}</span>
+                {goInfo && <button type="button" className="btn sm" onClick={()=>setTab(goInfo[0])}>Fix in {goInfo[1]}</button>}
+              </div>
+              <div className="audrows">
+                {groups[k].slice(0,150).map((x,i)=>(
+                  <div key={i} className={"audrow"+(x.ref?" go":"")} onClick={x.ref?()=>openRef(x.ref):undefined}
+                    title={x.ref?"Open and fix":undefined}>
+                    <span className="auditem">{x.item}</span>
+                    <span className="auddet">{x.detail}</span>
+                    {x.ref && <span className="audfix">Fix &rsaquo;</span>}
+                  </div>))}
+                {groups[k].length>150 && <div className="audmore">+{groups[k].length-150} more not shown</div>}
+              </div>
+            </div>; })}
+    </div>
     {fixRec && <RecipeEditorV2 rec={fixRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={createIng} onClose={()=>setFixRec(null)} onSave={commitRec} onDelete={id=>{update(s=>{s.recipes=s.recipes.filter(r=>r.id!==id);}); setFixRec(null);}} />}
     {fixIng && <IngredientEditor ing={fixIng} onClose={()=>setFixIng(null)} onSave={commitIng} onDelete={id=>{update(s=>{s.ingredients=s.ingredients.filter(i=>i.id!==id);}); setFixIng(null);}} />}
   </div>;
@@ -5777,24 +5835,137 @@ function Dashboard({state, ingMap, setTab}){
 const TRELLO_PROCEDURES = {"Jeyuk sauce":"200g mother gochu\n100 Veg oyster\n2g Onion powder\n2g Garlic powder\n20gGinger\n2g Black pepper\n150ml Mirim\n3g chicken powder\n\n1. Place all ingredients in the bowl and mix well with the whisk.\n2. Pour into a squeeze btl and label.","Chicken cranberry bagel":"\\-Garnish on the picture only-\n\n1ea plain or poppy-seed bagel\n\n50g Cranberry sauce mix\n\n20g cos lettuce\n\n120g chicken mix\n\n32g( quater) Brie cheese","Cook Chicken":"1. Divide the chicken breast among the oven trays with baking paper.\n2. Spread chicken evenly, making sure there is no layered chicken, as it does not cook through to the inside.\n3.  100 °C steam for 30m after finishing, open and close the oven door, and rest it for 5 minutes\n\nmaximum humidity","Ssamjang benedict sauce":"1kg hollandaise sauce\n200g ssamjang\n\nBlend","Roast Mushroom":"5kg(uncooked) mushroom slice\n\n400g Truffle paste\n\n30g parsley\n\n100g confit garllic\n\n5g salt \n\n2g pepper","Roast bacon":"**Bacon Prep (Ordering from Bidfood)**\n\nPar Level in the fridge: 2 biggest containers\n\n- Baking paper under(otherwise oil will leak to the bottom)\n- Bacon folds 3 times\n\n**How to cook**: Roast / 180 degrees, 17\nmin","Mashed Avocado":"Cut in half\n\nRemove the seeds\n\nScoop out the avo into the pots Make sure syou are cooping only avo - Not the skin or other hard parts from avo - customers can hurt their teeth)\n\n120ml Lemon + 2 Pepper + 3gSalt\n\nWhisk with hand mixer\n\n1 Avo tray can make around 4 ½ full containers.","Truffled field mushroom":"truffle\n\nconfit garlic\n\nthyme\n\nsalt\n\npepper\n\nroasted whole field mushroom sliced","Bacon egg bagel":"1ea plain or poppy-seed bagel\n\n50g Relish & mayo mix\n\n20g cos lettuce\n\n1ea fried egg\n\n1slice tasty cheese\n\n2ea bacon\n\n30g Sauce what customer asked for\n\n(If no sauce, relish & mayo only)","Tumeric Hummus":"1 2.5kgtin chicken pea drained = 1.6 kg\n\n800g chickpea\n300g ice\n200g lemon juice\n100g olive oil\n200g tahini\n50g cumin\n50g curry powder\n100g confit garlic\n3each raw garlic\n15g salt\n30g sugar\n\n1. Set up the blender\n2. Put drained chickpea, ice, lemon juice, olive oil, and blend till a velvet smooth texture.\n3. Put the rest of the ingredients, mix them one more time.\n4. Check if the powdered ingredients are also mixed well. taste it.\n5. Vacuum seal it and make sure no air is inside the bags\n   \\*BE CAREFUL WHEN YOU VACUUM SEAL, IT’S HIGHLY RISKY OF EXPLOSION INSIDE","Bulgogi chili bean":"3kg mince\n300g garlic mince\n200g ginger\n800ml mother soy\n300g sugar\n1 bunch spring onion\n2.5k 5bean tin\n1 tspoon soda","Pickle brine":"3L water\n\n4l wine vinegar\n\n3kg sugar\n\n15g salt\n\n3g pepper","Coleslaw mix":"HALF Red cabbage\n\nHALF Cabbage\n\n1 BUNCH Coriander\n\n500G Carrot shredded\n\n1. Cut all ingredients into strips and gently mix well together.\n2. You can vacuum seal the slaw, but make sure the vacuum time is not more than 5 seconds, as the pressure creates damage inside the vegetables that turns into a sauerkuraut","* Oiji":"4each continental cucumbers\n\n30g table salt\n\n30g sugar\n\n30g msg\n\n60g sweet paprika\n\n10g chili powder\n\n60g garlic mince\n\n15g ginger mince\n\n1. Slice cucumbers with one long scoring line\n2. Put Salt, sugar, msg with cucumber slices. and let it lose water contaminants for 30 minutes.\n3. Get rid of excess water from the cucumber, add garlic, ginger, and sweet paprika powder,  chilli powder","Sichuan pepper corn mayo":"100ml Sichuan pepper corn oil\n\n1btl japanese mayo\n\n1. Mix all together well. pour into a squeeze btl","Chicken Marinade powder mix":"Chilli powder 70g\n\nSweet paprika 800\n\ncumin powder 700\n\nsugar 300\n\nTable salt 900\n\nmsg 450\n\nonion powder 100\n\nGarlic powder 100\n\nPlace in a big tray or pot, slowly mix all together well and evenc","Nut mix":"1kg pinenut\n\n1kg pistachio\n\n1kg pepitas\n\n1.  Place raw nuts on the baking tray with a baking paper\n2. Spread the nuts evenly in each tray.\n3. Roast it in the oven at 170 degrees and set up the alarm for 10 minutes,\n4. After the alarm rings, take those nuts out, gently mix well, and spread evenly on the baking tray. Put it back in the oven, set the alarm for 7 minutes.\n5. After the alarm rings - check the roasting process by the colors of those nuts.\n6. Once it's toasted light brown, move into a baking rack.\n7. Wait until it cools, and use the blender to blend it.","Mother Soy":"GF soy health boy 9000\n\nwater  6000\n\nmsg 900\n\nsugar 5400\n\nspring onion 10each\n\ngarlic 300g\n\nginger 300g\n\nchilli 50g\n\n1. Place everything in the big pot\n2. Bring it up to a boil and reduce the heat to below 100 degrees for 1Hour - Almost like a brewing","Mixed chicken":"approx 10kg chicken breast\n\n20g salt\n\n8g pepper\n\n2btlCaesar dressing\n\n500g mayonnaise\n\n30g garlic powder\n\n30g onion powder\n\n1 bunch parsley\n\n<Method>\n\n1. Cut chicken breast into 3 piece each chicken.\n2. Place the chicken pieces in the vacuum machine\n3. Sous-vide 66’ for 2 hours.\n4. After the first hour, take out the chicken and spread it evenly so that all chicken pieces are evenly cooked.\n5. Take out from the water bath, let it chill and place in the fridge overnight.\n6. Next dayt, drain out the liquid from the vacuum bags, place chicken in the pot\n7. Place all other ingredients, use the hand-mix to shred the chicken.\n8. Put the chicken mix in the vacuum bags and label.","Bacon & Egg Sauce":"1. Get a small standard container\n\n- 1 full jar of tomato relish divided into 3 containers.\n- 1 full kewpie mayo divide it on top of the 3 containers with tomato relish\n\n1. Mix well","Ham & Cheese toast":"2 slices of white sourdough\n\n30g honey mustard dressing\n\n20g Mayonnaise\n\n70g Leg ham slices\n\n20g Tomato slices\n\n2 of 1 slice of tasty cheese\n\n2 of 1 slice of swiss cheese","shakshuka tomato sauce":"Finley chopped crushed tomato 5kg 2 tin\nOil 400ml\nGarlic mince 340\n600g mother gochu\n350g sugar\n60 msg\n\nCook minced garlic till light brown\nPour","Pickled Shimeji mushroom":"1 water 1 brine\n300ml brine\n300ml water","Mother gochujang":"Gochujang 3kg\n\nMirim 800ml\n\nSugar 400\n\nMSG100\n\n100 ml vinegar\n\nPut in the bowl mix together","Pumpkin pesto sandwich":"2 slices Rye sourdough\n\n25g Basil pesto (Bottom)\n\n20g cos lettuce\n\n40g roasted pumpkin slices\n\n40g Char grilled eggplant\n\n20g tomato slices\n\n2 of 1 swiss cheese\n\n2 of 1 tasty cheese","Feta sauce":"1\\.5kg break fetta\n100 confit garlic\n350 lemon juice\n5 g xantan gum\n\n1. Drain the whey brine from the fetta tubs.\n2. Place half the amount of fetta(you don’t need to weigh exactly, just roughly half) into the blender jar and break into small particles)\n3. Place the rest of the ingredients and blend till smooth\n4. Once finished blending, put the rest of the fetta into the blending jar and blend it one more time - MAKE SURE THERE ARE NO RUMPY PIECES IN THE FETTA SACUE\n5. Transfer into 2 piping bags\n6. Seal the piping bags (Sealing time should be around 1.4~1.5sec)\n7. Date and label","pickled shitake":"400ml pickle brine\n800ml mother soy\n400ml water\n\n2kg **Soaked shiitake mushrooms**","confit garlic":"1000g whole garlic\n\n1200g oil ( can be used eggplant oil, veg oil)\n\nCook in the low temp till gets soft (about 40m)","Gochujang butter":"1kg butter (unsalted)\n\n100g mother gochujang\n\nhalf bunch parsley or chives","dried shitake":"Brine ratio\n\n500g pickle juice 1000g mother soy\n\nwater1000\n\n100g ginger sliced","Grab&Go  Fresh dynamite":"Rye sourdough square cut\n\nMayo\n\nLettuce\n\nslaw\n\nsprout\n\ntomato slices\n\nHam slices\n\ncarrot pickles\n\ntasty cheese\n\nswiss cheese\n\ntapanade\n\nrye sourdough","Grab&Go  Spicy chicken avo":"Rye sourdough square cut\n\nMayo\n\nLettuce\n\nslaw\n\nsprout\n\nsliced avocado\n\ntomato slices\n\nspicy chicken\n\ncarrot pickles\n\ncheese\n\nchipotle mayo\n\nrye sourdough\n\n120g chicken +20g jeyuk sauce","Pickles":"1000ml pickle brine\n\n500ml of water mixed\n\n1. Bring the brine & water mix to a boil in the pot\n2. Pour into a vegetable - Quarter cut Watermelon radish, White radish cubes, red radish, whole  Onion rings, Garlic shoot)","Chicken salt (chips)":"900g table salt\n100g chicken rub","Egg sand mix":"40 eggs\n4g garlic powder\n4g onion powder\nCaesar dressing 100\n Mayonnaise 100\nSugar 40\nSalt 6 g\nChopped parsley 5g\n\nSteamed egg 30ea\n100c highest humidity\nIce bath","Chicken wrap":"1ea Spinach wrap\n\n20g cos lettuce\n\n60g avocado slices\n\n15g Sun-dried tomato\n\n120 Chicken breast mix\n\n1ea fried-egg\n\n2slices tasty cheese","Mediterranean wrap":"1ea Plain Tortillas\n\n20g cos lettuce\n\n80g eggplant\n\n40g hummus\n\n15g Sundried tomato\n\n30g cucumbers\n\n10g onion\n\n1ea fried egg","Fried chicken batter mix":"Plain flour 2kg\n\nCorn flour 300g\n\nChicken marinade mix 80g","Cut chicken thigh fillet skin on marinade":"5kg chicken thigh fillet\n\n100g chicken marinade mix\n\n300ml Shaoxing cooking wine\n\n1. Prepare a yellow chopping board\n2. Trim the chicken thigh fillet into 2-finger-sized strips.\n3. Once finished, mix the chicken with shaoxing and chicken marinade powder by the weight","Pulled pork":"7kg pork butt\n540 g mother gochu\n300 Mother soy\n500 water\n100g crushed ginger\n50g garlic\n\nCook 180 to 3hours","Green oil":"**Green Oil**\n\n- Vege oil 1000ml + Baby Spinach 1000g\n- 1 pinch of bi carb soda\n- Blend\n- Place in the pot, and then boil them until 90 degree celsius. (before 100’C)\n\n---\n\nBe careful not to exceed 100 degrees.\n\nPlace the pin thermometer in the center of the liquid and make sure to turn off the light when the temperature is set at 90 degrees.\n\nThen immediately put the liquid in a container, cool it, and freeze it. When oil and water are separated, remove the water.","Cooked Barley & Quinoa":"500G pearl barley\n\n250G Quinoa\n\n1. Place barley & quinoa in the separated water, soak them for 30 minutes minimum\n2. Prepare a pot with boiling water and a hint of salt.\n3. Once the water boils, put the strained barley set the alarm for 15 minutes.\n4. Once the alarm rings, put drained quinoa into the pot. and set it for another 15 minutes.\n5. After finishing, move into an oven tray with a chux, spread Barley & Quinoa on the tray, and let it rest for 10 minutes.","Noodle portion":"200g / portion","Douban sichuan spicy sauce":"600ml Confit garlic oil\n\n20g staranise\n\n100g garlic mince\n\n100g ginger crushed\n\n500g hong you dou ban\n\n400ml shao xing cooking wine\n\n150ml water\n\n150 msg\n\n250 sugar\n\n1. in the big wide pot, sweat the garlic and ginger with staranise\n2. place the hong you dou ban stir-fry for 5 minutes\n3. put rest of the ingredients and reduce for 30 minutes in a small heat -THIS PREP IS EXTREMELY EASY TO BURN.","Blueberry & Mascarpone Mix":"1. Get a small standard container \n2. One full bottle of blueberry jam into the small container\n3. 7 tablespoon of mascarpone cheese\n4. Mix well","Warm salad dressing":"600g mother gochujang\n\n120 mirim\n\n80 barley vinegar (hwanman)\n\n80 olive oil\n\n80 honey mustard\n\n60 sesame oil\n\n400 water\n\nMix all ingredients in a big bowl pour into a squeeze btl","Shakshuka portion":"1 portion\n\n20g Sun-dried tomato\n15g Onion\nhalf-sliced Chorizo\n30g Roasted peppers","Blueberry compote":"3kg frozen blueberries\n\n2kg sugar","Cranberry Sauce":"275g Cranberry sauce\n\n30g confit garlic\n\n1. Place cranberry sauce and confit garlic in the container, mix well. ( garlic does not need to be mashed fully).","Bulgogi beef wrap":"1ea white tortilla 12'\n\n30g cos lettuce\n\n100g bulgogi mince mix\n\n40g tomato slices\n\n1ea fried egg\n\n15g leek\n\n1each slice tasty cheese\n\n20g pickled shitake\n\n10ml soy & sesame vinaigrette","Kimchi relish":"200g garlic oil\nHalf kimchi\n\n120g sugar\nMsg 15","Pickled mushroom":"shitake","Furikake":"nori, msg, sugar, chili or spice powder, sesame seed","whipped tofu":"900g tofu\n\n30g brown rice vinegar\n\n30 sesame oil\n\n7g salt\n\nsugar 35","Japchae portion":"Truffle mushroom, shitake pickles, brown onion, roasted capsicum, Brocolini, and Woodear mushroom.","Black Garlic Hummus":"hummus 1kg  \n\nblackgarlic  80g\n\ndark soy 20g\n\nSugar 30g\n\nConfit garlic 60g\n\nPlace all ingredients in a container and blend with a stick blender.","Japchae soy":"900 mother soy\n100g sugar","dangmyun":"soak up the noodle in the water 6 hours ahead\n\n(Just tap water and room temp is fine)","Soy & Sesame vinaigrette":"Mother soy 600ml\n\nVinegar 350ml\n\nSesame oil 50ml"};
 const DAILY_ROUTINE = {"Monday":"# Monday\n\n### Opening\n\n☐ Check prep list\n☐ Check display fridge (cleanliness, stock level, presentation)\n\n### During Service\n\n☐ Dispose of all remaining **G&G sandwiches**\n\n☐ Clean and organise the **cabinet fridge**\n\n- Window has no dirty marks\n- Products are well organised\n- G&G menu stands clean and readable\n\n☐ Check **fruit quality**\n\n- If prepared on **Thursday → discard**\n\n### Closing\n\n☐ Create **next day prep list**\n☐ Write **kitchen report**\n☐ Check and place **orderings if needed**","Tuesday":"# Tuesday\n\n### Opening\n\n☐ Check prep list\n☐ Check display fridge (cleanliness, stock level, presentation)\n\n### During Service\n\n☐ Refill / restock **G&G sandwiches**\n\n### Closing\n\n☐ Create **next**-**day prep list**\n☐ Write **kitchen report**\n☐ Check and place **orders if needed**","Wednesday":"# Wednesday\n\n### Opening\n\n☐ Check prep list\n☐ Check display fridge (cleanliness, stock level, presentation)\n\n### During Service\n\nOrder items for **Thursday prep**\n\nFresho\n☐ 3 tubs feta cheese\n☐ 3 boxes field mushrooms\n☐ 5 kg large tomatoes\n☐ 3 trays avocado\n☐ 4 kg butternut pumpkin\n☐ 3 tubs grilled eggplant\n☐ 2x btl Caesar dressing\n☐ 1x btl Japanese mayonaise\n\nB&E\n☐ 6 × ham slices\n☐ 4 × ctn bacon\n☐ 3 × swiss cheese\n☐ 3 × tasty cheese\n☐ 1 ctn chicken breast\n☐ 1 ctn green tortillas\n☐ 1 ctn white tortillas\n\n### Closing\n\n☐ Create **next day prep list**\n☐ Write **kitchen report**\n☐ Confirm **orders placed**","Thursday":"# Thursday\n\n### Opening\n\n☐ Check prep list\n☐ Check display fridge (cleanliness, stock level, presentation)\n\n### Prep Production\n\nPrepare and store in fridge:\n\n☐ Smashed avo – **3 trays**\n☐ Chicken – **2 full containers**\n☐ Mushroom – **2 full containers**\n☐ Bacon – **2 full containers**\n☐ Feta sauce – **2 piping bags**\n☐ Roasted pumpkin – **whole batch**\n\n### Closing\n\n☐ Create **next day prep list**\n☐ Write **kitchen report**\n☐ Check and place **orderings if needed**","Friday":"# Friday\n\n### Opening\n\n☐ Check prep list\n☐ Check display fridge (cleanliness, stock level, presentation)\n\n### Production\n\n☐ Bacon & Eggs\n36 (100E) + 18 (340A) = **54 pcs**\n\n☐ Ham & Cheese Tomato\n30 (100E) + 16 (340A) = **46 pcs**\n\n☐ Pesto Pumpkin\n15 (100E) + 10 (340A) = **25 pcs**\n\n☐ Mediterranean Wraps\n10 (100E) + 6 (340A) = **20 pcs**\n\n☐ Chicken Wraps\n24 (100E) + 12 (340A) = **36 pcs**\n\n☐ Chicken Cranberry\n20 (100E) + 12 (340A) = **32 pcs**\n\n☐ Bulgogi Wraps\n12 (340A) = **12 pcs**\n\n### Friday Production Total\n\nBacon & Eggs → 54\nHam & Cheese Tomato → 46\nPesto Pumpkin → 25\nMediterranean Wraps →16\nChicken Wraps → 36\nChicken Cranberry → 32\nBulgogi Wraps → 12\n\n**TOTAL = 229 pcs**\n\n### Closing\n\n☐ Create **next day prep list**\n☐ Write **kitchen report**\n☐ Check and place **orderings if needed**","Saturday":"Opening chef - Cooking ingredients for plating, dropping hash brown, poached egg, scrambled egg, bacon, etc\n(9:30 am - go break)\n\nSecond chef - Focusing on prepping and support - helping out with plating when the docket is more than 4.\n(12:00 am go break)\n\n3RD chef - Plating up the dishes and toasting bread according to the order. Always communicate with the cooking chef.\n(12:30 pm go break)\n\n1. The person who opens and prepares the ingredients below\n   Set up the induction cooker to 80 °C\n\n(The items can be flexible as needed)\n\nGet a 4X4 with a ladle, a tong, and a hotel spoon, and add hot water.\n\nPre-heat the bacon and fried egg in the tray. Ready-to-go\n\nGet an ice bath in the hotel pan, and have some ingredients ready.\n\n1. The second person comes, checks the prep-list, and starts working.\n2. 3rd person comes, start helping out.","Sunday":"Opening chef - Cooking ingredients for plating, dropping hash brown, poached egg, scrambled egg, bacon, etc\n(9:30 am - go break)\n\nSecond chef - Focusing on prepping and support - helping out with plating when the docket is more than 4.\n(12:00 am go break)\n\n3RD chef - Plating up the dishes and toasting bread according to the order. Always communicate with the cooking chef.\n(12:30 pm go break)\n\n1. The person who opens and prepares the ingredients below\n   Set up the induction cooker to 80 °C\n\n(The items can be flexible as needed)\n\nGet a 4X4 with a ladle, a tong, and a hotel spoon, and add hot water.\n\nPre-heat the bacon and fried egg in the tray. Ready-to-go\n\nGet an ice bath in the hotel pan, and have some ingredients ready.\n\n1. The second person comes, checks the prep-list, and starts working.\n2. 3rd person comes, start helping out.\n\n### Opening\n\n☐ Check prep list\n☐ Check display fridge (cleanliness, stock level, presentation)\n\n### Closing\n\n☐ Create **next-day prep list**\n☐ Write **kitchen report**\n☐ Check and place **orders if needed**"};
 const INFO_DOCS = [{"key":"veg","title":"Veg ordering — product list","text":"#### **Avocado**\n\n#### **Field mushroom**\n\n#### **Shimeji**\n\n#### **whole peeled garlic**\n\n#### **parsley**\n\n#### **Leeks**\n\n#### **Lettuce - Mesclun**\n\n#### **Lemons**\n\n#### **Lettuce - Cos Midi**\n\n#### **baby spinach leaves**\n\n#### **Capsicum Tomato Tapenade - Wombat Valley**\n\n#### **Kale - Purple**\n\n#### **Kale**\n\n#### **Onions - Brown**\n\n#### **Hollandaise Sauce - Wombat Valley**\n\n#### **Carrot Shredded 1kg**\n\n#### **Onions - Salad**\n\n#### **Eggs - Big Michaels Barn Laid (Trays) 700g**\n\n#### **Japanese Style Mayo - Wombat Valley**\n\n#### **Olive Oil - Extra Virgin \"Odessa Brand\"**\n\n#### **Caesar Dressing - Wombat Valley**\n\n#### **Micro Herbs - Mixed Cut**\n\n#### **Basil Pesto Chunky - Wombat Valley**\n\n#### **Blueberries**\n\n#### **Strawberries**\n\n#### **Broccoli - Baby**\n\n#### **Coriander**\n\n#### **Tomatoes - Cherry Heirloom Mixed Colour (200gm)**\n\n#### **Tomatoes - Cherry**\n\n####\n\n#### **Tomatoes - Medium**\n\n#### **Tomatoes - Grape Roma Yellow**\n\n#### **Shallots (green onion)**\n\n#### **Raspberries**\n\n#### **Sprouts - Alfalfa**\n\n#### **Cabbage - Green**\n\n#### **Cabbage - Red**\n\n#### **Pumpkin - Butternut**\n\n#### **Parsley - Italian**\n\n#### **Fetta Danish Style - Wombat Valley**\n\n#### **Fiery Chipotle Mayo - Wombat Valley**\n\n#### **Cucumber - Continental**"},{"key":"sand","title":"Sandwich making schedule","text":"All sandwiches’ shelf life will be 3days MAX\n\nMonday -\n\n```\n            4 Spicy chicken and Avocado\n            4 Fresh dynamite\n            4 Egg sandwich\n```\n\nWednesday -\n\n```\n            4 Spicy chicken and Avocado\n            4 Fresh dynamite\n            4 Egg sandwich\n```\n\nThursday and Friday - To have 4 of each sandwich in the cabinet\n\nIf there are no more than 4 sandwiches before 10:30 am on Friday. We still need to top up.\n\n- All sandwiches must go after Saturday."},{"key":"resp","title":"Responsibilities","text":"**THINGS I CAN HELP WITH WHILE JU AN IS AWAY**\n\n- Checking and fixing recipes and cooking procedures\n- Asking and confirming equipment setup questions\n- Changing roster only in advance (not for same-day absence or sick leave)\n- Placing packaging orders\n\n---\n\n**THINGS I CANNOT HELP WITH WHILE JU AN IS AWAY**\n\n- Sick leave or unforeseen absence (less than 1 day notice):\n  Try to find your own replacement directly via Google Chat.\n  If you can’t find one, ask Eddie or Tom as early as possible.\n- Urgent purchases or deliveries:\n  Ask Eddie or Tom.\n- Emergencies such as injury, equipment issue, or service request:\n  Ask Eddie or Tom immediately.\n\n---\n\n**340 ADELAIDE – ROLES & RESPONSIBILITIES**\n\nJorge – Senior Cook\nIn charge of food quality, order organizing (including packagings), planning, sandwich making, prep quality, speed of dish making, and kitchen organization and cleaning.\nAlso responsible for prep planning, especially for pulled pork and mixed chicken.\n\nBeam & Ashly & Natalia– Junior Cook\nResponsible for weekday prep for 100E, bread ordering, vegetable and B&E ordering, kitchen organization and cleaning, and prep planning.\n\nTony – Senior Pastry Chef\nIn charge of pastry quality, prep quantity, and quality, sending prep items to 100E in the morning according to their requests.\nCommunicates with Jorge and Nookie about any future changes or prep planning.\nOrganises and cleans the pastry prep area.\nIn charge of ordering packagings and giving Ju An the list of items that need to be ordered.\n\n---\n\n**100 EDWARD – ROLES & RESPONSIBILITIES**\n\nAnge, Joy & Nina – Senior Cooks\nIn charge of food quality, order organizing (including packagings), planning, sandwich making, prep quality, speed of dish making, kitchen organization and cleaning, and prep planning.\nCommunicate with Tony and Nookie about items to be delivered to 100E.\n\nNookie, Jen & Queenie – Junior Cooks\nIn charge of weekday prep for 100E, bread ordering, vegetable and B&E ordering, kitchen organization and cleaning, prep planning, display cabinet visual cleanliness, and wall and hood cleaning.\n\nJai – Kitchen Assistant / Sandwich Hand\nAssists with simple cooking and sandwich preparation, organises the dishwashing area, delivers food to tables, and provides good service."},{"key":"open","title":"Opening checklist","text":"1. Turn on the extractor and kitchen lights.\n2. Fill a pot with water and vinegar. Place lids on the pot. Turn on the heat and ensure the water is **boiling by 6:30 AM**.\n3. Turn on the fryer.\n4. Turn on the grill.\n5. Set the oven to **180°C, medium fan, infinite time**.\n6. Set up the opening station, including a rubbish container, utensils, and essential cooking tools, ready for service.\n7. Check tablets for the **prep lists and daily tasks**.\n8. Check the **actual prep status in the fridge**.\n9. Compare the current prep with the **prep list**.\n10. Confirm there are **enough ingredients available** to complete the prep.\n11. Plan the **prep tasks for the day**."}];
+/* Renderer for every posted note in the app. It reads the same markdown-lite the NoteEditor
+   toolbar writes, so what you click is what appears here.
+   overflow-wrap is not cosmetic: a pasted URL or a long unbroken word used to run straight out
+   through the side of the card. */
 function MiniDoc({text}){
-  const lines=String(text||"").split("\n"); const out=[]; let key=0; let buf=null;
-  const flush=()=>{ if(buf){ out.push(<pre key={key++} style={{whiteSpace:"pre-wrap",fontFamily:"var(--font-text)",fontSize:13,background:"var(--color-canvas-parchment)",borderRadius:10,padding:"10px 12px",color:"var(--color-ink-muted-80)",margin:"6px 0",overflowX:"auto"}}>{buf.join("\n")}</pre>); buf=null; } };
-  const fmt=(s)=> s.split(/(\*\*[^*]+\*\*)/g).map((p,i)=> (p.startsWith("**")&&p.endsWith("**"))? <strong key={i}>{p.slice(2,-2)}</strong> : p );
+  const lines=String(text||"").split("\n"); const out=[]; let key=0; let buf=null; let num=0;
+  const WRAP={overflowWrap:"anywhere", wordBreak:"break-word", minWidth:0};
+  const flush=()=>{ if(buf){ out.push(<pre key={key++} style={Object.assign({whiteSpace:"pre-wrap",
+    fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace",fontSize:12.5,background:"#f3f1ec",
+    border:"2px solid #141312",padding:"10px 12px",color:"#141312",margin:"8px 0",overflowX:"auto"},WRAP)}>{buf.join("\n")}</pre>); buf=null; } };
+  const fmt=(str)=>{
+    /* bold first, then italics inside the leftovers - single * must not eat the ** pairs */
+    const parts=String(str).split(/(\*\*[^*]+\*\*)/g);
+    const out2=[]; let k=0;
+    parts.forEach(p=>{
+      if(p.startsWith("**")&&p.endsWith("**")&&p.length>4){ out2.push(<strong key={k++}>{p.slice(2,-2)}</strong>); return; }
+      p.split(/(\*[^*\n]+\*)/g).forEach(q=>{
+        if(q.startsWith("*")&&q.endsWith("*")&&q.length>2) out2.push(<em key={k++}>{q.slice(1,-1)}</em>);
+        else if(q) out2.push(<span key={k++}>{q}</span>);
+      });
+    });
+    return out2;
+  };
   lines.forEach(ln=>{
     if(ln.trim()==="```"){ if(buf) flush(); else buf=[]; return; }
     if(buf){ buf.push(ln); return; }
+    if(/^\s*(---+|___+)\s*$/.test(ln)){ num=0;
+      out.push(<div key={key++} style={{borderTop:"3px solid #141312", margin:"14px 0"}} />); return; }
     const h=ln.match(/^(#{1,4})\s+(.*)/);
-    if(h){ const lvl=h[1].length; out.push(<div key={key++} style={{fontFamily:"var(--font-display)",fontWeight:600,fontSize:lvl<=1?17:lvl===2?15:13.5,marginTop:key===1?0:14,marginBottom:4,color:"var(--color-ink)",textTransform:lvl>=3?"uppercase":"none",letterSpacing:lvl>=3?"0.06em":0}}>{fmt(h[2])}</div>); return; }
-    const cb=ln.match(/^\s*\u2610\s+(.*)/);
-    if(cb){ out.push(<label key={key++} style={{display:"flex",gap:9,alignItems:"flex-start",padding:"6px 0",fontSize:13.5,color:"var(--color-ink)",cursor:"pointer"}}><input type="checkbox" style={{marginTop:3,accentColor:"var(--color-primary)",width:16,height:16,flexShrink:0}} /><span>{fmt(cb[1])}</span></label>); return; }
-    const bl=ln.match(/^\s*[-*]\s+(.*)/);
-    if(bl){ out.push(<div key={key++} style={{display:"flex",gap:8,fontSize:13,color:"var(--color-ink-muted-80)",padding:"2px 0 2px 8px"}}><span>·</span><span>{fmt(bl[1])}</span></div>); return; }
-    if(ln.trim()===""){ out.push(<div key={key++} style={{height:7}} />); return; }
-    out.push(<div key={key++} style={{fontSize:13.5,color:"var(--color-ink)",lineHeight:1.5,padding:"2px 0"}}>{fmt(ln)}</div>);
+    if(h){ num=0; const lvl=h[1].length;
+      out.push(<div key={key++} style={Object.assign({fontWeight:700,
+        fontSize:lvl<=1?19:lvl===2?16:13,
+        marginTop:out.length?16:0, marginBottom:6, color:"#141312", lineHeight:1.25,
+        textTransform:lvl>=3?"uppercase":"none", letterSpacing:lvl>=3?"0.14em":"-0.01em"},WRAP)}>{fmt(h[2])}</div>); return; }
+    const cb=ln.match(/^\s*([\u2610\u2611])\s+(.*)/);
+    if(cb){ num=0; const done=cb[1]==="\u2611";
+      out.push(<label key={key++} style={Object.assign({display:"flex",gap:10,alignItems:"flex-start",
+        padding:"5px 0",fontSize:14.5,color:"#141312",cursor:"pointer"},WRAP)}>
+        <input type="checkbox" defaultChecked={done} style={{marginTop:3,accentColor:"#ec3013",width:17,height:17,flexShrink:0}} />
+        <span style={Object.assign({textDecoration:done?"line-through":"none", opacity:done?0.55:1},WRAP)}>{fmt(cb[2])}</span></label>); return; }
+    const ol=ln.match(/^\s*(\d+)[.)]\s+(.*)/);
+    if(ol){ num++;
+      out.push(<div key={key++} style={Object.assign({display:"flex",gap:10,fontSize:14.5,color:"#141312",padding:"3px 0"},WRAP)}>
+        <span style={{fontWeight:700,flex:"none",minWidth:18,fontVariantNumeric:"tabular-nums"}}>{num+"."}</span>
+        <span style={WRAP}>{fmt(ol[2])}</span></div>); return; }
+    const bl=ln.match(/^\s*[-*\u2022]\s+(.*)/);
+    if(bl){ num=0;
+      out.push(<div key={key++} style={Object.assign({display:"flex",gap:10,fontSize:14.5,color:"#141312",padding:"3px 0"},WRAP)}>
+        <span style={{flex:"none",fontWeight:700}}>&middot;</span><span style={WRAP}>{fmt(bl[1])}</span></div>); return; }
+    if(ln.trim()===""){ num=0; out.push(<div key={key++} style={{height:9}} />); return; }
+    num=0;
+    out.push(<div key={key++} style={Object.assign({fontSize:14.5,color:"#141312",lineHeight:1.55,padding:"2px 0"},WRAP)}>{fmt(ln)}</div>);
   });
-  flush(); return <div>{out}</div>;
+  flush(); return <div className="minidoc" style={{minWidth:0}}>{out}</div>;
 }
+
+/* The toolbar every post box now has. It writes the markdown-lite MiniDoc reads - nothing here
+   invents a new format, so old posts keep working and a chef who types the syntax by hand still
+   gets the same result.
+   Line tools apply to whichever lines the cursor or selection touches, and pressing one again
+   removes it, which is what people expect from a list button. */
+function NoteEditor({value, onChange, placeholder, rows, minHeight, autoFocus}){
+  const ta=useRef(null);
+  const [show,setShow]=useState(false);
+  const txt=String(value||"");
+  const put=(next, selStart, selEnd)=>{
+    onChange(next);
+    requestAnimationFrame(()=>{ const el=ta.current; if(!el) return; el.focus();
+      try{ el.setSelectionRange(selStart, selEnd==null?selStart:selEnd); }catch(e){} });
+  };
+  const lineTool=(mk, test)=>{
+    const el=ta.current; if(!el) return;
+    const a=el.selectionStart, b=el.selectionEnd;
+    const from=txt.lastIndexOf("\n", a-1)+1;
+    let to=txt.indexOf("\n", b); if(to<0) to=txt.length;
+    const block=txt.slice(from,to).split("\n");
+    const on=block.every(l=>l.trim()==="" || test(l));
+    const done=block.map((l,i)=>{
+      if(l.trim()==="" && block.length>1) return l;
+      const bare=l.replace(/^\s*(?:#{1,4}\s+|[-*\u2022]\s+|\d+[.)]\s+|[\u2610\u2611]\s+)/,"");
+      return on? bare : mk(bare, i);
+    }).join("\n");
+    const next=txt.slice(0,from)+done+txt.slice(to);
+    put(next, from, from+done.length);
+  };
+  const wrapTool=(mark)=>{
+    const el=ta.current; if(!el) return;
+    const a=el.selectionStart, b=el.selectionEnd;
+    const sel=txt.slice(a,b);
+    if(!sel){ const next=txt.slice(0,a)+mark+"text"+mark+txt.slice(a);
+      put(next, a+mark.length, a+mark.length+4); return; }
+    const already=sel.startsWith(mark)&&sel.endsWith(mark)&&sel.length>mark.length*2;
+    const body=already? sel.slice(mark.length,-mark.length) : mark+sel+mark;
+    const next=txt.slice(0,a)+body+txt.slice(b);
+    put(next, a, a+body.length);
+  };
+  const insert=(str)=>{
+    const el=ta.current; if(!el) return;
+    const a=el.selectionStart, b=el.selectionEnd;
+    const pre=(a>0 && txt[a-1]!=="\n")? "\n":"";
+    const next=txt.slice(0,a)+pre+str+txt.slice(b);
+    put(next, a+pre.length+str.length);
+  };
+  const T=[
+    ["H1","Big heading",()=>lineTool(t=>"# "+t, l=>/^\s*#\s/.test(l))],
+    ["H2","Medium heading",()=>lineTool(t=>"## "+t, l=>/^\s*##\s/.test(l))],
+    ["H3","Small heading",()=>lineTool(t=>"### "+t, l=>/^\s*###\s/.test(l))],
+    ["B","Bold",()=>wrapTool("**")],
+    ["I","Italic",()=>wrapTool("*")],
+    ["\u2022 List","Bulleted list",()=>lineTool(t=>"- "+t, l=>/^\s*[-*\u2022]\s/.test(l))],
+    ["1. List","Numbered list",()=>lineTool((t,i)=>(i+1)+". "+t, l=>/^\s*\d+[.)]\s/.test(l))],
+    ["\u2610 Task","Checkbox",()=>lineTool(t=>"\u2610 "+t, l=>/^\s*[\u2610\u2611]\s/.test(l))],
+    ["\u2014","Divider",()=>insert("---\n")]
+  ];
+  return <div className="ned">
+    <div className="ned-bar">
+      {T.map(([label,title,fn])=>
+        <button key={label} type="button" className={"ned-b"+(label==="B"?" bold":label==="I"?" ital":"")}
+          title={title} aria-label={title} onMouseDown={e=>e.preventDefault()} onClick={fn}>{label}</button>)}
+      <button type="button" className={"ned-b prev"+(show?" on":"")} aria-pressed={show}
+        onClick={()=>setShow(v=>!v)}>{show?"Write":"Preview"}</button>
+    </div>
+    {show
+      ? <div className="ned-prev">{txt.trim()? <MiniDoc text={txt} /> : <span className="ned-empty">Nothing written yet.</span>}</div>
+      : <textarea ref={ta} className="ned-ta" rows={rows||10} autoFocus={autoFocus}
+          style={minHeight?{minHeight:minHeight}:undefined}
+          value={txt} placeholder={placeholder||"Write the post. Use the buttons above for headings, lists and tick boxes."}
+          onChange={e=>onChange(e.target.value)} />}
+  </div>;
+}
+
 
 /* ---------------- Daily Reminder (Google Calendar + smart alerts) ---------------- */
 const DEFAULT_ICS="https://calendar.google.com/calendar/ical/thehideoutbooking20%40gmail.com/private-5acba5a382a03c9279c7c6ac06e13cc7/basic.ics";
@@ -6771,12 +6942,8 @@ function PrepHandover({state, update, branch, meEmail, composer=true}){
       {/* Grows with what is typed instead of scrolling inside a fixed box - a handover is sometimes
           one line and sometimes twenty, and neither should feel cramped. Capped at 70vh so the Save
           buttons never get pushed off screen. */}
-      <textarea autoFocus className="inp" rows={14} value={cardText}
-        placeholder={"Anything the next chef needs to know\u2026\n\nOne thing per line reads best on the board."}
-        onChange={e=>{ setCardText(e.target.value);
-          const el=e.target; el.style.height="auto";
-          el.style.height=Math.min(el.scrollHeight+2, Math.round(window.innerHeight*0.7))+"px"; }}
-        style={{minHeight:"45vh", maxHeight:"70vh", fontFamily:"var(--font-text)", fontSize:15, lineHeight:1.6, resize:"vertical"}} />
+      <NoteEditor value={cardText} onChange={setCardText} autoFocus minHeight="45vh"
+        placeholder={"Anything the next chef needs to know…\n\nOne thing per line reads best on the board."} />
       <div className="mt-3">
         <div className="text-xs font-medium mb-2" style={{color:"var(--color-ink)"}}>Photos</div>
         <div className="text-[11px] mb-2" style={{color:"var(--color-ink-muted-48)"}}>
@@ -7833,7 +8000,7 @@ function MeetingLiveV2({meeting, meetings, branches, update, onClose}){
             </div>
           : <div className="sub" style={{marginBottom:16}}>No previous meeting for this branch yet.</div>)}
         {(sec.items||[]).map((it,i)=>{ const on=!!((m.checks||{})[sec.id]&&m.checks[sec.id][i]); return <label key={i} className={"ck"+(on?" on":"")}><input type="checkbox" checked={on} onChange={()=>setM(t=>{ t.checks=t.checks||{}; const arr=(t.checks[sec.id]||[]).slice(); arr[i]=!arr[i]; t.checks[sec.id]=arr; })} /><span>{it}</span></label>; })}
-        {sec.special!=="actions" && <><div className="lab" style={{marginTop:18}}>Notes</div><textarea className="notes" autoFocus placeholder="What was said, decided, worth remembering…" value={(m.notes||{})[sec.id]||""} onChange={e=>setM(t=>{ t.notes=t.notes||{}; t.notes[sec.id]=e.target.value; })} /></>}
+        {sec.special!=="actions" && <><div className="lab" style={{marginTop:18}}>Notes</div><NoteEditor value={(m.notes||{})[sec.id]||""} onChange={v=>setM(t=>{ t.notes=t.notes||{}; t.notes[sec.id]=v; })} minHeight={190} autoFocus placeholder="What was said, decided, worth remembering…" /></>}
         {sec.special==="actions" && <div className="sub" style={{marginTop:8}}>Actions live in the right column and the bar below — add them from any section.</div>}
         <div style={{display:"flex", gap:10, marginTop:22, flexWrap:"wrap"}}>{cur<secs.length-1 ? <button type="button" className="btn p" onClick={()=>setCur(cur+1)}>Next section ›</button> : <button type="button" className="btn p" onClick={onClose}>Finish meeting ✓</button>}<span className="sub" style={{alignSelf:"center"}}>Alt + ← / → moves · Esc closes</span></div>
       </div>
@@ -8645,7 +8812,7 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
             </div>
             <div className="edit">{curNotice ? <>
               <div className="lab">Title — shows on the board</div><input className="inp" style={{width:"100%", marginBottom:12}} value={curNotice.title||""} onChange={e=>setNoticeField(curNotice.id,"title",e.target.value)} placeholder="Notice title" />
-              <div className="lab">Message</div><textarea className="inp" style={{width:"100%", height:170, marginBottom:12}} value={curNotice.body||""} onChange={e=>setNoticeField(curNotice.id,"body",e.target.value)} placeholder={"# heading · - bullet · ☐ checkbox · **bold** — or leave blank for a title-only notice"} />
+              <div className="lab">Message</div><div style={{marginBottom:12}}><NoteEditor value={curNotice.body||""} onChange={v=>setNoticeField(curNotice.id,"body",v)} minHeight={170} placeholder="Write the notice. Leave it blank for a title-only notice." /></div>
               <div className="kv"><div><div className="lab">From</div><input type="date" className="inp" style={{width:"100%"}} value={curNotice.from||""} onChange={e=>setNoticeField(curNotice.id,"from",e.target.value)} /></div><div><div className="lab">Until (blank = until removed)</div><input type="date" className="inp" style={{width:"100%"}} value={curNotice.until||""} onChange={e=>setNoticeField(curNotice.id,"until",e.target.value)} /></div>
                 <div><div className="lab">Store</div><select className="inp" style={{width:"100%"}} value={curNotice.branch||""} onChange={e=>setNoticeField(curNotice.id,"branch",e.target.value)}><option value="">All stores</option>{(state.branches||[]).map(b=><option key={b.id} value={b.name}>{b.name}</option>)}</select></div>
                 <div><div className="lab">Flags</div><label className="chk" style={{display:"inline-flex", alignItems:"center", gap:8, marginRight:16, fontWeight:600}}><input type="checkbox" checked={!!curNotice.pin} onChange={e=>setNoticeField(curNotice.id,"pin",e.target.checked)} />Pin to top</label><label className="chk" style={{display:"inline-flex", alignItems:"center", gap:8, fontWeight:600}}><input type="checkbox" checked={curNotice.tone==="urgent"} onChange={e=>setNoticeField(curNotice.id,"tone",e.target.checked?"urgent":"info")} />Urgent</label></div></div>
@@ -8657,12 +8824,12 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
         {sec==="routines" && <>
           <h2>Weekday routines</h2><p className="desc">The routine shown on Today for each day. Simple markdown — # heading, - bullet, ☐ checkbox, **bold**, ``` fixed block.</p>
           <div className="lp"><div className="list">{DAYS.map(d=><button key={d} type="button" aria-current={curDay===d} onClick={()=>setPick(d)}>{d}<small>{(routine[d]||"").trim()?((routine[d]||"").trim().split("\n").length+" lines"):"empty"}</small></button>)}</div>
-            <div className="edit"><div className="lab">{curDay}</div><textarea className="inp" style={{width:"100%", height:"56vh"}} value={routine[curDay]||""} onChange={e=>update(s=>{ if(!s.dailyRoutine) s.dailyRoutine={}; s.dailyRoutine[curDay]=e.target.value; })} placeholder={"# Opening\n☐ Turn on ovens\n- Check the bain-marie"} /></div></div>
+            <div className="edit"><div className="lab">{curDay}</div><NoteEditor value={routine[curDay]||""} onChange={v=>update(s=>{ if(!s.dailyRoutine) s.dailyRoutine={}; s.dailyRoutine[curDay]=v; })} minHeight="52vh" placeholder={"# Opening\n☐ Turn on ovens\n- Check the bain-marie"} /></div></div>
         </>}
         {sec==="docs" && <>
           <h2>Reference documents</h2><p className="desc">The chips at the bottom of Today — veg ordering, schedules, checklists.</p>
           <div className="lp"><div className="list"><button type="button" onClick={addDoc} style={{background:"var(--ink)", color:"#f3f1ec"}}>+ Add document</button>{docs.map(d=><button key={d.key} type="button" aria-current={curDoc&&curDoc.key===d.key} onClick={()=>setPick(d.key)}>{d.title||"Untitled"}<small>{(d.text||"").trim().length} chars</small></button>)}{docs.length===0&&<div className="empty">No documents yet.</div>}</div>
-            <div className="edit">{curDoc ? <><div className="lab">Title</div><input className="inp" style={{width:"100%", marginBottom:12}} value={curDoc.title} onChange={e=>setDocField(curDoc.key,"title",e.target.value)} /><div className="lab">Content</div><textarea className="inp" style={{width:"100%", height:"48vh"}} value={curDoc.text} onChange={e=>setDocField(curDoc.key,"text",e.target.value)} /><div style={{marginTop:14}}><button type="button" className="btn" style={{borderColor:"var(--rt)", color:"var(--rt)"}} onClick={()=>removeDoc(curDoc.key)}>Remove document</button></div></> : <div className="empty">Pick a document on the left.</div>}</div></div>
+            <div className="edit">{curDoc ? <><div className="lab">Title</div><input className="inp" style={{width:"100%", marginBottom:12}} value={curDoc.title} onChange={e=>setDocField(curDoc.key,"title",e.target.value)} /><div className="lab">Content</div><NoteEditor value={curDoc.text} onChange={v=>setDocField(curDoc.key,"text",v)} minHeight="44vh" /><div style={{marginTop:14}}><button type="button" className="btn" style={{borderColor:"var(--rt)", color:"var(--rt)"}} onClick={()=>removeDoc(curDoc.key)}>Remove document</button></div></> : <div className="empty">Pick a document on the left.</div>}</div></div>
         </>}
         {sec==="sheets" && <>
           <h2>Catering sheets</h2><p className="desc">Published by the catering agent (or uploaded below). Each shows on Today from its date; this list is for checking and clearing out.</p>

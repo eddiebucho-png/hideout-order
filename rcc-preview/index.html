@@ -3199,11 +3199,13 @@ body{
    a different shape of statement from an empty list. */
 .alp{display:block}
 .alp-chips{display:flex;flex-wrap:wrap;gap:6px}
-.alp-chip,.alp-new,.alp-ok{font:inherit;font-weight:700;font-size:11px;letter-spacing:.08em;
+.alp-chip,.alp-new,.alp-ok,.alp-more{font:inherit;font-weight:700;font-size:11px;letter-spacing:.08em;
   text-transform:uppercase;padding:7px 10px;min-height:34px;border:2px solid var(--ink);
   background:#fff;color:var(--ink);border-radius:0;cursor:pointer;
   transition:transform .14s cubic-bezier(.32,.72,0,1),background .14s,color .14s}
-.alp-chip:hover,.alp-new:hover,.alp-ok:hover{transform:translateY(-2px)}
+.alp-chip:hover,.alp-new:hover,.alp-ok:hover,.alp-more:hover{transform:translateY(-2px)}
+.alp-more{border-style:dotted;color:var(--muted)}
+.alp-more[aria-expanded="true"]{background:var(--ink);color:#fff;border-style:solid}
 .alp-chip:active{transform:scale(.96)}
 .alp-chip[aria-pressed="true"]{background:var(--ink);color:#fff}
 .alp-chip.none{border-style:dashed}
@@ -3214,8 +3216,65 @@ body{
   border:2px solid var(--ink);border-radius:0;background:#fff;color:var(--ink);outline:none}
 .alp-input:focus{box-shadow:3px 3px 0 var(--y)}
 .alp-hint{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted);margin-top:7px}
-@media (prefers-reduced-motion:reduce){ .alp-chip,.alp-new,.alp-ok{transition:none}
-  .alp-chip:hover,.alp-new:hover,.alp-ok:hover{transform:none} }
+@media (prefers-reduced-motion:reduce){ .alp-chip,.alp-new,.alp-ok,.alp-more{transition:none}
+  .alp-chip:hover,.alp-new:hover,.alp-ok:hover,.alp-more:hover{transform:none} }
+/* ---- inside a popup -----------------------------------------------------------------------
+   The shell is tdv2; these make the CONTENTS match without touching 24 components. Anything that
+   already owns a finished look is excluded rather than overridden. */
+.md-body{color:var(--ink)}
+.md-body label,.md-body .lab{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.md-body input:not([type="checkbox"]):not([type="radio"]):not(.alp-input):not(.idp-input),
+.md-body select,
+.md-body textarea{
+  font:inherit;font-weight:600;font-size:15px;width:100%;padding:10px 12px;
+  border:3px solid var(--ink)!important;border-radius:0!important;background:#fff;color:var(--ink);
+  outline:none;box-shadow:none}
+.md-body input:focus:not(.alp-input):not(.idp-input),
+.md-body select:focus,
+.md-body textarea:focus{box-shadow:4px 4px 0 var(--y)!important}
+.md-body input::placeholder,.md-body textarea::placeholder{color:var(--muted);font-weight:500}
+/* Buttons keep whatever colour they were given - a red confirm stays red - and only lose the
+   rounding and gain the house weight and press. */
+.md-body button:not(.md-x):not(.alp-chip):not(.alp-new):not(.alp-ok):not(.alp-more):not(.idp-trigger):not(.idp-opt):not(.idp-new){
+  font:inherit;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+  border-radius:0!important;padding:11px 16px;cursor:pointer;
+  transition:transform .16s cubic-bezier(.32,.72,0,1),box-shadow .16s cubic-bezier(.32,.72,0,1)}
+.md-body button:not(.md-x):not(.alp-chip):not(.alp-new):not(.alp-ok):not(.alp-more):not(.idp-trigger):not(.idp-opt):not(.idp-new):hover{
+  transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--ink)}
+.md-body button:not(.md-x):not(.alp-chip):not(.alp-new):not(.alp-ok):not(.alp-more):not(.idp-trigger):not(.idp-opt):not(.idp-new):active{
+  transform:none;box-shadow:none}
+/* rounded leftovers from the old card language */
+.md-body .rounded-full,.md-body .rounded-lg,.md-body .rounded-xl,.md-body .rounded-md,
+.md-body [class*="rounded-["]{border-radius:0!important}
+@media (prefers-reduced-motion:reduce){ .md-body button{transition:none}
+  .md-body button:hover{transform:none} }
+/* ---- old-language sweep --------------------------------------------------------------------
+   The last of the pre-tdv2 Tailwind vocabulary, retired app-wide instead of screen by screen.
+   Only inside #root: the assistant panel (#hb-panel) and the postcards widget own their looks. */
+#root .rounded,#root .rounded-md,#root .rounded-lg,#root .rounded-xl,#root .rounded-2xl,
+#root .rounded-3xl,#root [class*="rounded-["]{border-radius:0!important}
+/* a pill-shaped control is old; a round div is a dot or an avatar and stays round */
+#root button.rounded-full,#root span.rounded-full,#root a.rounded-full{border-radius:0!important}
+
+/* the warm-grey text ramp collapses onto the two inks the system actually has */
+#root .text-stone-300,#root .text-stone-400,#root .text-stone-500{color:var(--muted)!important}
+#root .text-stone-600,#root .text-stone-700,#root .text-stone-800,#root .text-stone-900{color:var(--ink)!important}
+#root .border-stone-100,#root .border-stone-200,#root .border-stone-300{border-color:rgba(20,19,18,.28)!important}
+#root .bg-stone-50,#root .bg-stone-100{background:var(--paper)!important}
+
+/* the amber "check this" boxes - same message, house colours */
+#root .text-amber-700,#root .text-amber-800,#root .text-amber-900{color:var(--ink)!important}
+#root .bg-amber-50,#root .bg-amber-100{background:#fdf7dd!important}
+#root .border-amber-200,#root .border-amber-300{border-color:var(--y)!important;border-width:3px!important}
+
+/* the old emerald "create" affordance */
+#root .text-emerald-600,#root .text-emerald-700{color:#1e7a46!important}
+#root .bg-emerald-50{background:#eaf6ef!important}
+#root .border-emerald-200{border-color:#1e7a46!important}
+
+/* tokens have to resolve outside a .tdv2/.rv2 ancestor - Audit, Archive and the older cards
+   are neither */
+#root{--r:#ec3013;--b:#1e4fb0;--y:#f2c100;--ink:#141312;--paper:#f3f1ec;--muted:rgba(20,19,18,.62)}
 </style>
 </head>
 <body>
@@ -7271,6 +7330,9 @@ function AllergenPicker({value, onChange}){
   const vocab = useMemo(()=>{ const v=allergenVocab();
     picked.forEach(x=>{ if(!v.some(y=>y.toLowerCase()===x.toLowerCase())) v.push(x); }); return v; }, [key]);
   const [adding,setAdding]=useState(false); const [nw,setNw]=useState("");
+  /* Nineteen chips is a wall - it made the ingredient card taller than the screen. Closed, the
+     row shows only what this ingredient actually has; the rest are one click away. */
+  const [openAll,setOpenAll]=useState(false);
   /* Esc cancels this little input, not the editor behind it */
   useEscLayer(adding, ()=>{ setAdding(false); setNw(""); });
   const toggle=t=>{ const k=t.toLowerCase();
@@ -7290,9 +7352,13 @@ function AllergenPicker({value, onChange}){
           field means on the dish card. Parked at the end of the row nobody found it. */}
       <button type="button" className="alp-chip none" aria-pressed={isNone}
         onClick={()=>onChange(isNone?[]:["none"])}>No allergens</button>
-      {vocab.map(t=><button key={t} type="button" className="alp-chip" aria-pressed={low.indexOf(t.toLowerCase())>=0}
-        onClick={()=>toggle(t)}>{t}</button>)}
-      {!adding && <button type="button" className="alp-new" onClick={()=>setAdding(true)}>+ New</button>}
+      {(openAll? vocab : vocab.filter(t=>low.indexOf(t.toLowerCase())>=0)).map(t=>
+        <button key={t} type="button" className="alp-chip" aria-pressed={low.indexOf(t.toLowerCase())>=0}
+          onClick={()=>toggle(t)}>{t}</button>)}
+      <button type="button" className="alp-more" aria-expanded={openAll} onClick={()=>setOpenAll(v=>!v)}>
+        {openAll? "Done" : "Choose \u00b7 "+vocab.length}
+      </button>
+      {openAll && !adding && <button type="button" className="alp-new" onClick={()=>setAdding(true)}>+ New</button>}
     </div>
     {adding && <div className="alp-row">
       <input autoFocus className="alp-input" value={nw} placeholder="new allergen"
@@ -7848,6 +7914,27 @@ function aivSuggest(line, ings){
 const aivTier = sc => sc>=70? "hi" : sc>=45? "md" : "lo";
 const aivTierName = sc => sc>=70? "high" : sc>=45? "maybe" : "low";
 const aivKey = (sup,code,raw) => (sup||"?")+"|"+(code||raw||"");
+/* Rows logged before 2026-09-11 carry the PACK TOTAL in `new` when they came from a manual link,
+   and a per-unit rate otherwise; nothing in the row said which. New rows state it outright. Tag
+   the old ones here, at the one place they get opened, so applyPriceTo can do the right thing. */
+const aivRowFromLog = (u, r) => u && u.basis ? u : Object.assign({}, u, {
+  basis: /^Manual link by staff/.test(String((r&&r.analysis)||"")) ? "pack" : "unit" });
+/* A rule keyed on a placeholder supplier ("Multiple", written by the bulk link) or on the
+   ingredient's own name can never match a future invoice line, so it is worse than no rule -
+   the line comes back every run and looks like the app forgot. */
+const AIV_BAD_SUP=new Set(["","?","multiple","various","mixed"]);
+const aivKeyUsable = (sup,code,raw) =>
+  !!(String(code||"").trim() || (!AIV_BAD_SUP.has(String(sup||"").trim().toLowerCase()) && String(raw||"").trim()));
+/* 20x is far outside any real price move; at that size it is a pack/unit mix-up. Callers refuse
+   or ask rather than writing - this is the check that was missing when a 1 kg pack turned into
+   $12,633. */
+const AIV_JUMP=20;
+function aivWildJump(oldP, nextP){
+  const a=Number(oldP)||0, b=Number(nextP)||0;
+  if(!(a>0&&b>0)) return 0;
+  const r=b>a? b/a : a/b;
+  return r>=AIV_JUMP? +r.toFixed(1) : 0;
+}
 
 /* Write one invoice line's price onto an ingredient. Mirrors applyPriceTo() inside
    InvoiceItemCard: the line price is per line-unit, the ingredient stores per purchaseQty
@@ -7864,13 +7951,18 @@ function aivApply(s, line, tgtId, note){
   if(!(perUse>0)) return {ok:false, why:"unit mismatch", name:g.name};
   const next=+(perUse*qty).toFixed(4), old=Number(g.purchasePrice)||0;
   if(next===old) return {ok:false, why:"same price", old:old, next:next, name:g.name, unit:g.useUnit, qty:qty};
+  const jump=aivWildJump(old, next);
+  if(jump) return {ok:false, why:"would move the price "+jump+"x ("+money(old)+" \u2192 "+money(next)+" per "+qty+" "+(g.useUnit||"")+") \u2014 looks like a pack/unit mix-up", old:old, next:next, name:g.name, unit:g.useUnit, qty:qty};
   g.purchasePrice=next;
   g.costHistory=(g.costHistory||[]).concat([{date:today(), price:next, note:note||"AI Invoice"}]);
   if(line.orderCode){
     g.suppliers=g.suppliers||[];
     if(!g.suppliers.some(sp=>String(sp.orderCode||"")===String(line.orderCode))) g.suppliers.push({name:line.supplier||"", orderCode:line.orderCode});
   }
-  return {ok:true, old:old, next:next, unit:g.useUnit, qty:qty, name:g.name};
+  /* perOld/perNew are the rate per ONE useUnit. Log these, never the pack total: a reader cannot
+     tell the two apart afterwards, and guessing wrong multiplies by the pack size. */
+  return {ok:true, old:old, next:next, unit:g.useUnit, qty:qty, name:g.name,
+          perOld:+(old/qty).toFixed(6), perNew:+(next/qty).toFixed(6)};
 }
 
 /* Per-ingredient price series out of the run log.
@@ -8215,7 +8307,11 @@ function InvoicesV2({state, update, ingMap}){
         s.invoiceUnmatched=(s.invoiceUnmatched||[]).filter(x=>aivKey(x.supplier, x.orderCode, x.rawName)!==k);
         const res=aivApply(s, it.u, it.gId, "AI Invoice (linked in app) "+(it.u.supplier||"")+(it.u.invoiceNo?" "+it.u.invoiceNo:""));
         if(res.ok){
-          upd.push({id:it.gId, name:res.name, old:res.old, new:res.next, unit:res.unit, orderCode:it.u.orderCode||""});
+          /* basis/qty/pack make the row self-describing - see aivApply. rawName + supplier are
+             what the alias key is rebuilt from when this row is reopened. */
+          upd.push({id:it.gId, name:res.name, old:res.perOld, new:res.perNew, unit:res.unit,
+                    orderCode:it.u.orderCode||"", rawName:it.u.rawName||"", supplier:it.u.supplier||"",
+                    basis:"unit", qty:res.qty, pack:res.next});
           done.push(it.u.rawName+" → "+res.name+"  "+money(res.old)+" → "+money(res.next));
         } else if(res.why==="same price"){
           // The link is the point; the ingredient simply already carries this price. Not a
@@ -8410,7 +8506,7 @@ function InvoicesV2({state, update, ingMap}){
                 {r.analysis && <div className="impact calm" style={{marginTop:0}}><b>Price trends</b> — {r.analysis}</div>}
                 {(r.added||[]).length>0 && <div style={{marginTop:12}}><div className="lab">New ingredients ({r.added.length})</div><div className="chips" style={{border:0, padding:0}}>{r.added.map((a,j)=><span key={j} className="chip">{a}</span>)}</div></div>}
                 {(r.flagged||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Needs review</div>{r.flagged.map((f,j)=><div key={j} style={{padding:"4px 0"}}><span className="sh t" style={{marginRight:8}}></span>{f}</div>)}</div>}
-                {(r.updated||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Price updates ({r.updated.length})</div><table className="mini"><tbody>{r.updated.map((u,j)=><tr key={j} className="row" onClick={()=>setCard({row:u, entry:r})}><td>{u.name}</td><td>{<AivSpark pts={(series[u.id||("n:"+(u.name||""))]||[]).map(x=>x.price)} w={70} h={22} />}</td><td className="num">{u.old!=null? money(u.old):"–"} → <b>{money(u.new)}</b>{u.unit?"/"+u.unit:""}</td></tr>)}</tbody></table></div>}
+                {(r.updated||[]).length>0 && <div style={{marginTop:12}}><div className="lab">Price updates ({r.updated.length})</div><table className="mini"><tbody>{r.updated.map((u,j)=><tr key={j} className="row" onClick={()=>setCard({row:aivRowFromLog(u,r), entry:r})}><td>{u.name}</td><td>{<AivSpark pts={(series[u.id||("n:"+(u.name||""))]||[]).map(x=>x.price)} w={70} h={22} />}</td><td className="num">{u.old!=null? money(u.old):"–"} → <b>{money(u.new)}</b>{u.unit?"/"+u.unit:""}</td></tr>)}</tbody></table></div>}
               </td></tr>}
             </React.Fragment>)}
           </tbody>
@@ -9547,9 +9643,16 @@ function parseFreshoText(text){
    state.invoiceAliases so the 09:04 task applies it automatically from then on. */
 function InvoiceItemCard({row, entry, state, update, onClose}){
   const ings=(state.ingredients||[]).filter(g=>!g.archived);
+  /* set only after the person has seen the two numbers and said yes - see relink() */
+  const confirmedJump=useRef(false);
   const ing = (row.id && ings.find(g=>g.id===row.id)) || ings.find(g=>(g.name||"")===row.name) || null;
-  const aliasKey = (entry.supplier||"?")+"|"+(row.orderCode||row.name||"");
-  const aliasId = ((state.invoiceAliases||{})[aliasKey])||"";
+  /* The supplier's OWN wording and the supplier on the line - not the ingredient name, and not
+     the log entry's "Multiple" placeholder. Getting this wrong writes a rule that never fires. */
+  const aliasSup = row.supplier || entry.supplier || "";
+  const aliasRaw = row.rawName || "";
+  const aliasKey = aivKey(aliasSup, row.orderCode, aliasRaw);
+  const aliasOk  = aivKeyUsable(aliasSup, row.orderCode, aliasRaw);
+  const aliasId = aliasOk? (((state.invoiceAliases||{})[aliasKey])||"") : "";
   const aliased = aliasId? ings.find(g=>g.id===aliasId) : null;
   // history: every logged update for this ingredient (by id, else by name)
   const hist=[];
@@ -9578,7 +9681,12 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
      Returns {ok, old, next} so the caller can report exactly what changed. */
   function applyPriceTo(s, tgtId){
     const g=(s.ingredients||[]).find(x=>x.id===tgtId); if(!g) return {ok:false, why:"not found"};
-    const price=Number(row.new); if(!(price>0)) return {ok:false, why:"no price on this line"};
+    /* row.new is a rate per one unit - EXCEPT on rows written by the old manual-link code, which
+       stored the pack total. Those are tagged basis:"pack" where they are opened; divide by the
+       pack size they were written against, or the multiply below doubles it up. */
+    let price=Number(row.new);
+    if(row.basis==="pack"){ const rq=Math.abs(Number(row.qty))||Math.abs(Number(g.purchaseQty))||1; price=price/rq; }
+    if(!(price>0)) return {ok:false, why:"no price on this line"};
     const qty=Math.abs(Number(g.purchaseQty))||1;
     const from=row.unit||g.useUnit||"", to=g.useUnit||row.unit||"";
     // toUnit() silently returns the input when two units share no table (box↔each, portion↔ml …).
@@ -9589,10 +9697,12 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
     if(!(perUse>0)) return {ok:false, why:"unit mismatch"};
     const next=+(perUse*qty).toFixed(4), old=Number(g.purchasePrice)||0;
     if(next===old) return {ok:false, why:"same price"};
+    const jump=aivWildJump(old, next);
+    if(jump && !confirmedJump.current) return {ok:false, why:"looks like a pack/unit mix-up", jump:jump, old:old, next:next, unit:g.useUnit, qty:qty};
     g.purchasePrice=next;
     g.costHistory=(g.costHistory||[]).concat([{date:today(), price:next, note:"AI Invoice (manual link) "+(entry.supplier||"")+(entry.invoiceNo?" "+entry.invoiceNo:"")}]);
     if(row.orderCode){ g.suppliers=g.suppliers||[]; if(!g.suppliers.some(sp=>sp.orderCode===row.orderCode)) g.suppliers.push({name:entry.supplier||"", orderCode:row.orderCode}); }
-    return {ok:true, old, next, unit:g.useUnit, qty};
+    return {ok:true, old, next, unit:g.useUnit, qty, perOld:+(old/qty).toFixed(6), perNew:+(next/qty).toFixed(6)};
   }
   function relink(v){
     const id = (v&&v.ingredientId)||v;
@@ -9608,9 +9718,13 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
     update(s=>{
       if(!tgt) tgt=(s.ingredients||[]).find(x=>x.id===id);
       if(!tgt){ res={ok:false, why:"not found"}; return; }
-      s.invoiceAliases=s.invoiceAliases||{};
-      s.invoiceAliases[aliasKey]=id;
-      s.invoiceUnmatched=(s.invoiceUnmatched||[]).filter(x=>((x.supplier||"?")+"|"+(x.orderCode||x.rawName||""))!==aliasKey);
+      /* Only write a rule that a future run can actually hit. A key built from "Multiple" or from
+         the ingredient's own name matches nothing, and the line returns to the queue every run. */
+      if(aliasOk){
+        s.invoiceAliases=s.invoiceAliases||{};
+        s.invoiceAliases[aliasKey]=id;
+        s.invoiceUnmatched=(s.invoiceUnmatched||[]).filter(x=>aivKey(x.supplier, x.orderCode, x.rawName)!==aliasKey);
+      }
       res=applyPriceTo(s, id);                                  // new invoice price wins on the correct ingredient
       if(undo){                                                 // restore the previous price on the wrong one
         const w=(s.ingredients||[]).find(x=>x.id===wrong.id);
@@ -9625,7 +9739,9 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
       s.invoiceLog=s.invoiceLog||[];
       s.invoiceLog.unshift({ ts:Date.now(), date:today(), supplier:entry.supplier||"", invoiceNo:entry.invoiceNo||"",
         analysis:"Manual link by staff — this supplier line now maps to \""+tgt.name+"\" and future runs use it automatically.",
-        updated: res&&res.ok? [{id:tgt.id, name:tgt.name, old:res.old, new:res.next, unit:res.unit, orderCode:row.orderCode||""}] : [],
+        updated: res&&res.ok? [{id:tgt.id, name:tgt.name, old:res.perOld, new:res.perNew, unit:res.unit,
+                                orderCode:row.orderCode||"", rawName:aliasRaw, supplier:aliasSup,
+                                basis:"unit", qty:res.qty, pack:res.next}] : [],
         added: [], flagged: (res&&!res.ok&&res.why!=="same price"? ["Price not applied ("+res.why+") — set it manually on "+tgt.name+"."]:[])
           .concat(undone? ["Reverted the earlier price on "+wrong.name+"."]:[]) });
     });
@@ -9633,6 +9749,17 @@ function InvoiceItemCard({row, entry, state, update, onClose}){
     // tgt/res) only run when the batch flushes — so defer the user-facing outcome past the flush.
     setTimeout(()=>{
       if(!tgt){ alert("Could not link — ingredient not found."); return; }
+      /* A 20x move is almost always a pack read as a unit. Show both numbers and let the person
+         decide - refusing outright would block a genuine correction of an already-wrong price. */
+      if(res && res.jump){
+        if(confirm("This would change the price " + res.jump + "x.\n\n"
+            + money(res.old) + "  \u2192  " + money(res.next) + "   per " + res.qty + " " + (res.unit||"") + "\n\n"
+            + "A jump that size is usually a pack price read as a unit price, not a real change.\n\n"
+            + "OK = apply it anyway   \u00b7   Cancel = leave the price alone")){
+          confirmedJump.current = true; relink(v); confirmedJump.current = false;
+        }
+        return;
+      }
       alert("Linked to \""+tgt.name+"\"."
         + (res&&res.ok? "\nPrice updated: "+money(res.old)+" → "+money(res.next)+" per "+res.qty+" "+res.unit
           : (res&&res.why==="same price"? "\nPrice already matches this invoice line."
@@ -9710,7 +9837,7 @@ function Invoices({state, update}){
           </div>
           {r.analysis?<div className="text-xs text-stone-600 bg-stone-50 border border-stone-100 rounded-lg p-2.5 mb-2 leading-snug"><b>Price trends</b> — {r.analysis}</div>:null}
           {(r.updated&&r.updated.length>0)?<div className="mb-2"><div className="text-[11px] uppercase tracking-wide text-stone-400 mb-1">Price updates ({r.updated.length})</div>
-            <div className="space-y-0.5">{r.updated.map((u,j)=>(<button key={j} type="button" onClick={()=>setCard({row:u, entry:r})} title="Open ingredient card — history & re-link" className="w-full text-left text-sm text-stone-700 flex justify-between gap-3 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-stone-50"><span className="truncate">{u.name}<span className="text-stone-300"> ›</span></span><span className="shrink-0 text-stone-500">{u.old!=null?money(u.old):"–"} → <span className="text-stone-800 font-medium">{money(u.new)}</span><span className="text-stone-400">{u.unit?("/"+u.unit):""}</span></span></button>))}</div></div>:null}
+            <div className="space-y-0.5">{r.updated.map((u,j)=>(<button key={j} type="button" onClick={()=>setCard({row:aivRowFromLog(u,r), entry:r})} title="Open ingredient card — history & re-link" className="w-full text-left text-sm text-stone-700 flex justify-between gap-3 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-stone-50"><span className="truncate">{u.name}<span className="text-stone-300"> ›</span></span><span className="shrink-0 text-stone-500">{u.old!=null?money(u.old):"–"} → <span className="text-stone-800 font-medium">{money(u.new)}</span><span className="text-stone-400">{u.unit?("/"+u.unit):""}</span></span></button>))}</div></div>:null}
           {(r.added&&r.added.length>0)?<div className="mb-2"><div className="text-[11px] uppercase tracking-wide text-emerald-700 mb-1">New ingredients ({r.added.length})</div><div className="flex flex-wrap gap-1">{r.added.map((a,j)=><span key={j} className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">{a}</span>)}</div></div>:null}
           {(r.flagged&&r.flagged.length>0)?<div><div className="text-[11px] uppercase tracking-wide text-amber-700 mb-1">Needs review ({r.flagged.length})</div><div className="space-y-0.5">{r.flagged.map((f,j)=><div key={j} className="text-xs text-amber-700">⚠ {f}</div>)}</div></div>:null}
         </div>

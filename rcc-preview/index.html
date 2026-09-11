@@ -5670,7 +5670,7 @@ function Audit({state, ingMap, setTab, update}){
           </div>
         </div>
       </div>; })}
-    {fixRec && <RecipeEditor rec={fixRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={createIng} onClose={()=>setFixRec(null)} onSave={commitRec} onDelete={id=>{update(s=>{s.recipes=s.recipes.filter(r=>r.id!==id);}); setFixRec(null);}} />}
+    {fixRec && <RecipeEditorV2 rec={fixRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={createIng} onClose={()=>setFixRec(null)} onSave={commitRec} onDelete={id=>{update(s=>{s.recipes=s.recipes.filter(r=>r.id!==id);}); setFixRec(null);}} />}
     {fixIng && <IngredientEditor ing={fixIng} onClose={()=>setFixIng(null)} onSave={commitIng} onDelete={id=>{update(s=>{s.ingredients=s.ingredients.filter(i=>i.id!==id);}); setFixIng(null);}} />}
   </div>;
 }

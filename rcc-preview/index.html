@@ -6885,18 +6885,20 @@ const RV2_CSS=`
   /* Dishes v2 */
   .rv2 .cath{display:flex;align-items:baseline;gap:12px;padding:18px 14px 10px;font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase} .rv2 .cath .n{color:var(--muted);font-weight:500;letter-spacing:0} .rv2 .cath::after{content:"";flex:1;height:3px;background:var(--ink)}
   .rv2 .dgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:0 14px 18px}
-  .rv2 .dish{border:3px solid var(--ink);background:#fff;cursor:pointer;text-align:left;padding:0;font:inherit;color:inherit;display:block;width:100%;animation:rv2-rise .4s cubic-bezier(.2,.8,.2,1) both;transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s}
+  /* column + full height: the grid stretches cards to the tallest in the row, and the allergen
+     band has to sit on the floor of the card or it stops mid-card with white space under it. */
+  .rv2 .dish{border:3px solid var(--ink);background:#fff;cursor:pointer;text-align:left;padding:0;font:inherit;color:inherit;display:flex;flex-direction:column;height:100%;width:100%;animation:rv2-rise .4s cubic-bezier(.2,.8,.2,1) both;transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s}
   .rv2 .dish:hover{transform:translate(-3px,-3px);box-shadow:6px 6px 0 var(--ink)} .rv2 .dish:active{transform:none;box-shadow:none}
-  .rv2 .dish .ph{aspect-ratio:4/3;background:#e6e2da;position:relative;overflow:hidden} .rv2 .dish .ph img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s} .rv2 .dish:hover .ph img{transform:scale(1.04)}
+  .rv2 .dish .ph{flex:none;aspect-ratio:4/3;background:#e6e2da;position:relative;overflow:hidden} .rv2 .dish .ph img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s} .rv2 .dish:hover .ph img{transform:scale(1.04)}
   /* Footer band. Wraps instead of truncating - a half-printed allergen list is worse than none -
      and sits below the card body so the photo is never covered. */
-  .rv2 .dish .al{display:block;background:var(--y);color:var(--ink);
+  .rv2 .dish .al{flex:none;display:block;background:var(--y);color:var(--ink);
     border-top:3px solid var(--ink);padding:5px 12px 6px;font-size:10.5px;font-weight:700;
     letter-spacing:.08em;line-height:1.4;text-transform:uppercase;overflow-wrap:break-word}
   .rv2 .dish .al .sh.t{display:inline-block;margin-right:6px;vertical-align:-1px}
   .rv2 .dish .al.q{background:var(--rt);color:#fff}
   .rv2 .dish .addph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ink);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:13px;background:rgba(20,19,18,.04);border:0;cursor:pointer;font-family:inherit}
-  .rv2 .dish .body{padding:10px 12px 12px;border-top:3px solid var(--ink)} .rv2 .dish .dname{font-weight:700;font-size:16px;line-height:1.2} .rv2 .dish .meta{color:var(--muted);font-size:14px;margin-top:3px;display:flex;justify-content:space-between;gap:8px}
+  .rv2 .dish .body{flex:1 1 auto;padding:10px 12px 12px;border-top:3px solid var(--ink)} .rv2 .dish .dname{font-weight:700;font-size:16px;line-height:1.2} .rv2 .dish .meta{color:var(--muted);font-size:14px;margin-top:3px;display:flex;justify-content:space-between;gap:8px}
   /* Dish detail v2 */
   .rv2.dd{position:fixed;inset:0;z-index:60;background:rgba(20,19,18,.55);overflow:auto;padding:16px;animation:rv2-rise .2s both}
   .rv2.dd .box{max-width:760px;margin:0 auto;background:#f3f1ec;border:3px solid var(--ink);box-shadow:10px 10px 0 var(--ink);animation:rv2-rise .3s cubic-bezier(.2,.8,.2,1) both}
@@ -7278,13 +7280,14 @@ function AllergenPicker({value, onChange}){
     setNw(""); setAdding(false); };
   return <div className="alp">
     <div className="alp-chips">
+      {/* First, not last. Plenty of records genuinely have none - water cannot carry an allergen -
+          and "none" is a different answer from "nobody has checked yet", which is what an empty
+          field means on the dish card. Parked at the end of the row nobody found it. */}
+      <button type="button" className="alp-chip none" aria-pressed={isNone}
+        onClick={()=>onChange(isNone?[]:["none"])}>No allergens</button>
       {vocab.map(t=><button key={t} type="button" className="alp-chip" aria-pressed={low.indexOf(t.toLowerCase())>=0}
         onClick={()=>toggle(t)}>{t}</button>)}
       {!adding && <button type="button" className="alp-new" onClick={()=>setAdding(true)}>+ New</button>}
-      {/* "no allergens" and "nobody has checked yet" say different things on a dish card, so there
-          has to be a way to state the first one out loud */}
-      <button type="button" className="alp-chip none" aria-pressed={isNone}
-        onClick={()=>onChange(isNone?[]:["none"])}>No allergens</button>
     </div>
     {adding && <div className="alp-row">
       <input autoFocus className="alp-input" value={nw} placeholder="new allergen"

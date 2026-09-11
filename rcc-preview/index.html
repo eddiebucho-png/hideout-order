@@ -3327,6 +3327,18 @@ body{
 @media (prefers-reduced-motion:reduce){
   .hdr2 .bnav,.hdr2 .row2,#chrome-grip{transition:none}
 }
+/* ---- settings sidebar: foldable groups ----------------------------------------------------
+   The heading is now a button. It has to read as a heading first and a control second, so the
+   caret is the only added ink and the type stays exactly as it was. */
+#root .rv2 .nav .ng{border-bottom:1px solid rgba(20,19,18,.14)}
+#root .rv2 .nav .ng:last-child{border-bottom:0}
+#root .rv2 .nav button.g{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:none;border:0;cursor:pointer;font:inherit;font-size:11px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:12px 14px 6px}
+#root .rv2 .nav button.g:hover{color:var(--ink)}
+#root .rv2 .nav .gcar{font-size:13px;line-height:1;width:10px;flex:none}
+#root .rv2 .nav .gt{margin-right:auto}
+#root .rv2 .nav .ng.shut button.g{padding-bottom:12px}
 </style>
 </head>
 <body>
@@ -8585,6 +8597,11 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
   const notices=Array.isArray(state.notices)?state.notices:[]; const autoNotices=meetingNotices(state);
   const routine=state.dailyRoutine||{}; const docs=state.infoDocs||[]; const sheets=state.cateringSheets||[];
   const [viewSheet,setViewSheet]=useState(null);
+  /* which sidebar groups are folded, remembered per device */
+  const [navShut,setNavShut]=useState(()=>{ try{ return JSON.parse(localStorage.getItem("hideout_setnav_shut")||"[]")||[]; }catch(e){ return []; } });
+  const toggleNav=g=>setNavShut(v=>{ const nx = v.indexOf(g)>=0 ? v.filter(x=>x!==g) : v.concat(g);
+    try{ localStorage.setItem("hideout_setnav_shut", JSON.stringify(nx)); }catch(e){}
+    return nx; });
   const auditCount=useMemo(()=>{ try{ const g=auditData(state, ingMap||{}); return Object.keys(g).reduce((n,k)=>n+g[k].length,0); }catch(e){ return 0; } }, [state, ingMap]);
   const setNoticeField=(id,k,v)=>update(s=>{ const n=(s.notices||[]).find(x=>x.id===id); if(n) n[k]=v; });
   const addNotice=()=>{ const id=rid("nt"); update(s=>{ if(!Array.isArray(s.notices)) s.notices=[]; s.notices.unshift({id, title:"", body:"", from:localYmd(), until:"", pin:false, tone:"info", branch:"", archived:false}); }); setPick(id); };
@@ -8600,7 +8617,22 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
     <RV2Style />
     <div className="lbl"><span className="sh c"></span><span className="tag">Settings</span><span className="c2">what the team sees on Today · stores · people · tools</span></div>
     <div className="screen navcol">
-      <div className="nav">{NAV.map(([g,items])=><div key={g}><div className="g">{g}</div>{items.map(([k,l,n])=><button key={k} type="button" aria-current={sec===k} onClick={()=>{ setSec(k); setPick(null); }}><span>{l}</span>{n>0&&<span className="cnt2">{n}</span>}</button>)}</div>)}</div>
+      {/* Foldable groups. The heading is the control; the group you are currently inside always
+          stays open so a fold can never hide the page you are on. */}
+      <div className="nav">{NAV.map(([g,items])=>{
+        const holdsCurrent = items.some(it=>it[0]===sec);
+        const shut = !holdsCurrent && navShut.indexOf(g)>=0;
+        const pending = items.reduce((t,it)=>t+(Number(it[2])||0),0);
+        return <div key={g} className={"ng"+(shut?" shut":"")}>
+          <button type="button" className="g" aria-expanded={!shut} onClick={()=>toggleNav(g)}>
+            <span className="gcar" aria-hidden="true">{shut?"\u203a":"\u2304"}</span>
+            <span className="gt">{g}</span>
+            {shut && pending>0 && <span className="cnt2">{pending}</span>}
+          </button>
+          {!shut && items.map(([k,l,n])=><button key={k} type="button" aria-current={sec===k}
+            onClick={()=>{ setSec(k); setPick(null); }}><span>{l}</span>{n>0&&<span className="cnt2">{n}</span>}</button>)}
+        </div>;
+      })}</div>
       <div className="pane" key={sec}>
         {sec==="notices" && <>
           <h2>Staff notices</h2><p className="desc">Shows on the Today board — the title on the board, the body when they tap it. Leave <b>Until</b> blank to keep it up until you remove it.</p>

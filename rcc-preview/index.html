@@ -3451,6 +3451,12 @@ body{
 /* the little link-buttons inside rows and panel headers */
 #root .rv2 .acts .btn,#root .rv2 .lp .list .btn{font-size:11px;padding:5px 9px;min-height:28px}
 #root .rv2 .sub{font-size:12px}
+/* ---- the auto-link switch ------------------------------------------------------------------
+   The app now writes on its own, so the control that governs that sits in plain sight. */
+#root .rv2 .aiv-auto{display:inline-flex;align-items:center;gap:8px;margin-left:auto;
+  font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+#root .rv2 .aiv-auto input{width:16px;height:16px;accent-color:var(--ink);flex:none}
+@media (max-width:560px){ #root .rv2 .aiv-auto{margin-left:0;flex-basis:100%} }
 </style>
 </head>
 <body>
@@ -5744,8 +5750,21 @@ function collapsePrepSubs(n){
   });
   return changed;
 }
+/* Everything a recipe's ingredients already know about allergens, in canonical names. One level
+   into sub-recipes, which is where the bread and the sauces live. */
+function rollupAllergens(rec, byId, byRec, depth){
+  const out=[];
+  (rec.items||[]).forEach(it=>{
+    if(it.ingredientId){ const g=byId[it.ingredientId]; if(g) out.push(...allergenList(g.allergens)); }
+    else if(it.subRecipeId && (depth||0)<1){ const r2=byRec[it.subRecipeId];
+      if(r2) out.push(...rollupAllergens(r2, byId, byRec, (depth||0)+1)); }
+  });
+  const seen=new Set(), uniq=[];
+  out.forEach(a=>{ const k=a.toLowerCase(); if(!seen.has(k)){ seen.add(k); uniq.push(a); } });
+  return uniq;
+}
 function runAutoFix(n){
-  let alg=0, wt=0, link=0;
+  let alg=0, wt=0, link=0, roll=0, cat=0;
   (n.recipes||[]).forEach(r=>(r.items||[]).forEach(it=>{ if((it.ingredientId||it.subRecipeId)||!it.rawName) return; const m=matchIngredient(it.rawName, n.ingredients); if(m){ it.ingredientId=m.ing.id; link++; return; } const mr=matchRecipe(it.rawName, n.recipes, r.id); if(mr){ it.subRecipeId=mr.id; link++; } }));
   const eachByWeight=new Set();
   (n.recipes||[]).forEach(r=>(r.items||[]).forEach(it=>{ const ing=(n.ingredients||[]).find(g=>g.id===it.ingredientId); if(ing && EACH_U.has(normU(ing.useUnit)) && it.rawUnit && U_MASS[normU(it.rawUnit)]!=null) eachByWeight.add(ing.id); }));
@@ -5754,7 +5773,27 @@ function runAutoFix(n){
     if(missing.length){ i.allergens=[...cur,...missing]; alg+=missing.length; }
     if(eachByWeight.has(i.id) && !(i.gramsPerEach>0)){ const w=commonPieceWeight(i.name); if(w){ i.gramsPerEach=w; wt++; } }
   });
-  return {alg, wt, link};
+  /* A recipe with an empty allergen list, whose own ingredients answer the question. Only fills
+     a blank - a list somebody wrote is never touched, and neither is an explicit "none". */
+  const byId=Object.fromEntries((n.ingredients||[]).map(g=>[g.id,g]));
+  const byRec=Object.fromEntries((n.recipes||[]).map(r=>[r.id,r]));
+  (n.recipes||[]).forEach(r=>{
+    if(r.archived) return;
+    const cur=(r.allergens||[]).map(x=>String(x).trim()).filter(Boolean);
+    if(cur.length) return;                                  // already answered, including "none"
+    const found=rollupAllergens(r, byId, byRec, 0);
+    if(found.length){ r.allergens=found; roll++; }
+  });
+  /* A dish on the menu with no category falls to the bottom of the board. The app can already
+     work one out from the dish itself, so there is no reason to ask. */
+  (n.recipes||[]).forEach(r=>{
+    if(r.archived || (r.category||"").trim()) return;
+    const onMenu = !!r.showInDish || (r.branch && Object.keys(r.branch).some(b=>r.branch[b] && r.branch[b].dish));
+    if(!onMenu) return;
+    let c=""; try{ c=dishCategory(r)||""; }catch(e){ c=""; }
+    if(c){ r.category=c; cat++; }
+  });
+  return {alg, wt, link, roll, cat};
 }
 function auditData(state, ingMap){
   const issues=[]; let _ref=null; const add=(type,item,detail,sev,go)=>issues.push({type,item,detail,sev:sev||"warn",go:go||null,ref:_ref});
@@ -5813,7 +5852,13 @@ function Audit({state, ingMap, setTab, update}){
   const commitRec=(rec)=>{ update(s=>{ const idx=s.recipes.findIndex(r=>r.id===rec.id); if(idx>=0) s.recipes[idx]=rec; }); setFixRec(null); };
   const commitIng=(ing)=>{ update(s=>{ const idx=s.ingredients.findIndex(i=>i.id===ing.id); if(idx>=0) s.ingredients[idx]=ing; }); setFixIng(null); };
   const createIng=(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; };
-  const doAutoFix=()=>{ let res={alg:0,wt:0,link:0}; update(n=>{ res=runAutoFix(n); }); setMsg(`AI auto-fix — allergens added: ${res.alg}, grams-per-each set: ${res.wt}, ingredients linked: ${res.link}. Anything still listed needs info AI can't guess.`); };
+  const doAutoFix=()=>{ let res={alg:0,wt:0,link:0,roll:0,cat:0}; update(n=>{ res=runAutoFix(n); });
+    setMsg("Auto-fix — ingredient allergens added: "+res.alg
+      +", recipe allergens rolled up from ingredients: "+res.roll
+      +", menu categories filled: "+res.cat
+      +", grams-per-each set: "+res.wt
+      +", ingredients linked: "+res.link
+      +". Anything still listed needs a decision the app should not make for you."); };
   const Metric=({n,sev})=>{ const s=AUDIT_SEV[sev]; return <div className="rounded-[14px] p-3.5" style={{background:s.bg, border:"1px solid var(--color-hairline-alpha)"}}><div className="text-2xl font-semibold" style={{color:s.c, fontFamily:"var(--font-display)", lineHeight:1}}>{n}</div><div className="text-xs mt-1" style={{color:"var(--color-ink-muted-80)"}}>{sev==="error"?"Errors — blocking":sev==="warn"?"To fix soon":"Suggestions"}</div></div>; };
   return <div className="rv2 aud">
     <RV2Style />
@@ -7313,7 +7358,9 @@ const RV2_CSS=`
   .rv2 .task .th{width:56px;height:56px;background:#e6e2da;border:2px solid var(--ink);overflow:hidden;cursor:pointer} .rv2 .task .th img{width:100%;height:100%;object-fit:cover;display:block} .rv2 .task .th.ph{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)}
   .rv2 .task .tn{font-weight:700;font-size:17px;line-height:1.2;cursor:pointer;background:none;border:0;padding:0;font-family:inherit;color:inherit;text-align:left} .rv2 .task .tn:hover{text-decoration:underline;text-underline-offset:3px} .rv2 .task .tm{color:var(--muted);font-size:14px;margin-top:2px}
   .rv2 .task .acts{display:flex;gap:8px}
-  .rv2 .done{width:56px;height:56px;border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);transition:transform .15s,background .15s} .rv2 .done:hover{background:var(--y)} .rv2 .done:active{transform:scale(.94)}
+  /* buttons only - a completed ACTION ROW also carries .done and was being squashed into a
+     56px square, which is what pushed its text over the rows underneath (2026-09-13) */
+  .rv2 button.done{width:56px;height:56px;border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);transition:transform .15s,background .15s} .rv2 button.done:hover{background:var(--y)} .rv2 button.done:active{transform:scale(.94)}
   .rv2 .done.fire{width:44px;font-size:18px;color:var(--rt)} .rv2 .done.back{background:var(--ink);color:#f3f1ec} .rv2 .done.back:hover{background:var(--y);color:var(--ink)}
   .rv2 .task.is-done .tn{text-decoration:line-through;color:var(--muted)} .rv2 .task.is-done .th img{filter:grayscale(1)}
   .rv2 .grp{display:flex;align-items:baseline;gap:12px;padding:18px 14px 8px;font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase} .rv2 .grp .n{color:var(--muted);font-weight:500;letter-spacing:0} .rv2 .grp::after{content:"";flex:1;height:3px;background:var(--ink)} .rv2 .grp .link{letter-spacing:0;text-transform:none;font-size:14px}
@@ -7332,7 +7379,7 @@ const RV2_CSS=`
   .rv2.fs textarea.notes{width:100%;min-height:150px;border:2px solid var(--ink);padding:12px;font:inherit;font-size:16px;line-height:1.5;background:#fff;resize:vertical} .rv2.fs textarea.notes:focus{outline:none;box-shadow:4px 4px 0 var(--y)}
   .rv2.fs .acts{border-left:3px solid var(--ink);background:#fff;padding:16px 18px;position:sticky;top:76px;align-self:start;max-height:calc(100vh - 76px);overflow:auto}
   .rv2.fs .acts .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
-  .rv2.fs .act{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px} .rv2.fs .act input[type=checkbox]{width:22px;height:22px;accent-color:var(--ink);margin-top:2px} .rv2.fs .act .who{color:var(--muted);font-size:13px} .rv2.fs .act.done{color:var(--muted);text-decoration:line-through}
+  .rv2.fs .act{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px} .rv2.fs .act input[type=checkbox]{width:22px;height:22px;accent-color:var(--ink);margin-top:2px} .rv2.fs .act .who{color:var(--muted);font-size:13px} .rv2.fs .act.done{color:var(--muted);text-decoration:line-through;display:grid;width:auto;height:auto}
   .rv2.fs .actbar{position:fixed;left:0;right:0;bottom:0;background:var(--ink);color:#f3f1ec;padding:12px 22px;display:flex;gap:10px;align-items:center;z-index:3;flex-wrap:wrap;box-shadow:0 -4px 0 var(--y)}
   .rv2.fs .actbar .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--y);flex:none} .rv2.fs .actbar input{font:inherit;font-size:15px;padding:10px 12px;border:0;background:#fff;color:var(--ink);min-width:0} .rv2.fs .actbar input:focus{outline:none;box-shadow:0 0 0 3px var(--y) inset}
   .rv2.fs .actbar .btn{color:#f3f1ec;border-color:#f3f1ec} .rv2.fs .actbar .btn.y{background:var(--y);border-color:var(--y);color:var(--ink)}
@@ -8625,6 +8672,18 @@ function InvoicesV2({state, update, ingMap}){
      A 71-vs-70 pair is a coin toss, and a coin toss is what put "Soy Milk" on "Milk". */
   const autoLink = suggestions.filter(x=>x.cands.length && x.cands[0].sc>=70 && (x.cands.length<2 || x.cands[0].sc-x.cands[1].sc>=12));
 
+  /* Apply the confident ones without being asked. Only ever runs over lines it has not seen
+     before in this session, so a re-render cannot link the same line twice, and never while the
+     owner has it switched off. */
+  const autoDone=useRef({});
+  useEffect(()=>{
+    if(state.invoiceAutoLink===false) return;
+    const fresh=autoLink.filter(x=>!autoDone.current[aivKey(x.u.supplier,x.u.orderCode,x.u.rawName)]);
+    if(!fresh.length) return;
+    fresh.forEach(x=>{ autoDone.current[aivKey(x.u.supplier,x.u.orderCode,x.u.rawName)]=1; });
+    doLink(fresh.map(x=>({u:x.u, gId:x.cands[0].g.id})), true);
+  }, [autoLink, state.invoiceAutoLink]);
+
   function openLine(u){
     setCard({row:{name:u.rawName, rawName:u.rawName, orderCode:u.orderCode, new:u.perUnitPrice, unit:u.useUnit, old:null},
              entry:{supplier:u.supplier, invoiceNo:u.invoiceNo, date:u.date}});
@@ -8632,7 +8691,7 @@ function InvoicesV2({state, update, ingMap}){
 
   /* Link one or many supplier lines in a single state write: alias saved (so the 09:04 run
      reuses it), line removed from the queue, price applied, one audit row in the run log. */
-  function doLink(items){
+  function doLink(items, silent){
     const done=[], same=[], fail=[];
     update(s=>{
       s.invoiceAliases=s.invoiceAliases||{};
@@ -8661,9 +8720,10 @@ function InvoicesV2({state, update, ingMap}){
       s.invoiceLog=s.invoiceLog||[];
       s.invoiceLog.unshift({ts:Date.now(), date:today(),
         supplier:(items.length===1? (items[0].u.supplier||"") : "Multiple"), invoiceNo:"",
-        analysis:"Manual link by staff — "+items.length+" supplier line"+(items.length>1?"s":"")+" mapped in the app. Future automatic runs use these mappings.",
+        analysis:(silent?"Auto-linked (high confidence) — ":"Manual link by staff — ")+items.length+" supplier line"+(items.length>1?"s":"")+" mapped in the app. Future automatic runs use these mappings.",
         updated:upd, added:[], flagged:flg});
     });
+    if(silent) return;
     setTimeout(()=>{
       alert("Linked "+items.length+" line"+(items.length>1?"s":"")+".\n\n"
         + (done.length? done.join("\n")+"\n" : "")
@@ -8735,9 +8795,9 @@ function InvoicesV2({state, update, ingMap}){
       {view==="queue" && <React.Fragment>
         <div className="grp" style={{padding:"18px 14px 8px"}}>
           <span className="sh s" style={{marginRight:8}}></span>Needs linking <span className="n">{unmatched.length}</span>
-          {autoLink.length>0 && <button type="button" className="btn sm p" style={{marginLeft:"auto"}} onClick={linkAll}>Link {autoLink.length} sure one{autoLink.length>1?"s":""}</button>}
+          <label className="aiv-auto" title="Only lines scoring 70+ and at least 12 clear of the runner-up"><input type="checkbox" checked={state.invoiceAutoLink!==false} onChange={e=>update(s2=>{ s2.invoiceAutoLink=e.target.checked; })} />Link the sure ones automatically</label>{autoLink.length>0 && state.invoiceAutoLink===false && <button type="button" className="btn sm p" onClick={linkAll}>Link {autoLink.length} sure one{autoLink.length>1?"s":""}</button>}
         </div>
-        <div className="aiv-note">Each line is scored against every ingredient in the app on name, supplier order code, unit and price. Nothing is applied until you press a button, and whatever you press is remembered — the 09:04 run reuses it from then on.</div>
+        <div className="aiv-note">Each line is scored against every ingredient in the app on name, supplier order code, unit and price. A line only links itself when it scores 70 or more AND is at least 12 clear of the next best guess; everything else waits here for you. Every automatic link is an ordinary row in the log — open it to see or change it — and a price that would move more than 20x is refused rather than written.</div>
         <div style={{overflowX:"auto"}}><table><tbody>
           {unmatched.length===0 && <tr><td colSpan={4} className="empty">Nothing waiting — every invoice line found its ingredient.</td></tr>}
           {suggestions.map((it,i)=><AivUnmatchedRow key={"u"+i} item={it} onOpen={openLine}

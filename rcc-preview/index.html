@@ -3457,6 +3457,22 @@ body{
   font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
 #root .rv2 .aiv-auto input{width:16px;height:16px;accent-color:var(--ink);flex:none}
 @media (max-width:560px){ #root .rv2 .aiv-auto{margin-left:0;flex-basis:100%} }
+/* ---- the meeting editor's fixed action bar must not sit on top of the lists ----------------
+   It is position:fixed, so the rail and the actions panel scrolled underneath it and the last
+   sections could be neither read nor tapped. --actbar-h is published by the bar itself so these
+   reservations stay correct when it wraps to two rows on a phone. */
+#root .rv2.fs{--actbar-h:76px}
+#root .rv2.fs .actbar{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+#root .rv2.fs .rail,#root .rv2.fs .acts{
+  max-height:calc(100vh - 76px - var(--actbar-h));
+  padding-bottom:calc(var(--actbar-h) + 12px)}
+#root .rv2.fs .cur{padding-bottom:calc(var(--actbar-h) + 28px)}
+@media (max-width:900px){
+  /* stacked layout: the rail is a horizontal strip, so only the column under it needs the room */
+  #root .rv2.fs .rail{max-height:none;padding-bottom:0}
+  #root .rv2.fs .acts{max-height:none;padding-bottom:calc(var(--actbar-h) + 12px)}
+}
+@media (max-width:640px){ #root .rv2.fs{--actbar-h:120px} }
 </style>
 </head>
 <body>
@@ -11092,6 +11108,25 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   window.addEventListener("scroll", function(){
     if(locked && (window.pageYOffset||0)<TOP && !hidden()) locked=false;
   }, {passive:true});
+})();
+</script>
+<script>
+/* The meeting editor's action bar wraps to two rows on a narrow screen, so its height is not a
+   constant. Measure it and hand the number to CSS; everything that has to stay clear of the bar
+   reserves against --actbar-h. */
+(function(){
+  function sync(){
+    document.querySelectorAll(".rv2.fs").forEach(function(fs){
+      var bar=fs.querySelector(".actbar"); if(!bar) return;
+      var h=Math.round(bar.getBoundingClientRect().height);
+      if(h>0) fs.style.setProperty("--actbar-h", h+"px");
+    });
+  }
+  var t=0;
+  function schedule(){ if(t) return; t=requestAnimationFrame(function(){ t=0; sync(); }); }
+  window.addEventListener("resize", schedule, {passive:true});
+  new MutationObserver(schedule).observe(document.documentElement, {childList:true, subtree:true});
+  schedule();
 })();
 </script>
 </body>

@@ -3343,14 +3343,20 @@ body{
    Same frame as every other field, with a toolbar welded on top so the box reads as one control
    rather than a strip of buttons floating above a textarea. */
 .ned{display:block;border:3px solid var(--ink);background:#fff;min-width:0}
-.ned-bar{display:flex;flex-wrap:wrap;gap:0;background:var(--paper);border-bottom:3px solid var(--ink)}
+.ned-bar{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;background:var(--paper);border-bottom:3px solid var(--ink)}
 .ned-b{font:inherit;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   padding:9px 11px;min-height:36px;background:none;border:0;border-right:2px solid rgba(20,19,18,.18);
   color:var(--ink);cursor:pointer;transition:background .12s,color .12s}
 .ned-b:hover{background:var(--y)}
 .ned-b:active{background:var(--ink);color:#fff}
-.ned-b.bold{font-weight:900}
-.ned-b.ital{font-style:italic}
+/* each control is set in the style it produces - nothing to decode */
+.ned-b.t1{font-size:15px;font-weight:700;letter-spacing:-0.01em;text-transform:none}
+.ned-b.t2{font-size:13px;font-weight:700;letter-spacing:0;text-transform:none}
+.ned-b.t3{font-size:10px;font-weight:700;letter-spacing:.16em}
+.ned-b.bold{font-weight:900;font-size:13px}
+.ned-b.ital{font-style:italic;font-size:13px;text-transform:none}
+/* a rule in front of each group, so a wrapped bar still reads as four jobs */
+.ned-b.sep{border-left:3px solid var(--ink)}
 .ned-b.prev{margin-left:auto;border-right:0;border-left:2px solid rgba(20,19,18,.18)}
 .ned-b.prev.on{background:var(--ink);color:#fff}
 .ned-ta{display:block;width:100%;box-sizing:border-box;border:0;outline:none;resize:vertical;
@@ -3390,6 +3396,61 @@ body{
 #root .rv2 .audfix{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--r);flex:none;white-space:nowrap}
 #root .rv2 .audmore{padding:9px 14px;font-size:12px;color:var(--muted)}
 @media (max-width:640px){ #root .rv2 .audrow{grid-template-columns:minmax(0,1fr);gap:3px} }
+/* ---- notice form: the message is the content, the rest is settings ------------------------
+   The four settings used to be full-width blocks with the same weight as the message, so the one
+   thing you came to write was the smallest box on the page. */
+#root .rv2 .ned-wrap{margin-bottom:14px}
+#root .rv2 .nmeta{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;
+  border-top:3px solid var(--ink);padding-top:12px}
+#root .rv2 .nf{display:flex;flex-direction:column;gap:4px;min-width:0}
+#root .rv2 .nfl{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  display:flex;gap:6px;align-items:baseline;white-space:nowrap}
+#root .rv2 .nfl i{font-style:normal;font-size:9px;letter-spacing:.06em;opacity:.72;text-transform:none}
+#root .rv2 .nmeta input[type=date],#root .rv2 .nmeta select{font:inherit;font-size:13px;font-weight:600;
+  padding:6px 8px;border:2px solid var(--ink)!important;border-radius:0!important;background:#fff;color:var(--ink);
+  min-height:34px;width:auto;min-width:132px;box-sizing:border-box}
+#root .rv2 .nmeta select{min-width:140px}
+#root .rv2 .nfrow{display:flex;gap:14px;flex-wrap:wrap;padding-bottom:6px}
+#root .rv2 .nchk{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer}
+#root .rv2 .nchk input{width:16px;height:16px;accent-color:var(--ink);flex:none}
+#root .rv2 .nfend{margin-left:auto;flex-direction:row;align-items:center;gap:12px}
+#root .rv2 .nrm{font:inherit;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  padding:6px 10px;min-height:30px;background:none;border:2px solid var(--rt);color:var(--rt);
+  border-radius:0;cursor:pointer;white-space:nowrap}
+#root .rv2 .nrm:hover{background:var(--rt);color:#fff}
+#root .rv2 .nsave{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+@media (max-width:760px){
+  #root .rv2 .nmeta{gap:10px 12px}
+  #root .rv2 .nmeta input[type=date],#root .rv2 .nmeta select{min-width:0;width:100%}
+  #root .rv2 .nf{flex:1 1 46%}
+  #root .rv2 .nfend{flex:1 1 100%;margin-left:0;justify-content:space-between}
+}
+@media (max-width:430px){
+  #root .rv2 .nf{flex:1 1 100%}
+  /* a 16px field stops iOS zooming the whole page when it is focused */
+  #root .rv2 .nmeta input[type=date],#root .rv2 .nmeta select{font-size:16px}
+}
+/* ---- price trend on the ingredient card ---------------------------------------------------
+   Small on purpose - it answers "is this going up?" and hands the detail to AI Invoice. */
+#root .ctrend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:2px 0}
+#root .ctrend.none{font-size:12px;color:var(--muted)}
+#root .ctrend svg{flex:none;display:block}
+#root .ctxt{display:flex;flex-direction:column;gap:1px;min-width:0;font-size:11px;color:var(--muted);line-height:1.35}
+#root .ctxt b{font-size:14px;font-variant-numeric:tabular-nums}
+#root .ctlast{overflow-wrap:anywhere}
+/* ---- secondary controls are smaller than the content they act on -------------------------
+   A tool should not look as important as the thing it works on. The primary action per screen
+   (.btn.p) keeps its size on purpose. */
+#root .rv2 .btn.sm{font-size:11px;letter-spacing:.08em;padding:5px 9px;min-height:28px;border-width:2px}
+#root .rv2 .btn.sm:hover{transform:translate(-2px,-2px);box-shadow:3px 3px 0 var(--ink)}
+#root .rv2 .bar .btn:not(.p){font-size:12px;padding:8px 12px;min-height:34px;border-width:2px}
+#root .rv2 .chips .chip{font-size:12px;padding:6px 10px;min-height:32px}
+#root .rv2 .chips .chip .n{font-size:11px}
+/* destructive actions are rare and should read as small and deliberate, never as a big red slab */
+#root .rv2 .btn[style*="--rt"]{font-size:11px;letter-spacing:.1em;padding:6px 10px;min-height:30px;border-width:2px}
+/* the little link-buttons inside rows and panel headers */
+#root .rv2 .acts .btn,#root .rv2 .lp .list .btn{font-size:11px;padding:5px 9px;min-height:28px}
+#root .rv2 .sub{font-size:12px}
 </style>
 </head>
 <body>
@@ -5839,6 +5900,38 @@ const INFO_DOCS = [{"key":"veg","title":"Veg ordering — product list","text":"
    toolbar writes, so what you click is what appears here.
    overflow-wrap is not cosmetic: a pasted URL or a long unbroken word used to run straight out
    through the side of the card. */
+/* A price history at a glance for the ingredient card. Deliberately small: the readable detail
+   is on AI Invoice, this only answers "is this going up?". Inline SVG, no library. */
+function CostTrend({ing}){
+  const pts=((ing&&ing.costHistory)||[])
+    .map(h=>({d:String(h.date||""), p:Number(h.price)||0}))
+    .filter(h=>h.p>0).sort((a,b)=>a.d.localeCompare(b.d)).slice(-12);
+  const qty=Math.abs(Number(ing&&ing.purchaseQty))||1;
+  if(pts.length<2) return <div className="ctrend none">{pts.length===1?"One price on record \u2014 no trend yet.":"No price history yet."}</div>;
+  const first=pts[0].p, last=pts[pts.length-1].p;
+  const pct=first>0? ((last-first)/first)*100 : 0;
+  const up=pct>0.5, down=pct<-0.5;
+  const lo=Math.min(...pts.map(p=>p.p)), hi=Math.max(...pts.map(p=>p.p));
+  const W=132,H=30,span=(hi-lo)||1;
+  const d=pts.map((p,i)=>{
+    const x=(i/(pts.length-1))*(W-2)+1;
+    const y=H-1-((p.p-lo)/span)*(H-2);
+    return (i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1); }).join(" ");
+  const col=up?"#ec3013":down?"#1e7a46":"#141312";
+  return <div className="ctrend">
+    <svg width={W} height={H} viewBox={"0 0 "+W+" "+H} role="img"
+      aria-label={"Price trend over the last "+pts.length+" changes"}>
+      <path d={d} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={W-1} cy={(H-1-((last-lo)/span)*(H-2)).toFixed(1)} r="2.5" fill={col} />
+    </svg>
+    <div className="ctxt">
+      <b style={{color:col}}>{(pct>0?"+":"")+pct.toFixed(1)+"%"}</b>
+      <span>over {pts.length} changes</span>
+      <span className="ctlast">now {money(last/qty)}/{ing.useUnit||"unit"} · last {pts[pts.length-1].d}</span>
+    </div>
+  </div>;
+}
+
 function MiniDoc({text}){
   const lines=String(text||"").split("\n"); const out=[]; let key=0; let buf=null; let num=0;
   const WRAP={overflowWrap:"anywhere", wordBreak:"break-word", minWidth:0};
@@ -5938,28 +6031,32 @@ function NoteEditor({value, onChange, placeholder, rows, minHeight, autoFocus}){
     const next=txt.slice(0,a)+pre+str+txt.slice(b);
     put(next, a+pre.length+str.length);
   };
+  /* The label states the job and the type shows it - no H1/H2/H3 to decode. */
   const T=[
-    ["H1","Big heading",()=>lineTool(t=>"# "+t, l=>/^\s*#\s/.test(l))],
-    ["H2","Medium heading",()=>lineTool(t=>"## "+t, l=>/^\s*##\s/.test(l))],
-    ["H3","Small heading",()=>lineTool(t=>"### "+t, l=>/^\s*###\s/.test(l))],
-    ["B","Bold",()=>wrapTool("**")],
-    ["I","Italic",()=>wrapTool("*")],
-    ["\u2022 List","Bulleted list",()=>lineTool(t=>"- "+t, l=>/^\s*[-*\u2022]\s/.test(l))],
-    ["1. List","Numbered list",()=>lineTool((t,i)=>(i+1)+". "+t, l=>/^\s*\d+[.)]\s/.test(l))],
-    ["\u2610 Task","Checkbox",()=>lineTool(t=>"\u2610 "+t, l=>/^\s*[\u2610\u2611]\s/.test(l))],
-    ["\u2014","Divider",()=>insert("---\n")]
+    ["Title","t1","Biggest heading",()=>lineTool(t=>"# "+t, l=>/^\s*#\s/.test(l))],
+    ["Section","t2","Medium heading",()=>lineTool(t=>"## "+t, l=>/^\s*##\s/.test(l))],
+    ["Small","t3","Small uppercase label",()=>lineTool(t=>"### "+t, l=>/^\s*###\s/.test(l))],
+    ["B","bold sep","Bold",()=>wrapTool("**")],
+    ["I","ital","Italic",()=>wrapTool("*")],
+    ["\u2022 Bullets","sep","Bulleted list",()=>lineTool(t=>"- "+t, l=>/^\s*[-*\u2022]\s/.test(l))],
+    ["1. Numbers","","Numbered list",()=>lineTool((t,i)=>(i+1)+". "+t, l=>/^\s*\d+[.)]\s/.test(l))],
+    ["\u2610 Tick box","","Tick box the team can check off",()=>lineTool(t=>"\u2610 "+t, l=>/^\s*[\u2610\u2611]\s/.test(l))],
+    ["\u2014 Divider","sep","Horizontal rule",()=>insert("---\n")]
   ];
   return <div className="ned">
     <div className="ned-bar">
-      {T.map(([label,title,fn])=>
-        <button key={label} type="button" className={"ned-b"+(label==="B"?" bold":label==="I"?" ital":"")}
+      {T.map(([label,cls,title,fn])=>
+        <button key={label} type="button" className={"ned-b "+cls}
           title={title} aria-label={title} onMouseDown={e=>e.preventDefault()} onClick={fn}>{label}</button>)}
       <button type="button" className={"ned-b prev"+(show?" on":"")} aria-pressed={show}
         onClick={()=>setShow(v=>!v)}>{show?"Write":"Preview"}</button>
     </div>
     {show
       ? <div className="ned-prev">{txt.trim()? <MiniDoc text={txt} /> : <span className="ned-empty">Nothing written yet.</span>}</div>
+      /* data-gramm*: Grammarly and friends paint their own copy of the text on top of a
+         textarea, which shows up as doubled, offset words. They honour these attributes. */
       : <textarea ref={ta} className="ned-ta" rows={rows||10} autoFocus={autoFocus}
+          data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
           style={minHeight?{minHeight:minHeight}:undefined}
           value={txt} placeholder={placeholder||"Write the post. Use the buttons above for headings, lists and tick boxes."}
           onChange={e=>onChange(e.target.value)} />}
@@ -8812,11 +8909,27 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
             </div>
             <div className="edit">{curNotice ? <>
               <div className="lab">Title — shows on the board</div><input className="inp" style={{width:"100%", marginBottom:12}} value={curNotice.title||""} onChange={e=>setNoticeField(curNotice.id,"title",e.target.value)} placeholder="Notice title" />
-              <div className="lab">Message</div><div style={{marginBottom:12}}><NoteEditor value={curNotice.body||""} onChange={v=>setNoticeField(curNotice.id,"body",v)} minHeight={170} placeholder="Write the notice. Leave it blank for a title-only notice." /></div>
-              <div className="kv"><div><div className="lab">From</div><input type="date" className="inp" style={{width:"100%"}} value={curNotice.from||""} onChange={e=>setNoticeField(curNotice.id,"from",e.target.value)} /></div><div><div className="lab">Until (blank = until removed)</div><input type="date" className="inp" style={{width:"100%"}} value={curNotice.until||""} onChange={e=>setNoticeField(curNotice.id,"until",e.target.value)} /></div>
-                <div><div className="lab">Store</div><select className="inp" style={{width:"100%"}} value={curNotice.branch||""} onChange={e=>setNoticeField(curNotice.id,"branch",e.target.value)}><option value="">All stores</option>{(state.branches||[]).map(b=><option key={b.id} value={b.name}>{b.name}</option>)}</select></div>
-                <div><div className="lab">Flags</div><label className="chk" style={{display:"inline-flex", alignItems:"center", gap:8, marginRight:16, fontWeight:600}}><input type="checkbox" checked={!!curNotice.pin} onChange={e=>setNoticeField(curNotice.id,"pin",e.target.checked)} />Pin to top</label><label className="chk" style={{display:"inline-flex", alignItems:"center", gap:8, fontWeight:600}}><input type="checkbox" checked={curNotice.tone==="urgent"} onChange={e=>setNoticeField(curNotice.id,"tone",e.target.checked?"urgent":"info")} />Urgent</label></div></div>
-              <div style={{display:"flex", justifyContent:"space-between", marginTop:18}}><button type="button" className="btn" style={{borderColor:"var(--rt)", color:"var(--rt)"}} onClick={()=>removeNotice(curNotice.id)}>Remove notice</button><span className="sub" style={{alignSelf:"center"}}>saves as you type</span></div>
+              <div className="lab">Message</div><div className="ned-wrap"><NoteEditor value={curNotice.body||""} onChange={v=>setNoticeField(curNotice.id,"body",v)} minHeight="min(52vh,460px)" placeholder="Write the notice. Leave it blank for a title-only notice." /></div>
+              {/* settings, not content: small labels, fields sized to their contents, and the
+                  destructive button reduced to match. Wraps 4 -> 2 -> 1 on the way down. */}
+              <div className="nmeta">
+                <label className="nf"><span className="nfl">From</span>
+                  <input type="date" value={curNotice.from||""} onChange={e=>setNoticeField(curNotice.id,"from",e.target.value)} /></label>
+                <label className="nf"><span className="nfl">Until <i>blank = until removed</i></span>
+                  <input type="date" value={curNotice.until||""} onChange={e=>setNoticeField(curNotice.id,"until",e.target.value)} /></label>
+                <label className="nf"><span className="nfl">Store</span>
+                  <select value={curNotice.branch||""} onChange={e=>setNoticeField(curNotice.id,"branch",e.target.value)}>
+                    <option value="">All stores</option>{(state.branches||[]).map(b=><option key={b.id} value={b.name}>{b.name}</option>)}</select></label>
+                <div className="nf nflags"><span className="nfl">Flags</span>
+                  <div className="nfrow">
+                    <label className="nchk"><input type="checkbox" checked={!!curNotice.pin} onChange={e=>setNoticeField(curNotice.id,"pin",e.target.checked)} />Pin to top</label>
+                    <label className="nchk"><input type="checkbox" checked={curNotice.tone==="urgent"} onChange={e=>setNoticeField(curNotice.id,"tone",e.target.checked?"urgent":"info")} />Urgent</label>
+                  </div></div>
+                <div className="nf nfend">
+                  <button type="button" className="nrm" onClick={()=>removeNotice(curNotice.id)}>Remove notice</button>
+                  <span className="nsave">saves as you type</span>
+                </div>
+              </div>
             </> : <div className="empty">Pick a notice on the left, or post a new one.</div>}</div>
           </div>
           <label style={{display:"flex", alignItems:"center", gap:10, marginTop:16, fontWeight:600}}><input type="checkbox" checked={state.noticeFromMeetings!==false} onChange={e=>update(s=>{ s.noticeFromMeetings=e.target.checked; })} style={{width:20, height:20, accentColor:"var(--ink)"}} />Put the last team meeting on the board automatically <span className="sub" style={{display:"inline"}}>· one notice per store, edited in Team Meeting</span></label>
@@ -9009,6 +9122,7 @@ function IngredientEditor({ing, onClose, onSave, onDelete, panel, onDraft}){
       <Field label="Purchase price ($) — price for one pack above"><input type="number" inputMode="decimal" className="inp" value={f.purchasePrice} onChange={e=>set("purchasePrice",Number(e.target.value))} /></Field>
       <Field label="Allergens"><AllergenPicker value={f.allergens||[]} onChange={v=>set("allergens",v)} /></Field>
       {(EACH_U.has(normU(f.useUnit))||EACH_U.has(normU(f.purchaseUnit))||Number(f.gramsPerEach)>0) && <Field label="Grams per each (weight-priced pieces, e.g. 1 avocado = 200)"><input type="number" className="inp" value={f.gramsPerEach||0} onChange={e=>{ const g=Number(e.target.value); setTouched(true); setF(p=>{ const c=packToUse(Number(p.packSize),p.purchaseUnit,p.useUnit,g); return {...p, gramsPerEach:g, purchaseQty:(c!=null&&c>0)?+Number(c).toFixed(6):p.purchaseQty}; }); }} /></Field>}
+      <Field label="Price trend"><CostTrend ing={f} /></Field>
       <Field label="Unit cost (calculated)"><div className="py-2 text-stone-700 font-medium">{money(unitCost(f))} / {f.useUnit||"?"}{(Number(f.packSize)>0&&Number(f.purchasePrice)>0)? <span className="text-stone-500 font-normal">{"  ·  "+money(Number(f.purchasePrice)/Number(f.packSize))+" / "+(f.purchaseUnit||"pack")}</span>:null}</div></Field>
     </div>
     <div className="mt-4"><div className="text-xs font-medium text-stone-500 mb-2">Suppliers</div>
@@ -10548,7 +10662,7 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
           One notice per store, built from that store's most recent meeting \u2014 open actions as tick-boxes plus what was covered. The next meeting at that store replaces it. Edit the content in Team Meeting, not here.
         </div>
         {autoNotices.length===0
-          ? <div className="text-sm text-stone-400">No meeting recorded yet \u2014 run one in Team Meeting and it lands on the board.</div>
+          ? <div className="text-sm text-stone-400">No meeting recorded yet — run one in Team Meeting and it lands on the board.</div>
           : <div className="space-y-2">
             {autoNotices.map(n=>(<div key={n.id} className="rounded-xl p-3" style={{border:"1px dashed var(--color-hairline-alpha)", background:"var(--color-canvas)"}}>
               <div className="flex items-baseline justify-between gap-3 flex-wrap">

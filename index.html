@@ -8,33 +8,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- Firebase compat SDK — shared RCC project (hideout-recipe-cost): staff login + postcards + photos. Added 2026-07-23. -->
-<!-- Firebase is only used by the Postcards staff board (More > Open staff board). Loading it in
-     <head> cost 565-762ms per script on every single visit, before anything was on screen, for a
-     panel most visits never open. It now loads the first time the board is opened - see
-     loadFirebase() beside initFb(). -->
-<script>
-window.__loadFirebase = (function(){
-  var p = null;
-  return function(){
-    if (window.firebase && window.firebase.initializeApp) return Promise.resolve(true);
-    if (p) return p;
-    var base = "https://www.gstatic.com/firebasejs/10.12.2/";
-    var files = ["firebase-app-compat.js","firebase-auth-compat.js","firebase-firestore-compat.js","firebase-storage-compat.js"];
-    /* in order: auth/firestore/storage all register themselves onto the app module */
-    p = files.reduce(function(chain, f){
-      return chain.then(function(){
-        return new Promise(function(res, rej){
-          var el = document.createElement("script");
-          el.src = base + f; el.async = false;
-          el.onload = res; el.onerror = function(){ rej(new Error("could not load " + f)); };
-          document.head.appendChild(el);
-        });
-      });
-    }, Promise.resolve()).then(function(){ return true; }).catch(function(){ p = null; return false; });
-    return p;
-  };
-})();
-</script>
+<!-- Firebase must load here, synchronously. staff-gate.js (the login gate) calls
+     firebase.initializeApp as soon as it runs; deferring these froze the app at "Loading data..."
+     on 2026-09-13. The Postcards board also uses them. Do not defer without fixing the gate. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <!-- Staff Postcards widget — single canonical source (deploys alongside this file). Loads first so the older inline copy below self-disables via its __HIDEOUT_POSTCARDS__ guard. -->
 <script>(function(){var s=document.createElement("script");s.src="postcards.js?v="+Math.floor(Date.now()/6e4);document.head.appendChild(s);})();</script>
 <!-- Staff Gate — soft Google-login identity gate (same RCC project/session as postcards). Integrated 2026-07-24 after live verification on ordering-gate-test.html. -->
@@ -3807,14 +3787,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
     document.body.appendChild(ov);
     ov.addEventListener("click",function(e){ if(e.target===ov) close(); });
     document.getElementById("pc-close").onclick=close;
-    /* fetch the SDK now that the board is actually open, then start it */
-    if(!initFb()){
-      if(!booting){
-        booting=true;
-        var start=function(){ if(!initFb()){ var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } };
-        if(window.__loadFirebase) window.__loadFirebase().then(start); else start();
-      }
-    }
+    if(!initFb()){ if(!booting){ booting=true; var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } }
   }
 
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",mount); else mount();

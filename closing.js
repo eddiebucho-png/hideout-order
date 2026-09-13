@@ -536,7 +536,7 @@
     /* a check row: the whole thing is the target */ + ".clo .row{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid var(--line);padding:10px 14px;min-height:64px;font:inherit;color:inherit;cursor:pointer}" + ".clo .row:active{background:rgba(242,193,0,.25)}" + ".clo .row .box{width:44px;height:44px;border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;background:#fff;flex:none}" + ".clo .row.on .box{background:var(--ok);border-color:var(--ok);color:#fff}" + ".clo .row.na .box{background:var(--line);border-color:var(--muted);color:#fff;font-size:13px}" + ".clo .row .lb{font-size:16px;font-weight:600;line-height:1.25}" + ".clo .row.on .lb{color:var(--muted)}" + ".clo .row .hint{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-top:3px;line-height:1.35}" + ".clo .row .tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:2px solid var(--b);color:var(--b);padding:1px 6px;white-space:nowrap}" + ".clo .row .skip{font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:none;border:2px solid var(--line);padding:6px 10px;cursor:pointer;min-height:44px;min-width:52px}" /* 44px floor: measured 46x34 on a 375px phone, and it sits next to the tick box */
     /* temperature row */ + ".clo .trow{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:#fff;min-height:68px}" + ".clo .trow .nm{font-size:16px;font-weight:600}" + ".clo .trow .lim{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:2px}" + ".clo .tin{display:flex;align-items:center;border:3px solid var(--ink);background:#fff;height:52px}" + ".clo .tin input{width:100%;min-width:0;border:0;outline:none;background:transparent;font:inherit;font-size:22px;font-weight:700;text-align:right;padding:0 4px 0 8px;font-variant-numeric:tabular-nums}" + ".clo .tin .u{font-size:14px;font-weight:700;color:var(--muted);padding-right:9px}" + ".clo .tin.ok{border-color:var(--ok)} .clo .tin.warn{border-color:var(--y);box-shadow:inset 0 0 0 2px var(--y)} .clo .tin.bad{border-color:var(--rt);background:#fdeceb}" + ".clo .alert{background:#fdeceb;border-left:6px solid var(--rt);padding:12px 14px;margin:0;font-size:14px;line-height:1.45}" + ".clo .alert b{font-weight:700}" + ".clo .alert textarea,.clo .fld textarea,.clo .fld input{width:100%;font:inherit;font-size:15px;border:2px solid var(--ink);background:#fff;padding:9px 10px;margin-top:8px;resize:vertical}" + ".clo .fld{padding:12px 14px}" + ".clo .fld label{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}"
     /* buttons */ + ".clo .btn{font:inherit;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.04em;padding:12px 16px;border:3px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer;min-height:48px}" + ".clo .btn:hover{background:var(--y)} .clo .btn.p{background:var(--r);border-color:var(--r);color:#fff} .clo .btn.p:hover{background:var(--rt);border-color:var(--rt)}" + ".clo .btn.sm{padding:7px 10px;font-size:12px;min-height:38px}" + ".clo .btn[disabled]{opacity:.45;cursor:not-allowed}"
-    /* the bottom bar — the only thing that matters at 10pm */ + "/* one page: five folding sections instead of five screens */" + ".clo .sec{border-bottom:3px solid var(--ink)}" + ".clo .sec:last-of-type{border-bottom:0}" + ".clo .sech{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;font-size:15px;font-weight:700;letter-spacing:.02em;background:#fff;color:var(--ink);border:0;padding:14px;min-height:56px;cursor:pointer;position:sticky;top:var(--stickytop,164px);z-index:5}" + ".clo .sec.clear .sech{background:var(--paper);color:var(--muted)}" + ".clo .sech .car{flex:none;font-size:17px;line-height:1;width:12px}" + ".clo .sech .t{flex:1;min-width:0}" + ".clo .sech .n{flex:none;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--rt);color:#fff;padding:3px 8px}" + ".clo .sech .n.done{background:var(--ok)}" + ".clo .secb{border-top:2px solid var(--line)}" + "/* the jump strip scrolls the page; it no longer swaps screens */" + ".clo .nav.jump button{white-space:nowrap}" + "/* a tap that drifts must still press the button, not select the label */" + ".clo button,.clo .sech,.clo label{-webkit-user-select:none;user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(242,193,0,.35)}" + "/* text you might actually want to copy stays selectable */" + ".clo input,.clo textarea,.clo .note,.clo .hint{-webkit-user-select:text;user-select:text}" + "/* three states in words, not an abbreviation nobody can read at 10pm */" + ".clo .row.na .lb{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}" + ".clo .row .nachip{flex:none;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:2px solid var(--line);padding:3px 7px;white-space:nowrap}" + ".clo .legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 14px;border-bottom:2px solid var(--line);background:var(--paper);font-size:12px;color:var(--muted)}" + ".clo .legend b{color:var(--ink);font-weight:700}" + ".clo .legend span{display:inline-flex;align-items:center;gap:6px}" + "@media (max-width:430px){.clo .row .skip{font-size:11px;padding:6px 8px;min-width:0}}" + "/* the one note, first on the page */" + ".clo .note-first .sech{background:var(--ink);color:#f3f1ec}" + ".clo .note-first .sech .n.opt{background:transparent;border:2px solid rgba(243,241,236,.45);color:#f3f1ec}" + ".clo .notebox{width:100%;box-sizing:border-box;font:inherit;font-size:16px;line-height:1.5;padding:12px;border:3px solid var(--ink);background:#fff;color:var(--ink);resize:vertical;min-height:104px}" + ".clo .notebox:focus{outline:none;box-shadow:4px 4px 0 var(--y)}" + ".clo .prepchk{display:flex;align-items:center;gap:10px;margin-top:12px;min-height:48px;font-size:15px;font-weight:700;cursor:pointer}" + ".clo .prepchk input{width:26px;height:26px;flex:none;accent-color:var(--ink)}" + ".clo .foot{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:#f3f1ec;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 -4px 0 var(--y)}" + ".clo .foot .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.3}" + ".clo .foot .txt b{display:block;font-size:15px;font-weight:700}" + ".clo .foot .go{flex:none;font:inherit;font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border:3px solid var(--y);background:var(--y);color:var(--ink);padding:13px 18px;cursor:pointer;min-height:54px}" + ".clo .foot .go.wait{background:transparent;color:#f3f1ec;border-color:rgba(243,241,236,.5)}" + ".clo .foot .go[disabled]{opacity:.5}"
+    /* the bottom bar — the only thing that matters at 10pm */ + "/* one page: five folding sections instead of five screens */" + ".clo .sec{border-bottom:3px solid var(--ink)}" + ".clo .sec:last-of-type{border-bottom:0}" + ".clo .sech{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;font-size:15px;font-weight:700;letter-spacing:.02em;background:#fff;color:var(--ink);border:0;padding:14px;min-height:56px;cursor:pointer;position:sticky;top:var(--stickytop,164px);z-index:5}" + ".clo .sec.clear .sech{background:var(--paper);color:var(--muted)}" + ".clo .sech .car{flex:none;font-size:17px;line-height:1;width:12px}" + ".clo .sech .t{flex:1;min-width:0}" + ".clo .sech .n{flex:none;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--rt);color:#fff;padding:3px 8px}" + ".clo .sech .n.done{background:var(--ok)}" + ".clo .secb{border-top:2px solid var(--line)}" + "/* the jump strip scrolls the page; it no longer swaps screens */" + ".clo .nav.jump button{white-space:nowrap}" + "/* a tap that drifts must still press the button, not select the label */" + ".clo button,.clo .sech,.clo label{-webkit-user-select:none;user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(242,193,0,.35)}" + "/* text you might actually want to copy stays selectable */" + ".clo input,.clo textarea,.clo .note,.clo .hint{-webkit-user-select:text;user-select:text}" + "/* three states in words, not an abbreviation nobody can read at 10pm */" + ".clo .row.na .lb{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}" + ".clo .row .nachip{flex:none;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:2px solid var(--line);padding:3px 7px;white-space:nowrap}" + ".clo .legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 14px;border-bottom:2px solid var(--line);background:var(--paper);font-size:12px;color:var(--muted)}" + ".clo .legend b{color:var(--ink);font-weight:700}" + ".clo .legend span{display:inline-flex;align-items:center;gap:6px}" + "@media (max-width:430px){.clo .row .skip{font-size:11px;padding:6px 8px;min-width:0}}" + "/* the one note, first on the page */" + ".clo .note-first .sech{background:var(--ink);color:#f3f1ec}" + ".clo .note-first .sech .n.opt{background:transparent;border:2px solid rgba(243,241,236,.45);color:#f3f1ec}" + ".clo .notebox{width:100%;box-sizing:border-box;font:inherit;font-size:16px;line-height:1.5;padding:12px;border:3px solid var(--ink);background:#fff;color:var(--ink);resize:vertical;min-height:104px}" + ".clo .notebox:focus{outline:none;box-shadow:4px 4px 0 var(--y)}" + ".clo .prepchk{display:flex;align-items:center;gap:10px;margin-top:12px;min-height:48px;font-size:15px;font-weight:700;cursor:pointer}" + ".clo .prepchk input{width:26px;height:26px;flex:none;accent-color:var(--ink)}" + "/* the first section header does not stick - stuck, its offset pushed it down over the note box */" + ".clo .sech.still{position:static}" + "/* wastage + closed-by side by side where there is room, stacked on a phone */" + ".clo .topfields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,220px);gap:12px;margin-top:12px}" + ".clo .topfields .fld{margin:0}" + "@media (max-width:520px){.clo .topfields{grid-template-columns:minmax(0,1fr)}}" + ".clo .foot{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:#f3f1ec;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 -4px 0 var(--y)}" + ".clo .foot .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.3}" + ".clo .foot .txt b{display:block;font-size:15px;font-weight:700}" + ".clo .foot .go{flex:none;font:inherit;font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border:3px solid var(--y);background:var(--y);color:var(--ink);padding:13px 18px;cursor:pointer;min-height:54px}" + ".clo .foot .go.wait{background:transparent;color:#f3f1ec;border-color:rgba(243,241,236,.5)}" + ".clo .foot .go[disabled]{opacity:.5}"
     /* lists (prep / order / records) */ + ".clo .lrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);background:#fff;min-height:58px}" + ".clo .lrow .box{width:38px;height:38px;border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer;background:#fff}" + ".clo .lrow.on .box{background:var(--ok);border-color:var(--ok);color:#fff}" + ".clo .lrow.on .nm{text-decoration:line-through;color:var(--muted)}" + ".clo .lrow .nm{font-size:16px;font-weight:600}" + ".clo .lrow .sub{display:block;font-size:12.5px;font-weight:400;color:var(--muted)}" + ".clo .lrow .x{background:none;border:0;color:var(--r);font-size:20px;font-weight:700;cursor:pointer;padding:6px 10px;line-height:1}" + ".clo .add{display:flex;gap:8px;padding:12px 14px;background:var(--paper);border-bottom:1px solid var(--line)}" + ".clo .add input{flex:1;min-width:0;font:inherit;font-size:16px;border:3px solid var(--ink);padding:10px;background:#fff}" + ".clo .empty{padding:26px 14px;color:var(--muted);font-weight:400;font-size:14.5px;line-height:1.5}" + ".clo .card{border:3px solid var(--ink);background:#fff;margin:14px}" + ".clo .card h4{margin:0;padding:11px 14px;border-bottom:3px solid var(--ink);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}" + ".clo .kv{display:flex;justify-content:space-between;gap:12px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:15px}" + ".clo .kv b{font-weight:700}" + ".clo .pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:2px solid var(--ink);padding:2px 7px}" + ".clo .pill.ok{background:var(--ok);border-color:var(--ok);color:#fff} .clo .pill.bad{background:var(--rt);border-color:var(--rt);color:#fff} .clo .pill.warn{background:var(--y);border-color:var(--y)}" + ".clo .done{padding:44px 20px;text-align:center}" + ".clo .done .big{font-size:34px;font-weight:700;line-height:1.1;letter-spacing:-.02em}" + ".clo .done .sm{color:var(--muted);font-weight:400;margin:12px auto 22px;max-width:46ch;line-height:1.5;font-size:15px}" + "@media (max-width:520px){.clo .trow{grid-template-columns:minmax(0,1fr) 112px}.clo .row{grid-template-columns:52px minmax(0,1fr) auto;gap:10px;padding:10px}.clo .foot .txt b{font-size:14px}.clo .done .big{font-size:26px}}" + "@media (prefers-reduced-motion:reduce){.clo *{transition:none!important;animation:none!important}}";
     function CloStyle() {
       useEffect(function () {
@@ -612,10 +612,10 @@
       onToggle,
       onNa
     }) {
-      /* aria-checked="mixed" for "not tonight": the item is neither done nor outstanding, and saying
-         "false" would report it as unanswered to anyone using a screen reader.
-         The keydown guard matters more than it looks - without it, Enter on the "Not tonight" button
-         bubbled up and ticked the row as well, so one keypress gave two different answers. */
+      /* Two states, ticked or not - Ju An 2026-09-13: "그냥 체크하면 이미 했다는 건데 뭐가 더 필요한건데".
+         A record written before that can still carry "na"; it renders as answered (mixed) and exports
+         as it always did, but nothing here can create a new one.
+         The keydown guard stays: without it a key pressed on a child inside the row ticked the row. */
       return /*#__PURE__*/React.createElement("div", {
         className: "row" + (on ? " on" : "") + (na ? " na" : ""),
         role: "checkbox",
@@ -646,14 +646,7 @@
         className: "tag"
       }, tag) : null, na ? /*#__PURE__*/React.createElement("span", {
         className: "nachip"
-      }, "not tonight") : null, onNa ? /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        className: "skip",
-        onClick: function (e) {
-          e.stopPropagation();
-          onNa();
-        }
-      }, na ? "Undo" : "Not tonight") : null));
+      }, "n/a (old record)") : null));
     }
   
     /* ── step 1 · temperatures ──────────────────────────────────────────────────────────────
@@ -963,7 +956,7 @@
         className: "note"
       }, blurb) : null, tasks.length === 0 && /*#__PURE__*/React.createElement("div", {
         className: "empty"
-      }, "Nothing due tonight in this section."), tasks.map(function (t) {
+      }, "Nothing due today in this section."), tasks.map(function (t) {
         return /*#__PURE__*/React.createElement(F, {
           key: t.id
         }, /*#__PURE__*/React.createElement(Check, {
@@ -994,23 +987,45 @@
       rec,
       set
     }) {
+      /* One sweep covers the whole walk: everything that must be OFF and everything that must
+         still be RUNNING. "all off" used to leave the fridges unconfirmed, which meant a second
+         pass through the same list - Ju An 2026-09-13. */
       var allOff = cfg.equipment.length > 0 && cfg.equipment.every(function (e) {
         return rec.equipment[e.id];
       });
+      var allOn = (cfg.leaveOn || []).every(function (l) {
+        return rec.leaveOn[l.id];
+      });
+      var secure = cfg.tasks && cfg.tasks.secure || [];
+      var allSecure = secure.every(function (t) {
+        return rec.checks[t.id] === true;
+      });
+      var allDone = allOff && allOn && allSecure;
+      /* the whole section in one tap: off, still-running, and secure - measured 2026-09-13, the
+         first version left the three Secure lines behind */
+      function sweepAll() {
+        set(function (r) {
+          r.equipment = Object.assign({}, r.equipment);
+          r.leaveOn = Object.assign({}, r.leaveOn);
+          r.checks = Object.assign({}, r.checks);
+          cfg.equipment.forEach(function (e) {
+            r.equipment[e.id] = !allDone;
+          });
+          (cfg.leaveOn || []).forEach(function (l) {
+            r.leaveOn[l.id] = !allDone;
+          });
+          secure.forEach(function (t) {
+            r.checks[t.id] = allDone ? false : true;
+          });
+        });
+      }
       return /*#__PURE__*/React.createElement(F, null, /*#__PURE__*/React.createElement("div", {
         className: "grp"
-      }, "Turn off", cfg.equipment.length > 1 && /*#__PURE__*/React.createElement("button", {
+      }, "Turn off", cfg.equipment.length + (cfg.leaveOn || []).length > 1 && /*#__PURE__*/React.createElement("button", {
         type: "button",
         className: "sweep",
-        onClick: function () {
-          set(function (r) {
-            r.equipment = Object.assign({}, r.equipment);
-            cfg.equipment.forEach(function (e) {
-              r.equipment[e.id] = !allOff;
-            });
-          });
-        }
-      }, allOff ? "clear" : "all off")), /*#__PURE__*/React.createElement("p", {
+        onClick: sweepAll
+      }, allDone ? "clear" : "all checked")), /*#__PURE__*/React.createElement("p", {
         className: "note"
       }, "Walk the line and look at each one. Gas last, after the extraction has pulled the heat out."), cfg.equipment.length === 0 && /*#__PURE__*/React.createElement("div", {
         className: "empty"
@@ -1034,7 +1049,7 @@
         }
       }, "Leave running"), /*#__PURE__*/React.createElement("p", {
         className: "note"
-      }, "Check these are still on before you hit the lights. A fridge switched off tonight is a bin full of stock in the morning."), cfg.leaveOn.map(function (l) {
+      }, "Check these are still on before you leave. A fridge switched off at close is a bin full of stock in the morning."), cfg.leaveOn.map(function (l) {
         return /*#__PURE__*/React.createElement(Check, {
           key: l.id,
           on: !!rec.leaveOn[l.id],
@@ -1083,41 +1098,9 @@
       set,
       left
     }) {
-      return /*#__PURE__*/React.createElement(F, null, /*#__PURE__*/React.createElement("div", {
-        className: "grp"
-      }, "Anything worth passing on"), /*#__PURE__*/React.createElement("div", {
-        className: "fld"
-      }, /*#__PURE__*/React.createElement("label", {
-        htmlFor: "clo-waste"
-      }, "Wastage tonight"), /*#__PURE__*/React.createElement("textarea", {
-        id: "clo-waste",
-        rows: 2,
-        value: rec.waste || "",
-        placeholder: "What went in the bin and roughly how much.",
-        onChange: function (e) {
-          var v = e.target.value;
-          set(function (r) {
-            r.waste = v;
-          });
-        }
-      })), /*#__PURE__*/React.createElement("div", {
-        className: "grp"
-      }, "Sign off"), /*#__PURE__*/React.createElement("div", {
-        className: "fld"
-      }, /*#__PURE__*/React.createElement("label", {
-        htmlFor: "clo-by"
-      }, "Who closed tonight"), /*#__PURE__*/React.createElement("input", {
-        id: "clo-by",
-        value: rec.by || "",
-        placeholder: "Your name",
-        autoComplete: "name",
-        onChange: function (e) {
-          var v = e.target.value;
-          set(function (r) {
-            r.by = v;
-          });
-        }
-      })), left.length > 0 && /*#__PURE__*/React.createElement("div", {
+      /* Everything a person writes - note, wastage, closed by - sits at the top of the sheet now,
+         written first and read first in the email. This is the summary before the button. */
+      return /*#__PURE__*/React.createElement(F, null, left.length > 0 ? /*#__PURE__*/React.createElement("div", {
         className: "alert"
       }, /*#__PURE__*/React.createElement("b", null, left.length, " thing", left.length > 1 ? "s" : "", " still open."), " You can send anyway \u2014 an honest gap beats a tick that was never true \u2014 but the email and the council export will both show it.", /*#__PURE__*/React.createElement("div", {
         style: {
@@ -1128,7 +1111,13 @@
         return /*#__PURE__*/React.createElement("div", {
           key: i
         }, "\xB7 ", o.where, ": ", o.what);
-      }), left.length > 6 ? /*#__PURE__*/React.createElement("div", null, "\xB7 and ", left.length - 6, " more") : null)));
+      }), left.length > 6 ? /*#__PURE__*/React.createElement("div", null, "\xB7 and ", left.length - 6, " more") : null)) : /*#__PURE__*/React.createElement("div", {
+        className: "alert",
+        style: {
+          borderLeftColor: "var(--ok)",
+          background: "#eef6f1"
+        }
+      }, /*#__PURE__*/React.createElement("b", null, "Everything is answered."), rec.by ? " Signed by " + rec.by + "." : " Add your name at the top before you send."));
     }
   
     /* ── prep and order tabs ─────────────────────────────────────────────────────────────── */
@@ -1323,7 +1312,7 @@
         disabled: busy || !rows.length
       }, "Export for council (CSV)")), rows.length === 0 && /*#__PURE__*/React.createElement("div", {
         className: "empty"
-      }, "Nothing recorded yet for this venue. Tonight\u2019s close will be the first."), rows.map(function (r) {
+      }, "Nothing recorded yet for this venue. Today\u2019s close will be the first."), rows.map(function (r) {
         var left = outstanding(r, cfg, r.date);
         var breaches = cfg.units.filter(function (u) {
           return tempState(u, r.temps && r.temps[u.id] && r.temps[u.id].v) === "bad";
@@ -2030,7 +2019,7 @@
           } catch (e) {}
           setSentMsg(outcome.indexOf("failed") === 0 ? "Saved. The server could not send it (" + outcome.slice(7) + ") — your mail app has been opened with the report instead." : "Saved. Your mail app has been opened with the report — press send.");
         } else if (outcome === "no-address") {
-          setSentMsg("Saved. No supervisor email is set yet — add one in Setup and tonight's report can go out automatically.");
+          setSentMsg("Saved. No supervisor email is set yet — add one in Setup and the report can go out automatically.");
         } else {
           setSentMsg("Saved and emailed to " + to + ".");
         }
@@ -2040,7 +2029,7 @@
         className: "clo"
       }, /*#__PURE__*/React.createElement(K.CloStyle, null), /*#__PURE__*/React.createElement("div", {
         className: "empty"
-      }, "Loading tonight\u2019s sheet\u2026"));
+      }, "Loading the closing sheet\u2026"));
       var isToday = date === localISO();
       var finishedAlready = !!rec.finishedAt;
       return /*#__PURE__*/React.createElement("div", {
@@ -2068,7 +2057,7 @@
         return /*#__PURE__*/React.createElement("option", {
           key: d,
           value: d
-        }, n === 0 ? "Tonight" : n === 1 ? "Yesterday" : prettyDate(d));
+        }, n === 0 ? "Today" : n === 1 ? "Yesterday" : prettyDate(d));
       })), /*#__PURE__*/React.createElement("button", {
         type: "button",
         className: "btn sm",
@@ -2148,7 +2137,7 @@
       }, /*#__PURE__*/React.createElement("b", null, "This night is already signed off"), " by ", rec.by || "someone", rec.finishedAt ? " at " + hhmm(new Date(rec.finishedAt)) : "", ". You can still correct it \u2014 save it again to update the record."), /*#__PURE__*/React.createElement("section", {
         className: "sec note-first"
       }, /*#__PURE__*/React.createElement("div", {
-        className: "sech",
+        className: "sech still",
         style: {
           cursor: "default"
         }
@@ -2175,7 +2164,39 @@
             r.handover = v;
           });
         }
-      }), /*#__PURE__*/React.createElement("label", {
+      }), /*#__PURE__*/React.createElement("div", {
+        className: "topfields"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "fld"
+      }, /*#__PURE__*/React.createElement("label", {
+        htmlFor: "clo-waste"
+      }, "Wastage"), /*#__PURE__*/React.createElement("textarea", {
+        id: "clo-waste",
+        rows: 2,
+        value: rec.waste || "",
+        placeholder: "What went in the bin and roughly how much.",
+        onChange: function (e) {
+          var v = e.target.value;
+          set(function (r) {
+            r.waste = v;
+          });
+        }
+      })), /*#__PURE__*/React.createElement("div", {
+        className: "fld"
+      }, /*#__PURE__*/React.createElement("label", {
+        htmlFor: "clo-by"
+      }, "Closed by"), /*#__PURE__*/React.createElement("input", {
+        id: "clo-by",
+        value: rec.by || "",
+        placeholder: "Your name",
+        autoComplete: "name",
+        onChange: function (e) {
+          var v = e.target.value;
+          set(function (r) {
+            r.by = v;
+          });
+        }
+      }))), /*#__PURE__*/React.createElement("label", {
         className: "prepchk"
       }, /*#__PURE__*/React.createElement("input", {
         type: "checkbox",
@@ -2188,7 +2209,7 @@
         }
       }), /*#__PURE__*/React.createElement("span", null, "Prep list for tomorrow is written")))), /*#__PURE__*/React.createElement("div", {
         className: "legend"
-      }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "\u2713"), " done"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "Not tonight"), " didn\u2019t apply \u2014 counts as answered"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "blank"), " goes out as NOT DONE")), /*#__PURE__*/React.createElement("div", {
+      }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "\u2713"), " done"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "blank"), " goes out as NOT DONE")), /*#__PURE__*/React.createElement("div", {
         className: "nav jump",
         style: {
           position: "static",

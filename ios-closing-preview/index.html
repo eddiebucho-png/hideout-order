@@ -3422,15 +3422,25 @@ function App(){
         {/* CLO-BTN - opens the separated closing sheet over this page. It is not a tab because it
             is not a place you browse to; it is a job you start, from either app. */}
         <button type="button" className="clobtn" title="Closing checklist" aria-label="Open the closing checklist"
-          onClick={()=>{ const M=window.HideoutClosing;
-            if(!M||!M.open){ alert("The closing sheet is still loading - try again in a second."); return; }
+          onClick={()=>{
+            /* Not here yet - slow network, or a page cached before the head tag was fixed.
+               Fetch it now and open when it lands; a dead-end alert is never the answer
+               to "I pressed the button". */
+            const openIt=()=>{ const M=window.HideoutClosing;
             const q=(p)=>"?action=closingReport&date="+encodeURIComponent(p.date)+"&loc="+encodeURIComponent(p.branch)+"&to="+encodeURIComponent(p.to)+(p.cc?"&cc="+encodeURIComponent(p.cc):"");
             M.open({
               store:{ get:(k)=>C.kvGet(k), set:(k,v)=>C.kvSet(k,v), getBatch:(keys)=>C.kvGetBatch(keys) },
               branch: ctx.branch,
               locations: ctx.locations || (window.__ORD_CFG&&window.__ORD_CFG.locations) || C.DEFAULT_LOCATIONS,
               sendReport: C.cfg.backendUrl? ((p)=>fetch(C.withAuth(C.cfg.backendUrl+q(p)),{cache:"no-store"}).then(r=>r.json()).then(j=>({ok:!!(j&&j.ok), error:j&&j.error}))) : null
-            }); }}>Closing</button>
+            }); };
+            if(window.HideoutClosing && window.HideoutClosing.open){ openIt(); return; }
+            const s=document.createElement("script");
+            s.src="https://order.hideoutdb.com/closing.js?v="+Math.floor(Date.now()/6e4);
+            s.onload=openIt;
+            s.onerror=()=>alert("Could not load the closing sheet. Check the connection and try again.");
+            document.head.appendChild(s);
+          }}>Closing</button>
         {LOGO?<img src={LOGO} alt="" style={{height:26,filter:"brightness(0) invert(1)",flex:"none"}} />:<span style={{fontWeight:700}}>Hideout</span>}
         <button type="button" className="locb" onClick={()=>setSheet("where")} title="Switch branch or department"><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(locations.find(l=>l.id===branch)||{}).name?String(locations.find(l=>l.id===branch).name).replace(/\s*\(.*\)/,""):"Select branch"}</span><small>{department==="barista"?"Barista":"Chef"}</small><span aria-hidden="true">▾</span></button>
         <span style={{marginLeft:"auto"}}></span>

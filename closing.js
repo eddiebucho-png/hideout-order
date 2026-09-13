@@ -42,8 +42,7 @@
       ".clobtn::before{content:'☾';font-size:15px;line-height:1;transform:rotate(-18deg)}" +
       ".clobtn:hover{background:#f2c100;color:#141312}" +
       ".clobtn:active{transform:scale(.96)}" +
-      "@media (max-width:560px){.clobtn{padding:0 10px;letter-spacing:.06em}" +
-      ".clobtn .lbl{display:none}}" +
+      "@media (max-width:560px){.clobtn{padding:0 10px;letter-spacing:.06em;font-size:11px}}" +
       "@media (prefers-reduced-motion:reduce){.clobtn{transition:none}.clobtn:active{transform:none}}";
     document.head.appendChild(st);
   })();

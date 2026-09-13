@@ -1863,11 +1863,13 @@ function TodaySummary({ctx}){
       return <Card style={{marginBottom:16,borderLeft:"4px solid var(--color-primary)"}}>
         <div className="u-label" style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><span aria-hidden="true" style={{fontSize:14,lineHeight:1}}>🥐</span>Grouped totals · same base ingredient</span></div>
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:260}}>
-          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th><th style={{...th,textAlign:"center"}} title="Oven trays · 8 per tray · floor(total ÷ 8) + 1">Trays</th></tr></thead>
+          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th><th style={{...th,textAlign:"center"}} title="Oven trays · 8 per tray · rounded up (8→1, 9→2)">Trays</th></tr></thead>
           <tbody>{list.map(g=>{ const mixed=g.units.size>1; const u=mixed?"mixed":([...g.units][0]||"");
-            /* 오븐 트레이 수 (2026-09-09 주인): 한 트레이에 8개. 계산은 주인이 정한 그대로 floor(total ÷ 8) + 1 —
-               나머지가 없어도 +1 이 붙는다(43→6, 28→4, 40→6). 반올림(ceil)이 아니라는 점이 의도다. */
-            const TRAY_CAP=8; const trays=Math.floor((Number(g.total)||0)/TRAY_CAP)+1;
+            /* 오븐 트레이 수: 한 트레이에 8개. 남는 개수는 트레이 하나를 더 쓰므로 올림(ceil)이다.
+               [수정 2026-09-13 주인] 이전엔 floor(total ÷ 8) + 1 이라 8·16·24처럼 딱 나눠떨어질 때
+               빈 트레이가 하나 더 붙었다(8→2). 딱 떨어지면 +1 하지 않는 것이 맞다(8→1, 16→2).
+               나머지가 있을 때의 값은 전과 같다(43→6, 54→7, 19→3). */
+            const TRAY_CAP=8; const trays=Math.ceil((Number(g.total)||0)/TRAY_CAP);
             return (<tr key={g.label} className="row-live">
             <td style={{...td,fontWeight:600}}>{g.label}</td>
             <td style={{...td,textAlign:"center",fontWeight:700}}>{g.total}<span style={{fontSize:10,fontWeight:500,color:mixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={mixed?"This group mixes units — total may be misleading":undefined}>{u}</span></td>
@@ -3344,6 +3346,18 @@ var CLO_CSS = ""
 + ".clo .btn.sm{padding:7px 10px;font-size:12px;min-height:38px}"
 + ".clo .btn[disabled]{opacity:.45;cursor:not-allowed}"
 /* the bottom bar — the only thing that matters at 10pm */
++ "/* one page: five folding sections instead of five screens */"
++ ".clo .sec{border-bottom:3px solid var(--ink)}"
++ ".clo .sec:last-of-type{border-bottom:0}"
++ ".clo .sech{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;font-size:15px;font-weight:700;letter-spacing:.02em;background:#fff;color:var(--ink);border:0;padding:14px;min-height:56px;cursor:pointer;position:sticky;top:var(--stickytop,164px);z-index:5}"
++ ".clo .sec.clear .sech{background:var(--paper);color:var(--muted)}"
++ ".clo .sech .car{flex:none;font-size:17px;line-height:1;width:12px}"
++ ".clo .sech .t{flex:1;min-width:0}"
++ ".clo .sech .n{flex:none;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--rt);color:#fff;padding:3px 8px}"
++ ".clo .sech .n.done{background:var(--ok)}"
++ ".clo .secb{border-top:2px solid var(--line)}"
++ "/* the jump strip scrolls the page; it no longer swaps screens */"
++ ".clo .nav.jump button{white-space:nowrap}"
 + ".clo .foot{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:#f3f1ec;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 -4px 0 var(--y)}"
 + ".clo .foot .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.3}"
 + ".clo .foot .txt b{display:block;font-size:15px;font-weight:700}"
@@ -3889,7 +3903,16 @@ function ClosingTab({ctx}){
   var [prep,setPrep]=useState([]);
   var [order,setOrder]=useState([]);
   var [view,setView]=useState("close");     // close | prep | order | records | setup
-  var [step,setStep]=useState("temps");
+  /* One page now. `shut` is the set of sections folded BY HAND; a finished section folds itself
+     without being added here, so re-opening one to correct it still works. */
+  var [shutSecs,setShutSecs]=useState({});
+  function toggleSec(k){ setShutSecs(function(p){ var n=Object.assign({},p); n[k]=!n[k]; return n; }); }
+  function jumpTo(k){
+    try{
+      var el=document.getElementById("clo-sec-"+k);
+      if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+    }catch(e){}
+  }
   var [busy,setBusy]=useState("");
   var [openRec,setOpenRec]=useState(null);
   var [sentMsg,setSentMsg]=useState("");
@@ -3963,11 +3986,6 @@ function ClosingTab({ctx}){
     measure(); window.addEventListener("resize", measure);
     return function(){ window.removeEventListener("resize", measure); };
   });
-
-  function nextStep(){
-    var i=STEPS.findIndex(function(s){ return s[0]===step; });
-    if(i<STEPS.length-1) { setStep(STEPS[i+1][0]); try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(e){ window.scrollTo(0,0); } }
-  }
 
   async function finish(){
     if(busy) return;
@@ -4046,7 +4064,7 @@ function ClosingTab({ctx}){
         <span className="sub">{prettyDate(date)} · {locName}</span>
         <span className="pick">
           <select value={date} aria-label="Date"
-            onChange={function(e){ setDate(e.target.value); setView("close"); setStep("temps"); }}>
+            onChange={function(e){ setDate(e.target.value); setView("close"); }}>
             {[0,1,2,3,4,5,6].map(function(n){ var d=K.addDays(localISO(),-n);
               return <option key={d} value={d}>{n===0?"Tonight":(n===1?"Yesterday":prettyDate(d))}</option>; })}
           </select>
@@ -4084,21 +4102,38 @@ function ClosingTab({ctx}){
         {finishedAlready && <div className="alert" style={{borderLeftColor:"var(--ok)",background:"#eef6f1"}}>
           <b>This night is already signed off</b> by {rec.by||"someone"}{rec.finishedAt? " at "+hhmm(new Date(rec.finishedAt)) : ""}. You can still correct it — save it again to update the record.
         </div>}
-        <div className="nav" style={{position:"static",borderTop:0}}>
+        {/* jump strip, not a screen switcher: the number is what is still outstanding there */}
+        <div className="nav jump" style={{position:"static",borderTop:0}}>
           {STEPS.map(function(s){
-            return <button key={s[0]} type="button" aria-pressed={step===s[0]} onClick={function(){ setStep(s[0]); }}>
+            return <button key={s[0]} type="button" onClick={function(){ jumpTo(s[0]); }}>
               {s[1]}{byStep[s[0]]? <span className="n">{byStep[s[0]]}</span> : <span className="n done">✓</span>}
             </button>;
           })}
         </div>
-        {step==="temps" && <U.TempStep cfg={cfg} rec={rec} set={set} date={date} />}
-        {step==="food" && <U.TaskStep group="food" title="Food" cfg={cfg} rec={rec} set={set} date={date}
-          blurb="The part that actually keeps people well. Tick what you did; the cooling log opens under the first line when it applies." />}
-        {step==="clean" && <U.TaskStep group="clean" title="Cleaning &amp; sanitising" cfg={cfg} rec={rec} set={set} date={date}
-          blurb="Surfaces food touches, the machine that sanitises them, and the basin you wash your hands in." />}
-        {step==="shut" && <U.ShutdownStep cfg={cfg} rec={rec} set={set} />}
-        {step==="finish" && <U.FinishStep cfg={cfg} rec={rec} set={set} prep={prep} order={order} left={left}
-          onGoto={function(v){ setView(v); }} />}
+        {STEPS.map(function(sd){
+          var k=sd[0], outstanding=byStep[k]||0;
+          /* a finished section folds itself; an unfinished one only folds if you fold it */
+          var folded = shutSecs[k]!=null ? shutSecs[k] : (outstanding===0 && k!=="finish");
+          return <section key={k} id={"clo-sec-"+k} className={"sec"+(folded?" folded":"")+(outstanding===0?" clear":"")}>
+            <button type="button" className="sech" aria-expanded={!folded} onClick={function(){ toggleSec(k); }}>
+              <span className="car" aria-hidden="true">{folded?"\u203a":"\u2304"}</span>
+              <span className="t">{sd[1]}</span>
+              {outstanding
+                ? <span className="n">{outstanding} left</span>
+                : <span className="n done">done</span>}
+            </button>
+            {!folded && <div className="secb">
+              {k==="temps" && <U.TempStep cfg={cfg} rec={rec} set={set} date={date} />}
+              {k==="food" && <U.TaskStep group="food" title="Food" cfg={cfg} rec={rec} set={set} date={date}
+                blurb="The part that actually keeps people well. Tick what you did; the cooling log opens under the first line when it applies." />}
+              {k==="clean" && <U.TaskStep group="clean" title="Cleaning &amp; sanitising" cfg={cfg} rec={rec} set={set} date={date}
+                blurb="Surfaces food touches, the machine that sanitises them, and the basin you wash your hands in." />}
+              {k==="shut" && <U.ShutdownStep cfg={cfg} rec={rec} set={set} />}
+              {k==="finish" && <U.FinishStep cfg={cfg} rec={rec} set={set} prep={prep} order={order} left={left}
+                onGoto={function(v){ setView(v); }} />}
+            </div>}
+          </section>;
+        })}
       </F>}
 
       {view==="prep" && <U.ListTab items={prep} setItems={savePrep}
@@ -4124,9 +4159,8 @@ function ClosingTab({ctx}){
           ? <F><b>All done — go home.</b>{cfg.supervisorEmail? "Report goes to "+cfg.supervisorEmail : "Set a supervisor email in Setup"}</F>
           : <F><b>{left.length} left</b>{(left[0]? left[0].where+": "+left[0].what : "")}</F>}
       </div>
-      {step!=="finish"
-        ? <button type="button" className="go wait" onClick={nextStep}>Next ›</button>
-        : <button type="button" className="go" onClick={finish} disabled={!!busy}>{busy||"Finish & send"}</button>}
+      {/* one button, always the same one - there is nothing to page through any more */}
+      <button type="button" className="go" onClick={finish} disabled={!!busy}>{busy||"Finish & send"}</button>
     </div>}
 
     {openRec && <U.RecordView rec={openRec} cfg={cfg} onClose={function(){ setOpenRec(null); }} />}
@@ -4156,7 +4190,7 @@ const T = window.OrderTabs;
 const { Settings, AiWidget, ProfileCard } = window.OrderSettings;
 const LOGO = window.HIDEOUT_LOGO || "";
 
-const TABS = [["daily","Today"],["order","Submit Order"],["stock","Stock Take"],["closing","Closing"],["period","Period Report"],["trends","Trends"],["settings","Settings"]];
+const TABS = [["daily","Today"],["order","Submit Order"],["closing","Closing"],["stock","Stock Take"],["period","Period Report"],["trends","Trends"],["settings","Settings"]];
 const TT = { daily:["Today at The Hideout","What’s ordered, where it goes, and who’s on delivery"], order:["Submit Order","Count what’s left — par levels fill the rest"], period:["Period Report","Order totals across a date range"], stock:["Stock Take","Count on-hand stock by branch"], trends:["Trends","Where orders, spend and waste are heading"], board:["Staff board","Postcards from the team — and your own name & photo"], closing:["Closing","Shut the kitchen down — temperatures, cleaning, equipment, sign off"], settings:["Settings","Items, par levels, branches & connection"] };
 /* Staff board tab (2026-09-09 owner: "staff board 는 어떤 탭이야? 아예 하나 신설해서 설정에 연결해서 자기정보
    입력할 수 있게") — the postcards widget used to hide behind a header button. This tab opens it and carries

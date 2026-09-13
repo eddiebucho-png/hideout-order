@@ -3144,11 +3144,14 @@ function uid(p){ return (p||"x")+Date.now().toString(36)+Math.random().toString(
 var DEFAULT_CONFIG = {
   supervisorEmail: "",
   ccEmail: "",
+  /* Ju An 2026-09-13, the real list. Ids are descriptive rather than u1..u4 so that a reading
+     recorded against a fridge can never be relabelled as a different one by a later edit. */
   units: [
-    {id:"u1", name:"Fridge 1 — under bench",  kind:"fridge", min:0, max:5},
-    {id:"u2", name:"Fridge 2 — tall",         kind:"fridge", min:0, max:5},
-    {id:"u3", name:"Fridge 3 — display",      kind:"fridge", min:0, max:5},
-    {id:"u4", name:"Freezer",                 kind:"freezer", min:-25, max:-15}
+    {id:"f_sandwich", name:"Sandwich fridge", kind:"fridge",  min:0,   max:5},
+    {id:"f_prep",     name:"Prep fridge",     kind:"fridge",  min:0,   max:5},
+    {id:"f_service",  name:"Service fridge",  kind:"fridge",  min:0,   max:5},
+    {id:"z_chest",    name:"Chest freezer",   kind:"freezer", min:-25, max:-15},
+    {id:"f_pastry",   name:"Pastry fridge",   kind:"fridge",  min:0,   max:5}
   ],
   /* Ju An 2026-09-11: "Combi oven, stoves, fryer, griddle 정도일거같은데" — plus the ones a
      closing chef also has to kill. Edit the list in Setup; it is per venue. */
@@ -3362,6 +3365,13 @@ var CLO_CSS = ""
 + ".clo button,.clo .sech,.clo label{-webkit-user-select:none;user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(242,193,0,.35)}"
 + "/* text you might actually want to copy stays selectable */"
 + ".clo input,.clo textarea,.clo .note,.clo .hint{-webkit-user-select:text;user-select:text}"
++ "/* three states in words, not an abbreviation nobody can read at 10pm */"
++ ".clo .row.na .lb{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}"
++ ".clo .row .nachip{flex:none;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:2px solid var(--line);padding:3px 7px;white-space:nowrap}"
++ ".clo .legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 14px;border-bottom:2px solid var(--line);background:var(--paper);font-size:12px;color:var(--muted)}"
++ ".clo .legend b{color:var(--ink);font-weight:700}"
++ ".clo .legend span{display:inline-flex;align-items:center;gap:6px}"
++ "@media (max-width:430px){.clo .row .skip{font-size:11px;padding:6px 8px;min-width:0}}"
 + ".clo .foot{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:#f3f1ec;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 -4px 0 var(--y)}"
 + ".clo .foot .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.3}"
 + ".clo .foot .txt b{display:block;font-size:15px;font-weight:700}"
@@ -3425,14 +3435,18 @@ var F=React.Fragment;
 function Check({on, na, label, hint, tag, onToggle, onNa}){
   return <div className={"row"+(on?" on":"")+(na?" na":"")} role="checkbox" aria-checked={on?"true":"false"} tabIndex={0}
       onClick={onToggle} onKeyDown={function(e){ if(e.key===" "||e.key==="Enter"){ e.preventDefault(); onToggle(); } }}>
-    <span className="box" aria-hidden="true">{on?"✓":(na?"N/A":"")}</span>
+    {/* the box carries the tick only; "not tonight" is said in words on the right, because a
+        grey N/A box tells a tired chef nothing */}
+    <span className="box" aria-hidden="true">{on?"\u2713":(na?"\u2013":"")}</span>
     <span>
       <span className="lb">{label}</span>
       {hint? <span className="hint">{hint}</span> : null}
     </span>
     <span style={{display:"flex",gap:8,alignItems:"center"}}>
       {tag? <span className="tag">{tag}</span> : null}
-      {onNa? <button type="button" className="skip" onClick={function(e){ e.stopPropagation(); onNa(); }}>{na?"undo":"n/a"}</button> : null}
+      {na? <span className="nachip">not tonight</span> : null}
+      {onNa? <button type="button" className="skip" onClick={function(e){ e.stopPropagation(); onNa(); }}>
+        {na?"Undo":"Not tonight"}</button> : null}
     </span>
   </div>;
 }
@@ -4106,6 +4120,13 @@ function ClosingTab({ctx}){
         {finishedAlready && <div className="alert" style={{borderLeftColor:"var(--ok)",background:"#eef6f1"}}>
           <b>This night is already signed off</b> by {rec.by||"someone"}{rec.finishedAt? " at "+hhmm(new Date(rec.finishedAt)) : ""}. You can still correct it — save it again to update the record.
         </div>}
+        {/* The three states, stated once. Blank is the one worth naming: people assume it means
+            "skipped", and it goes to the supervisor as NOT DONE. */}
+        <div className="legend">
+          <span><b>✓</b> done</span>
+          <span><b>Not tonight</b> didn’t apply — counts as answered</span>
+          <span><b>blank</b> goes out as NOT DONE</span>
+        </div>
         {/* jump strip, not a screen switcher: the number is what is still outstanding there */}
         <div className="nav jump" style={{position:"static",borderTop:0}}>
           {STEPS.map(function(s){

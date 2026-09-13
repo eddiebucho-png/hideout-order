@@ -33,17 +33,19 @@
     if (document.getElementById("clo-btn-css")) return;
     var st = document.createElement("style");
     st.id = "clo-btn-css";
+    /* Reviewed by Codex 2026-09-13 (hermes/_reports/closing-review-codex-20260913).
+       Paper outline on the ink header rather than yellow: yellow is what an ACTIVE TAB is,
+       and the button is not a tab. Contrast 16.44:1; focus ring 10.96:1. Crescent dropped -
+       it read as decoration and cost width the 375px header does not have. */
     st.textContent =
-      ".clobtn{display:inline-flex;align-items:center;gap:7px;flex:none;height:40px;padding:0 13px;" +
-      "background:transparent;color:#f2c100;border:2px solid #f2c100;border-radius:0;cursor:pointer;" +
-      "font:700 11.5px/1 Jost,Archivo,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;" +
-      "white-space:nowrap;-webkit-user-select:none;user-select:none;touch-action:manipulation;" +
-      "transition:background .16s,color .16s,transform .16s}" +
-      ".clobtn::before{content:'☾';font-size:15px;line-height:1;transform:rotate(-18deg)}" +
-      ".clobtn:hover{background:#f2c100;color:#141312}" +
-      ".clobtn:active{transform:scale(.96)}" +
-      "@media (max-width:560px){.clobtn{padding:0 10px;letter-spacing:.06em;font-size:11px}}" +
-      "@media (prefers-reduced-motion:reduce){.clobtn{transition:none}.clobtn:active{transform:none}}";
+      "" +
+      ".clobtn { box-sizing: border-box; appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 96px; width: 96px; min-width: 96px; min-height: 44px; margin: 0; padding: 8px 6px; border: 2px solid #f3f1ec; border-radius: 0; background: #141312; color: #f3f1ec; font: 700 12px/1.2 Jost, Archivo, system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; cursor: pointer; -webkit-user-select: none; user-select: none; touch-action: manipulation; transform: translate(0, 0); box-shadow: none; transition: transform 120ms ease; }" +
+      ".clobtn::before, .clobtn::after { content: none; }" +
+      "@media (hover: hover) and (pointer: fine) { .clobtn:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 #f3f1ec; }}" +
+      ".clobtn:focus-visible { outline: 3px solid #f2c100; outline-offset: 3px; }.clobtn:active { transform: translate(0, 0); box-shadow: none; }" +
+      ".clobtn:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }" +
+      "@media (max-width: 560px) { .clobtn { flex-basis: 84px; width: 84px; min-width: 84px; padding-inline: 4px; letter-spacing: .02em; }}" +
+      "@media (prefers-reduced-motion: reduce) { .clobtn, .clobtn:hover, .clobtn:active { transition: none; transform: none; }}";
     document.head.appendChild(st);
   })();
 
@@ -610,13 +612,18 @@
       onToggle,
       onNa
     }) {
+      /* aria-checked="mixed" for "not tonight": the item is neither done nor outstanding, and saying
+         "false" would report it as unanswered to anyone using a screen reader.
+         The keydown guard matters more than it looks - without it, Enter on the "Not tonight" button
+         bubbled up and ticked the row as well, so one keypress gave two different answers. */
       return /*#__PURE__*/React.createElement("div", {
         className: "row" + (on ? " on" : "") + (na ? " na" : ""),
         role: "checkbox",
-        "aria-checked": on ? "true" : "false",
+        "aria-checked": on ? "true" : na ? "mixed" : "false",
         tabIndex: 0,
         onClick: onToggle,
         onKeyDown: function (e) {
+          if (e.target !== e.currentTarget) return;
           if (e.key === " " || e.key === "Enter") {
             e.preventDefault();
             onToggle();
@@ -1788,21 +1795,41 @@
       /* One page now. `shut` is the set of sections folded BY HAND; a finished section folds itself
          without being added here, so re-opening one to correct it still works. */
       var [shutSecs, setShutSecs] = useState({});
-      function toggleSec(k) {
+      /* Flip what the row is SHOWING, not what is stored. A finished section is folded by the
+         derived rule with nothing in shutSecs, so flipping the stored value wrote folded over folded
+         and the first tap did nothing. */
+      function toggleSec(k, isFolded) {
         setShutSecs(function (p) {
           var n = Object.assign({}, p);
-          n[k] = !n[k];
+          n[k] = !isFolded;
           return n;
         });
       }
+      /* Open it first, then go to it - landing on a closed header is not arriving. The scroll waits
+         a frame so the section has actually expanded before the browser measures where it is. */
       function jumpTo(k) {
-        try {
-          var el = document.getElementById("clo-sec-" + k);
-          if (el) el.scrollIntoView({
-            behavior: "smooth",
-            block: "start"
-          });
-        } catch (e) {}
+        setShutSecs(function (p) {
+          var n = Object.assign({}, p);
+          n[k] = false;
+          return n;
+        });
+        var go = function () {
+          try {
+            var el = document.getElementById("clo-sec-" + k);
+            if (!el) return;
+            var calm = false;
+            try {
+              calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            } catch (e) {}
+            el.scrollIntoView({
+              behavior: calm ? "auto" : "smooth",
+              block: "start"
+            });
+          } catch (e) {}
+        };
+        if (window.requestAnimationFrame) requestAnimationFrame(function () {
+          requestAnimationFrame(go);
+        });else setTimeout(go, 32);
       }
       var [busy, setBusy] = useState("");
       var [openRec, setOpenRec] = useState(null);
@@ -2192,8 +2219,9 @@
           type: "button",
           className: "sech",
           "aria-expanded": !folded,
+          "aria-controls": "clo-secb-" + k,
           onClick: function () {
-            toggleSec(k);
+            toggleSec(k, folded);
           }
         }, /*#__PURE__*/React.createElement("span", {
           className: "car",
@@ -2205,7 +2233,8 @@
         }, outstanding, " left") : /*#__PURE__*/React.createElement("span", {
           className: "n done"
         }, "done")), !folded && /*#__PURE__*/React.createElement("div", {
-          className: "secb"
+          className: "secb",
+          id: "clo-secb-" + k
         }, k === "temps" && /*#__PURE__*/React.createElement(U.TempStep, {
           cfg: cfg,
           rec: rec,

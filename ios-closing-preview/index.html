@@ -3372,6 +3372,13 @@ var CLO_CSS = ""
 + ".clo .legend b{color:var(--ink);font-weight:700}"
 + ".clo .legend span{display:inline-flex;align-items:center;gap:6px}"
 + "@media (max-width:430px){.clo .row .skip{font-size:11px;padding:6px 8px;min-width:0}}"
++ "/* the one note, first on the page */"
++ ".clo .note-first .sech{background:var(--ink);color:#f3f1ec}"
++ ".clo .note-first .sech .n.opt{background:transparent;border:2px solid rgba(243,241,236,.45);color:#f3f1ec}"
++ ".clo .notebox{width:100%;box-sizing:border-box;font:inherit;font-size:16px;line-height:1.5;padding:12px;border:3px solid var(--ink);background:#fff;color:var(--ink);resize:vertical;min-height:104px}"
++ ".clo .notebox:focus{outline:none;box-shadow:4px 4px 0 var(--y)}"
++ ".clo .prepchk{display:flex;align-items:center;gap:10px;margin-top:12px;min-height:48px;font-size:15px;font-weight:700;cursor:pointer}"
++ ".clo .prepchk input{width:26px;height:26px;flex:none;accent-color:var(--ink)}"
 + ".clo .foot{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:#f3f1ec;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 -4px 0 var(--y)}"
 + ".clo .foot .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.3}"
 + ".clo .foot .txt b{display:block;font-size:15px;font-weight:700}"
@@ -3622,32 +3629,20 @@ function ShutSecure({cfg, rec, set}){
 }
 
 /* ── step 5 · sign off ────────────────────────────────────────────────────────────────── */
-function FinishStep({cfg, rec, set, prep, order, left, onGoto}){
-  var prepLeft=prep.filter(function(p){ return !p.done; }).length;
+function FinishStep({cfg, rec, set, left}){
   return <F>
+    {/* the handover note moved to the top of the sheet - it is the first thing written and the
+        first thing in the email, so asking for it again down here was asking twice */}
     <div className="grp">Anything worth passing on</div>
-    <div className="fld">
-      <label htmlFor="clo-hand">Handover to the next chef</label>
-      <textarea id="clo-hand" rows={3} value={rec.handover||""} placeholder="What the morning needs to know — a batch that ran out, a delivery that was short, a stuck oven door."
-        onChange={function(e){ var v=e.target.value; set(function(r){ r.handover=v; }); }} />
-    </div>
     <div className="fld">
       <label htmlFor="clo-waste">Wastage tonight</label>
       <textarea id="clo-waste" rows={2} value={rec.waste||""} placeholder="What went in the bin and roughly how much."
         onChange={function(e){ var v=e.target.value; set(function(r){ r.waste=v; }); }} />
     </div>
 
-    <div className="grp">Carried into tomorrow</div>
-    <div className="lrow" onClick={function(){ onGoto("prep"); }} style={{cursor:"pointer"}}>
-      <span className="box" style={{border:0,fontSize:15}}>{prepLeft}</span>
-      <span><span className="nm">Prep list</span><span className="sub">{prepLeft? prepLeft+" still to make" : "nothing outstanding"} — tap to edit</span></span>
-      <span className="pill">open</span>
-    </div>
-    <div className="lrow" onClick={function(){ onGoto("order"); }} style={{cursor:"pointer"}}>
-      <span className="box" style={{border:0,fontSize:15}}>{order.length}</span>
-      <span><span className="nm">Running low</span><span className="sub">{order.length? order.length+" item"+(order.length>1?"s":"")+" for the next order" : "nothing flagged"} — tap to edit</span></span>
-      <span className="pill">open</span>
-    </div>
+    {/* "Carried into tomorrow" pointed at two tabs that no longer exist; the prep question is
+        now a single tick beside the note at the top of the sheet. */}
+
 
     <div className="grp">Sign off</div>
     <div className="fld">
@@ -3880,6 +3875,13 @@ function reportText(rec, cfg, locName){
   L.push("CLOSING REPORT — "+(locName||rec.branch));
   L.push(prettyDate(rec.date)+"  ·  closed by "+(rec.by||"unsigned")+(rec.finishedAt?" at "+hhmm(new Date(rec.finishedAt)):""));
   L.push("");
+  /* The note first, before the checklists. Whoever opens this in the morning wants the one thing
+     the closing chef chose to write down, not page three of a temperature log. */
+  if(String(rec.handover||"").trim()){
+    L.push("NOTE FROM THE CLOSE");
+    String(rec.handover).split("\n").forEach(function(ln){ L.push("  "+ln); });
+    L.push("");
+  }
   var breaches=[], open=outstanding(rec,cfg,rec.date);
   L.push("TEMPERATURES");
   cfg.units.forEach(function(u){
@@ -3901,10 +3903,10 @@ function reportText(rec, cfg, locName){
   L.push(""); L.push("SHUT DOWN");
   cfg.equipment.forEach(function(e){ L.push("  ["+((rec.equipment||{})[e.id]?"x":" ")+"] "+e.name); });
   L.push("  left running: "+cfg.leaveOn.map(function(l){ return l.name+((rec.leaveOn||{})[l.id]?"":" (NOT CONFIRMED)"); }).join(", "));
-  if((rec.prep||[]).length){ L.push(""); L.push("PREP FOR TOMORROW"); rec.prep.forEach(function(p){ L.push("  ["+(p.done?"x":" ")+"] "+p.name); }); }
-  if((rec.order||[]).length){ L.push(""); L.push("RUNNING LOW"); rec.order.forEach(function(p){ L.push("  · "+p.name); }); }
+
   if(String(rec.waste||"").trim()){ L.push(""); L.push("WASTAGE"); L.push("  "+rec.waste); }
-  if(String(rec.handover||"").trim()){ L.push(""); L.push("HANDOVER"); L.push("  "+rec.handover); }
+  /* the note is at the top now, not repeated here */
+  L.push(""); L.push("PREP LIST FOR TOMORROW: "+(rec.prepWritten? "written" : "NOT WRITTEN"));
   L.push("");
   L.push(breaches.length? "!! "+breaches.length+" temperature breach"+(breaches.length>1?"es":"")+": "+breaches.join(", ") : "No temperature breaches.");
   if(open.length) L.push("!! "+open.length+" item"+(open.length>1?"s":"")+" left open at sign-off.");
@@ -4096,7 +4098,9 @@ function ClosingTab({ctx}){
     </div>
 
     <div className="nav">
-      {[["close","Close"],["prep","Prep"],["order","Order"],["records","Records"]].map(function(v){
+      {/* Prep and Order were two more places to type with nothing explaining what they fed.
+          One note at the top replaced them. */}
+      {[["close","Close"],["records","Records"]].map(function(v){
         var badge = v[0]==="close"? (left.length||null) : (v[0]==="prep"? (prep.filter(function(p){return !p.done;}).length||null) : (v[0]==="order"? (order.length||null) : null));
         return <button key={v[0]} type="button" aria-pressed={view===v[0]} onClick={function(){ setView(v[0]); }}>
           {v[1]}{badge? <span className={"n"+(v[0]==="close"&&left.length===0?" done":"")}>{badge}</span> : null}
@@ -4120,6 +4124,26 @@ function ClosingTab({ctx}){
         {finishedAlready && <div className="alert" style={{borderLeftColor:"var(--ok)",background:"#eef6f1"}}>
           <b>This night is already signed off</b> by {rec.by||"someone"}{rec.finishedAt? " at "+hhmm(new Date(rec.finishedAt)) : ""}. You can still correct it — save it again to update the record.
         </div>}
+        {/* First thing on the sheet and first thing in the email. One box for everything the
+            morning needs: what ran low, what broke, what to watch. */}
+        <section className="sec note-first">
+          <div className="sech" style={{cursor:"default"}}>
+            <span className="t">Note for the morning</span>
+            {String(rec.handover||"").trim()
+              ? <span className="n done">written</span>
+              : <span className="n opt">optional</span>}
+          </div>
+          <div className="secb" style={{padding:"12px 14px"}}>
+            <textarea id="clo-note" rows={4} className="notebox" value={rec.handover||""}
+              placeholder="What ran low, what broke, what the morning needs to know. This goes to the top of the report."
+              onChange={function(e){ var v=e.target.value; set(function(r){ r.handover=v; }); }} />
+            <label className="prepchk">
+              <input type="checkbox" checked={!!rec.prepWritten}
+                onChange={function(e){ var v=e.target.checked; set(function(r){ r.prepWritten=v; }); }} />
+              <span>Prep list for tomorrow is written</span>
+            </label>
+          </div>
+        </section>
         {/* The three states, stated once. Blank is the one worth naming: people assume it means
             "skipped", and it goes to the supervisor as NOT DONE. */}
         <div className="legend">
@@ -4154,26 +4178,13 @@ function ClosingTab({ctx}){
               {k==="clean" && <U.TaskStep group="clean" title="Cleaning &amp; sanitising" cfg={cfg} rec={rec} set={set} date={date}
                 blurb="Surfaces food touches, the machine that sanitises them, and the basin you wash your hands in." />}
               {k==="shut" && <U.ShutdownStep cfg={cfg} rec={rec} set={set} />}
-              {k==="finish" && <U.FinishStep cfg={cfg} rec={rec} set={set} prep={prep} order={order} left={left}
-                onGoto={function(v){ setView(v); }} />}
+              {k==="finish" && <U.FinishStep cfg={cfg} rec={rec} set={set} left={left} />}
             </div>}
           </section>;
         })}
       </F>}
 
-      {view==="prep" && <U.ListTab items={prep} setItems={savePrep}
-        placeholder="What needs making tomorrow"
-        blurb="Anything you ran out of or nearly ran out of tonight. Unticked lines carry into tomorrow by themselves; ticked ones drop off when the night is signed off."
-        emptyText="Nothing on the prep list. Add what the morning has to make." />}
-
-      {view==="order" && <U.ListTab items={order} setItems={saveOrder}
-        placeholder="What is running low"
-        blurb="What you noticed was low while closing, so the next person ordering does not have to remember it. This list stays until someone clears it."
-        emptyText="Nothing flagged as low."
-        extra={ctx.openOrdering? <div style={{padding:"0 14px 12px"}}>
-          <button type="button" className="btn" style={{width:"100%"}} onClick={ctx.openOrdering}>Open Submit Order →</button>
-        </div> : null} />}
-
+      {/* Prep and Order views retired - one note at the top of the sheet replaced them. */}
       {view==="records" && <U.RecordsTab store={store} cfg={cfg} branch={branch} locations={ctx.locations}
         onOpen={function(r){ setOpenRec(r); }} />}
     </div>

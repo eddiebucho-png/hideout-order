@@ -1863,11 +1863,13 @@ function TodaySummary({ctx}){
       return <Card style={{marginBottom:16,borderLeft:"4px solid var(--color-primary)"}}>
         <div className="u-label" style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><span aria-hidden="true" style={{fontSize:14,lineHeight:1}}>🥐</span>Grouped totals · same base ingredient</span></div>
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:260}}>
-          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th><th style={{...th,textAlign:"center"}} title="Oven trays · 8 per tray · floor(total ÷ 8) + 1">Trays</th></tr></thead>
+          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th><th style={{...th,textAlign:"center"}} title="Oven trays · 8 per tray · rounded up (8→1, 9→2)">Trays</th></tr></thead>
           <tbody>{list.map(g=>{ const mixed=g.units.size>1; const u=mixed?"mixed":([...g.units][0]||"");
-            /* 오븐 트레이 수 (2026-09-09 주인): 한 트레이에 8개. 계산은 주인이 정한 그대로 floor(total ÷ 8) + 1 —
-               나머지가 없어도 +1 이 붙는다(43→6, 28→4, 40→6). 반올림(ceil)이 아니라는 점이 의도다. */
-            const TRAY_CAP=8; const trays=Math.floor((Number(g.total)||0)/TRAY_CAP)+1;
+            /* 오븐 트레이 수: 한 트레이에 8개. 남는 개수는 트레이 하나를 더 쓰므로 올림(ceil)이다.
+               [수정 2026-09-13 주인] 이전엔 floor(total ÷ 8) + 1 이라 8·16·24처럼 딱 나눠떨어질 때
+               빈 트레이가 하나 더 붙었다(8→2). 딱 떨어지면 +1 하지 않는 것이 맞다(8→1, 16→2).
+               나머지가 있을 때의 값은 전과 같다(43→6, 54→7, 19→3). */
+            const TRAY_CAP=8; const trays=Math.ceil((Number(g.total)||0)/TRAY_CAP);
             return (<tr key={g.label} className="row-live">
             <td style={{...td,fontWeight:600}}>{g.label}</td>
             <td style={{...td,textAlign:"center",fontWeight:700}}>{g.total}<span style={{fontSize:10,fontWeight:500,color:mixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={mixed?"This group mixes units — total may be misleading":undefined}>{u}</span></td>

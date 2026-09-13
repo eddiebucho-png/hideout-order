@@ -8,10 +8,33 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- Firebase compat SDK — shared RCC project (hideout-recipe-cost): staff login + postcards + photos. Added 2026-07-23. -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<!-- Firebase is only used by the Postcards staff board (More > Open staff board). Loading it in
+     <head> cost 565-762ms per script on every single visit, before anything was on screen, for a
+     panel most visits never open. It now loads the first time the board is opened - see
+     loadFirebase() beside initFb(). -->
+<script>
+window.__loadFirebase = (function(){
+  var p = null;
+  return function(){
+    if (window.firebase && window.firebase.initializeApp) return Promise.resolve(true);
+    if (p) return p;
+    var base = "https://www.gstatic.com/firebasejs/10.12.2/";
+    var files = ["firebase-app-compat.js","firebase-auth-compat.js","firebase-firestore-compat.js","firebase-storage-compat.js"];
+    /* in order: auth/firestore/storage all register themselves onto the app module */
+    p = files.reduce(function(chain, f){
+      return chain.then(function(){
+        return new Promise(function(res, rej){
+          var el = document.createElement("script");
+          el.src = base + f; el.async = false;
+          el.onload = res; el.onerror = function(){ rej(new Error("could not load " + f)); };
+          document.head.appendChild(el);
+        });
+      });
+    }, Promise.resolve()).then(function(){ return true; }).catch(function(){ p = null; return false; });
+    return p;
+  };
+})();
+</script>
 <!-- Staff Postcards widget — single canonical source (deploys alongside this file). Loads first so the older inline copy below self-disables via its __HIDEOUT_POSTCARDS__ guard. -->
 <script>(function(){var s=document.createElement("script");s.src="postcards.js?v="+Math.floor(Date.now()/6e4);document.head.appendChild(s);})();</script>
 <!-- Staff Gate — soft Google-login identity gate (same RCC project/session as postcards). Integrated 2026-07-24 after live verification on ordering-gate-test.html. -->
@@ -466,9 +489,9 @@
     <div style="color:#fff;font-family:sans-serif;font-weight:700;font-size:26px;text-align:center;line-height:1.3;padding:30%;">HSC<br><span style="font-size:13px;color:#e0d6c9;font-weight:500;">Ordering</span></div>
   </div>
 </template>
-<!-- Closing checklist - the separated module, attached rather than embedded. One source serves
-     the ordering app and RCC; both open it over the page they are already on. -->
-<script>/* CLO-SCRIPT (closing checklist) */(function(){var s=document.createElement("script");s.src="https://order.hideoutdb.com/closing.js?v="+Math.floor(Date.now()/6e4);document.head.appendChild(s);})();</script><style>/* CLO-ROOM */
+<!-- Closing checklist - the separated module, fetched when the Closing button is pressed rather
+     than on every page load. It cost 497ms and 104KB up front for a sheet used once a day; the
+     button's own handler loads it on demand (see CLO-BTN). --><style>/* CLO-ROOM */
 .hdr2 .row1 .locb{flex:0 1 auto;min-width:0}
 .hdr2 .row1 .locb > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:400px){ .hdr2 .row1{gap:8px} }
@@ -3784,7 +3807,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
     document.body.appendChild(ov);
     ov.addEventListener("click",function(e){ if(e.target===ov) close(); });
     document.getElementById("pc-close").onclick=close;
-    if(!initFb()){ if(!booting){ booting=true; var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } }
+    /* fetch the SDK now that the board is actually open, then start it */
+    if(!initFb()){
+      if(!booting){
+        booting=true;
+        var start=function(){ if(!initFb()){ var n=0; var iv=setInterval(function(){ n++; if(initFb()||n>20){ clearInterval(iv); } },400); } };
+        if(window.__loadFirebase) window.__loadFirebase().then(start); else start();
+      }
+    }
   }
 
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",mount); else mount();

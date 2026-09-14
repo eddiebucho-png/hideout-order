@@ -4776,6 +4776,7 @@ function migrate(s){
   if(!Array.isArray(s.infoDocs) || !s.infoDocs.length) s.infoDocs=(typeof INFO_DOCS!=="undefined")?JSON.parse(JSON.stringify(INFO_DOCS)):[];
   // Catering prep sheets: {id,date:"YYYY-MM-DD",branch,title,client,pax,pricePP,pickup,html,text,archived}
   if(!Array.isArray(s.cateringSheets)) s.cateringSheets=[];
+  if(!Array.isArray(s.cateringRemoved)) s.cateringRemoved=[];   // ids removed on purpose - see mergeCateringSheets
   // Staff notices shown on Today: {id,title,body,from,until,pin,tone:"info"|"urgent",branch,archived}
   // Posted by hand in Settings -> Daily content. `from`/`until` are inclusive YYYY-MM-DD; blank
   // `until` means the notice stays up until it is removed.
@@ -4816,6 +4817,20 @@ function loadCfg(){ try{ const s=localStorage.getItem("hideout_fb_config"); if(s
 function saveCfg(c){ try{ localStorage.setItem("hideout_fb_config", JSON.stringify(c)); }catch(e){} }
 const CLIENT_ID = Math.random().toString(36).slice(2,10);
 const CLOUD_DOC = ()=> ({ col:"hideout_app", doc:"recipe_cost" });
+/* 2026-09-15 SHEET SYNC: the whole state doc is last-writer-wins, and that was silently deleting
+   catering sheets - a kitchen tablet that slept through a publish woke up, changed one thing and pushed
+   its stale list over everyone else's (twice). So the sheet list alone is reconciled against the server
+   copy inside the push transaction: union by id, local order first, minus tombstones from either side
+   (`cateringRemoved`, written by removeSheet) so a deliberate Remove still wins everywhere. */
+function mergeCateringSheets(local, remote){
+  const arr=v=>Array.isArray(v)?v:[];
+  const L=arr(local.cateringSheets), R=arr(remote.cateringSheets);
+  const gone=new Set([...arr(local.cateringRemoved), ...arr(remote.cateringRemoved)].filter(Boolean));
+  const seen=new Set(); const out=[];
+  for(const c of [...L, ...R]){ if(!c||!c.id||seen.has(c.id)||gone.has(c.id)) continue; seen.add(c.id); out.push(c); }
+  const before=L.filter(c=>c&&c.id&&!gone.has(c.id)).map(c=>c.id).join("|"), after=out.map(c=>c.id).join("|");
+  return {sheets:out, removed:[...gone].slice(-300), changed:before!==after};
+}
 async function mirrorToSheet(state){
   try{ const conn=JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}"); if(!conn.mirror||!conn.backendUrl) return;
     await fetch(conn.backendUrl, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"mirror", token:(conn.token||"").trim(), ingredients:state.ingredients, recipes:state.recipes})});
@@ -5679,7 +5694,25 @@ function App(){
     if(!hydrated.current) return;
     if(applyingRemote.current){ applyingRemote.current=false; return; }
     if(pushTimer.current) clearTimeout(pushTimer.current);
-    pushTimer.current=setTimeout(()=>{ fb.db.collection(CLOUD_DOC().col).doc(CLOUD_DOC().doc).set({state: JSON.parse(JSON.stringify(state)), updatedAt:Date.now(), clientId:CLIENT_ID, by:((cloud.user&&cloud.user.email)||"app")}).catch(e=>setCloud(c=>({...c,status:"error",error:String(e)}))); mirrorToSheet(state); }, 900);
+    pushTimer.current=setTimeout(()=>{
+      // SHEET SYNC 2026-09-15: read the server copy in the same transaction and reconcile the catering
+      // sheet list before writing, so a stale client can no longer wipe sheets it never saw.
+      // Everything else in state is still last-writer-wins - only the sheet list gets this treatment.
+      const ref=fb.db.collection(CLOUD_DOC().col).doc(CLOUD_DOC().doc);
+      const local=JSON.parse(JSON.stringify(state));
+      fb.db.runTransaction(async tx=>{
+        const snap=await tx.get(ref); const rs=(snap.exists&&snap.data()&&snap.data().state)||{};
+        const m=mergeCateringSheets(local, rs);
+        local.cateringSheets=m.sheets; local.cateringRemoved=m.removed;
+        tx.set(ref,{state:local, updatedAt:Date.now(), clientId:CLIENT_ID, by:((cloud.user&&cloud.user.email)||"app")});
+        return m.changed;
+      }).then(changed=>{
+        // our own write never comes back through onSnapshot (clientId guard), so mirror the reconciled
+        // list into local state here; applyingRemote stops the push effect from echoing it straight back.
+        if(changed){ applyingRemote.current=true; setState(s=>({...s, cateringSheets:local.cateringSheets, cateringRemoved:local.cateringRemoved})); }
+      }).catch(e=>setCloud(c=>({...c,status:"error",error:String(e)})));
+      mirrorToSheet(state);
+    }, 900);
   }, [state, cloud.status]);
   const archN = state.ingredients.filter(i=>i.archived).length + state.recipes.filter(r=>r.archived).length;
   const auditN = useMemo(()=>{ const g=auditData(state, ingMap); return Object.keys(g).reduce((n,k)=>n+g[k].length,0); }, [state, ingMap]);
@@ -9004,7 +9037,7 @@ function SettingsV2({state, update, setTab, openBranches, openSync, fbRef, isMgr
   const setDocField=(key,k,v)=>update(s=>{ const d=(s.infoDocs||[]).find(x=>x.key===key); if(d) d[k]=v; });
   const addDoc=()=>{ const key="doc"+Date.now(); update(s=>{ if(!Array.isArray(s.infoDocs)) s.infoDocs=[]; s.infoDocs.push({key, title:"New document", text:""}); }); setPick(key); };
   const removeDoc=key=>{ if(!confirm("Remove this document?")) return; update(s=>{ s.infoDocs=(s.infoDocs||[]).filter(x=>x.key!==key); }); setPick(null); };
-  const removeSheet=i=>{ if(!confirm("Remove this catering sheet?")) return; const s0=sheets[i]; const docId=s0&&(s0.sheetDoc||(s0.id?"sheet_"+s0.id:"")); if(docId){ try{ const fb=fbRef&&fbRef.current; if(fb&&fb.db) fb.db.collection("hideout_app").doc(docId).delete().catch(()=>{}); }catch(e){} } try{ ((s0&&s0.pages)||[]).forEach(p=>{ if(p&&p.publicId) cloudinaryRelay("destroy",{publicId:p.publicId}).catch(()=>{}); }); }catch(e){} update(s=>{ s.cateringSheets.splice(i,1); }); };
+  const removeSheet=i=>{ if(!confirm("Remove this catering sheet?")) return; const s0=sheets[i]; const docId=s0&&(s0.sheetDoc||(s0.id?"sheet_"+s0.id:"")); if(docId){ try{ const fb=fbRef&&fbRef.current; if(fb&&fb.db) fb.db.collection("hideout_app").doc(docId).delete().catch(()=>{}); }catch(e){} } try{ ((s0&&s0.pages)||[]).forEach(p=>{ if(p&&p.publicId) cloudinaryRelay("destroy",{publicId:p.publicId}).catch(()=>{}); }); }catch(e){} update(s=>{ const rm=s.cateringSheets[i]; s.cateringSheets.splice(i,1); if(rm&&rm.id){ if(!Array.isArray(s.cateringRemoved)) s.cateringRemoved=[]; s.cateringRemoved.push(rm.id); } }); };
   const activeNotices=notices.filter(n=>!n.archived && (!n.until || n.until>=localYmd())).length;
   const NAV=[["Content",[["notices","Staff notices",activeNotices],["routines","Weekday routines",0],["docs","Reference documents",0],["sheets","Catering sheets",sheets.length]]],["Stores & menu",[["cats","Menu categories",0],["branches","Branches & passcodes",0]]],["People & system",[["team","Team access",0],["audit","Audit",auditCount],["integrations","Integrations",0]]],["Advanced",[["archive","Archive",0],["tools","One-off tools",0],["danger","Danger zone",0]]]];
   const curNotice=notices.find(n=>n.id===pick)||notices[0]; const curDoc=docs.find(d=>d.key===pick)||docs[0]; const curDay=DAYS.includes(pick)?pick:DAYS[(new Date().getDay()+6)%7];
@@ -10741,7 +10774,7 @@ function Settings({state, update, setTab, openBranches, openSync, fbRef, isMgr, 
     if(docId){ try{ const fb=fbRef&&fbRef.current; if(fb&&fb.db) fb.db.collection("hideout_app").doc(docId).delete().catch(()=>{}); }catch(e){} }
     // a hand-uploaded sheet is page images in Cloudinary - drop those too, or they bill forever
     try{ ((s0&&s0.pages)||[]).forEach(p=>{ if(p&&p.publicId) cloudinaryRelay("destroy",{publicId:p.publicId}).catch(()=>{}); }); }catch(e){}
-    update(s=>{ s.cateringSheets.splice(i,1); });
+    update(s=>{ const rm=s.cateringSheets[i]; s.cateringSheets.splice(i,1); if(rm&&rm.id){ if(!Array.isArray(s.cateringRemoved)) s.cateringRemoved=[]; s.cateringRemoved.push(rm.id); } });
   };
   const Section=({title,desc,children})=> <div className="card p-5 mb-4"><div className="font-semibold text-stone-800 mb-1" style={{fontFamily:"var(--font-display)"}}>{title}</div>{desc&&<p className="text-xs text-stone-500 mb-3 leading-relaxed">{desc}</p>}{children}</div>;
   const [sub,setSub]=useState("daily");

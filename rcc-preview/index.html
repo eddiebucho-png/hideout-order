@@ -5425,7 +5425,7 @@ function CloudSyncModal({cloud,setCloud,fbRef,state,setState,onClose}){
   const dot = cloud.status==="on"?"bg-emerald-500":cloud.status==="error"?"bg-red-500":cloud.status==="signedout"?"bg-amber-400":"bg-stone-300";
   return <Modal onClose={onClose} title="Cloud Sync (Firestore realtime)" wide>
     <div className="flex items-center gap-2 text-sm mb-3"><span className={`inline-block w-2.5 h-2.5 rounded-full ${dot}`}></span>
-      <span className="text-stone-700">{cloud.status==="on"?("Live sync ON — signed in as "+((cloud.user&&cloud.user.email)||"")):cloud.status==="signedout"?"Connected, not signed in":cloud.status==="connecting"?"Connecting…":cloud.status==="saving"?"Saving…":cloud.status==="error"?"Error":"Off (no config)"}</span></div>
+      <span className="text-stone-700">{cloud.status==="on"?("Live sync ON — signed in as "+((cloud.user&&cloud.user.email)||"")):cloud.status==="signedout"?"Connected, not signed in":cloud.status==="connecting"?"Connecting…":cloud.status==="error"?"Error":"Off (no config)"}</span></div>
     {cloud.error && <div className="text-xs bg-red-50 text-red-600 rounded-lg p-2 mb-3">{cloud.error}</div>}
     <p className="text-xs text-stone-500 mb-2">Paste your Firebase web app config below (see the setup guide). Changes then sync live across all devices signed into the same Firebase project. Data lives in your Firestore.</p>
     <textarea value={cfgText} onChange={e=>setCfgText(e.target.value)} placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "appId": "..." }' className="w-full h-32 p-3 text-xs border border-stone-200 rounded-lg font-mono" />
@@ -5690,13 +5690,7 @@ function App(){
       err=>setCloud(c=>({...c,status:"error",error:String(err)})));
     return ()=>unsub();
   }, [cloud.status]);
-  /* SAVE RELIABILITY 2026-09-19: the guard used to be `cloud.status!=="on"`, and a failed write
-     set status:"error" with nothing but re-init or an auth change to clear it. One transient
-     failure therefore stopped every later save for the rest of the session, silently, while the
-     chef kept typing. "error" is now allowed through so the next edit retries; only signed-out
-     blocks, because then there is nobody to write as. */
-  useEffect(()=>{ const fb=fbRef.current; if(!fb) return;
-    if(cloud.status!=="on" && cloud.status!=="error" && cloud.status!=="saving") return;
+  useEffect(()=>{ const fb=fbRef.current; if(!fb||cloud.status!=="on") return;
     if(!hydrated.current) return;
     if(applyingRemote.current){ applyingRemote.current=false; return; }
     if(pushTimer.current) clearTimeout(pushTimer.current);
@@ -5706,25 +5700,17 @@ function App(){
       // Everything else in state is still last-writer-wins - only the sheet list gets this treatment.
       const ref=fb.db.collection(CLOUD_DOC().col).doc(CLOUD_DOC().doc);
       const local=JSON.parse(JSON.stringify(state));
-      const attempt=(tries)=> fb.db.runTransaction(async tx=>{
+      fb.db.runTransaction(async tx=>{
         const snap=await tx.get(ref); const rs=(snap.exists&&snap.data()&&snap.data().state)||{};
         const m=mergeCateringSheets(local, rs);
         local.cateringSheets=m.sheets; local.cateringRemoved=m.removed;
         tx.set(ref,{state:local, updatedAt:Date.now(), clientId:CLIENT_ID, by:((cloud.user&&cloud.user.email)||"app")});
         return m.changed;
-      }).catch(e=>{
-        /* A transaction aborts on contention, and every device writes to this one document -
-           so a clash is ordinary, not an error. Back off and try again before saying anything. */
-        if(tries>0){ setCloud(c=>(c.status==="error"?c:{...c,status:"saving",error:""}));
-          return new Promise(r=>setTimeout(r, 400*(4-tries))).then(()=>attempt(tries-1)); }
-        throw e;
-      });
-      attempt(3).then(changed=>{
+      }).then(changed=>{
         // our own write never comes back through onSnapshot (clientId guard), so mirror the reconciled
         // list into local state here; applyingRemote stops the push effect from echoing it straight back.
-        setCloud(c=>(c.status==="on"?c:{...c,status:"on",error:""}));
         if(changed){ applyingRemote.current=true; setState(s=>({...s, cateringSheets:local.cateringSheets, cateringRemoved:local.cateringRemoved})); }
-      }).catch(e=>setCloud(c=>({...c,status:"error",error:"Not saved yet \u2014 "+String((e&&e.message)||e)+". Your changes are still on this device; they will go up on the next edit."})));
+      }).catch(e=>setCloud(c=>({...c,status:"error",error:String(e)})));
       mirrorToSheet(state);
     }, 900);
   }, [state, cloud.status]);

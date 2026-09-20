@@ -1722,6 +1722,15 @@ function Skeleton({rows,height}){ ensureSkCss(); const n=rows||5; return <div st
    an emptied box means (Cost wants "", min-order wants null, the RCC multiplier wants 1). */
 function NumIn({value, onNum, blank, style, placeholder, disabled, title, list}){
   const [draft,setDraft]=useState(null);            // non-null only while the user is typing
+  /* A value arriving from outside this box (switching item, an RCC link recalculating) must win
+     over a half-typed draft, or the field keeps showing stale text. Compared as numbers so a
+     mid-typing "0." is left alone. */
+  useEffect(()=>{
+    if(draft==null) return;
+    const d=Number(draft); if(!Number.isFinite(d)) return;
+    const v=(value===""||value==null) ? 0 : Number(value);
+    if(d!==v) setDraft(null);
+  },[value]);
   const shown = draft!=null ? draft : (value===""||value==null ? "" : String(value));
   const handle=(e)=>{
     const t=e.target.value.replace(/,/g,".").trim();

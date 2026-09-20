@@ -8,6 +8,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- Firebase compat SDK — shared RCC project (hideout-recipe-cost): staff login + postcards + photos. Added 2026-07-23. -->
+<!-- Firebase must load here, synchronously. staff-gate.js (the login gate) calls
+     firebase.initializeApp as soon as it runs; deferring these froze the app at "Loading data..."
+     on 2026-09-13. The Postcards board also uses them. Do not defer without fixing the gate. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -371,6 +374,17 @@
   .seg2{ display:inline-flex; flex:none; } .seg2 button{ padding:10px 14px; min-height:44px; border:3px solid var(--color-ink); border-left-width:0; font:inherit; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:#fff; color:var(--color-ink); cursor:pointer; transition:background .15s,color .15s; white-space:nowrap; }
   .seg2 button:first-child{ border-left-width:3px; } .seg2 button[aria-pressed="true"]{ background:var(--color-ink); color:#f3f1ec; animation:popIn .3s cubic-bezier(.2,.8,.2,1); } .seg2 button:hover:not([aria-pressed="true"]){ background:var(--color-warning); }
   .seg2.dark button{ background:var(--color-ink); color:#f3f1ec; border-color:#f3f1ec; } .seg2.dark button[aria-pressed="true"]{ background:var(--color-warning); color:var(--color-ink); border-color:var(--color-warning); }
+  /* .seg2 is one row of two. .segrid is the same control when there are more choices than fit a
+     line: the cells sit on the container's ink and a 3px gap lets it through as the divider, so
+     wrapping needs no per-edge border rules. Same type, same pressed state as .seg2. */
+  .seg2.full{ display:flex; width:100%; } .seg2.full button{ flex:1 1 0; justify-content:center; }
+  .segrid{ display:grid; grid-template-columns:1fr 1fr; gap:3px; background:var(--color-ink); border:3px solid var(--color-ink); }
+  .segrid button{ display:flex; align-items:center; justify-content:center; gap:7px; padding:12px 10px; min-height:52px; border:0; font:inherit; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:#fff; color:var(--color-ink); cursor:pointer; transition:background .15s,color .15s; text-align:center; }
+  .segrid button[aria-pressed="true"]{ background:var(--color-ink); color:#f3f1ec; animation:popIn .3s cubic-bezier(.2,.8,.2,1); }
+  .segrid button:hover:not([aria-pressed="true"]){ background:var(--color-warning); }
+  .segrid button .lk{ font-size:11px; opacity:.6; }
+  .segrid button .tick{ font-size:13px; }
+  @media (max-width:380px){ .segrid{ grid-template-columns:1fr; } }
   .btn2{ font:inherit; font-weight:700; font-size:14px; text-transform:uppercase; letter-spacing:.04em; padding:11px 16px; min-height:44px; border:3px solid var(--color-ink); background:#fff; color:var(--color-ink); white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s,background .18s,color .18s; }
   .btn2:hover{ transform:translate(-3px,-3px); box-shadow:5px 5px 0 var(--color-ink); } .btn2:active{ transform:none; box-shadow:none; }
   .btn2.p{ background:var(--color-primary); border-color:var(--color-primary); color:#fff; } .btn2.y{ background:var(--color-warning); border-color:var(--color-warning); color:var(--color-ink); } .btn2.dark{ background:var(--color-ink); color:#f3f1ec; }
@@ -466,9 +480,9 @@
     <div style="color:#fff;font-family:sans-serif;font-weight:700;font-size:26px;text-align:center;line-height:1.3;padding:30%;">HSC<br><span style="font-size:13px;color:#e0d6c9;font-weight:500;">Ordering</span></div>
   </div>
 </template>
-<!-- Closing checklist - the separated module, attached rather than embedded. One source serves
-     the ordering app and RCC; both open it over the page they are already on. -->
-<script>/* CLO-SCRIPT (closing checklist) */(function(){var s=document.createElement("script");s.src="https://order.hideoutdb.com/closing.js?v="+Math.floor(Date.now()/6e4);document.head.appendChild(s);})();</script><style>/* CLO-ROOM */
+<!-- Closing checklist - the separated module, fetched when the Closing button is pressed rather
+     than on every page load. It cost 497ms and 104KB up front for a sheet used once a day; the
+     button's own handler loads it on demand (see CLO-BTN). --><style>/* CLO-ROOM */
 .hdr2 .row1 .locb{flex:0 1 auto;min-width:0}
 .hdr2 .row1 .locb > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:400px){ .hdr2 .row1{gap:8px} }
@@ -1869,11 +1883,13 @@ function TodaySummary({ctx}){
       return <Card style={{marginBottom:16,borderLeft:"4px solid var(--color-primary)"}}>
         <div className="u-label" style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><span aria-hidden="true" style={{fontSize:14,lineHeight:1}}>🥐</span>Grouped totals · same base ingredient</span></div>
         <HScroll><table style={{borderCollapse:"collapse",width:"100%",minWidth:260}}>
-          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th><th style={{...th,textAlign:"center"}} title="Oven trays · 8 per tray · floor(total ÷ 8) + 1">Trays</th></tr></thead>
+          <thead><tr><th style={th}>Group</th><th style={{...th,textAlign:"center"}}>Total</th><th style={{...th,textAlign:"center"}} title="Oven trays · 8 per tray · rounded up (8→1, 9→2)">Trays</th></tr></thead>
           <tbody>{list.map(g=>{ const mixed=g.units.size>1; const u=mixed?"mixed":([...g.units][0]||"");
-            /* 오븐 트레이 수 (2026-09-09 주인): 한 트레이에 8개. 계산은 주인이 정한 그대로 floor(total ÷ 8) + 1 —
-               나머지가 없어도 +1 이 붙는다(43→6, 28→4, 40→6). 반올림(ceil)이 아니라는 점이 의도다. */
-            const TRAY_CAP=8; const trays=Math.floor((Number(g.total)||0)/TRAY_CAP)+1;
+            /* 오븐 트레이 수: 한 트레이에 8개. 남는 개수는 트레이 하나를 더 쓰므로 올림(ceil)이다.
+               [수정 2026-09-13 주인] 이전엔 floor(total ÷ 8) + 1 이라 8·16·24처럼 딱 나눠떨어질 때
+               빈 트레이가 하나 더 붙었다(8→2). 딱 떨어지면 +1 하지 않는 것이 맞다(8→1, 16→2).
+               나머지가 있을 때의 값은 전과 같다(43→6, 54→7, 19→3). */
+            const TRAY_CAP=8; const trays=Math.ceil((Number(g.total)||0)/TRAY_CAP);
             return (<tr key={g.label} className="row-live">
             <td style={{...td,fontWeight:600}}>{g.label}</td>
             <td style={{...td,textAlign:"center",fontWeight:700}}>{g.total}<span style={{fontSize:10,fontWeight:500,color:mixed?"#b45309":"var(--color-ink-muted-48)",marginLeft:2}} title={mixed?"This group mixes units — total may be misleading":undefined}>{u}</span></td>
@@ -3209,31 +3225,41 @@ function PowerMenu(){
 }
 
 // Top-left location display → tap to switch branch (passcode-aware; MASTER always works)
-function LocMenu({locations, branch, onSwitch}){
-  const [open,setOpen]=useState(false);
+/* Branch picker for the "Where are you" sheet. This replaced LocMenu, whose styling was written
+   for the dark header (muted text on a dark bar) and became near-invisible once the sheet went
+   light - it was the one thing in the sheet that did not look pressable.
+   The passcode gate is carried over unchanged: a branch that has one cannot be entered without it,
+   and MASTER still opens any of them. Live data has no passcodes today, but the field is honoured
+   the moment one is set, so do not drop this path. */
+function BranchPicker({locations, branch, onSwitch}){
   const [pend,setPend]=useState(null); const [code,setCode]=useState(""); const [err,setErr]=useState("");
-  const ref=useRef(null);
   const nm=(l)=>(l&&l.name?l.name.replace(/\s*\(.*\)/,""):"");
-  const cur=locations.find(l=>l.id===branch);
-  useEffect(()=>{ if(!open) return; const onDoc=(e)=>{ if(ref.current&&!ref.current.contains(e.target)){ setOpen(false); setPend(null); setCode(""); setErr(""); } }; document.addEventListener("mousedown",onDoc); document.addEventListener("touchstart",onDoc); return ()=>{ document.removeEventListener("mousedown",onDoc); document.removeEventListener("touchstart",onDoc); }; },[open]);
-  const choose=(l)=>{ if(l.id===branch){ setOpen(false); return; } if(l.passcode){ setPend(l.id); setCode(""); setErr(""); } else { onSwitch(l.id); setOpen(false); } };
-  const confirmCode=()=>{ const l=locations.find(x=>x.id===pend); if(!l) return; const c=code.trim(); if(c!==MASTER && l.passcode && String(l.passcode)!==c){ setErr("Incorrect passcode"); return; } onSwitch(pend); setOpen(false); setPend(null); setCode(""); setErr(""); };
-  return <div ref={ref} style={{position:"relative",display:"inline-flex"}}>
-    <button onClick={()=>setOpen(o=>!o)} title="Switch branch" style={{background:"none",border:"none",cursor:"pointer",color:open?"#fff":"var(--color-body-muted)",fontSize:12,display:"inline-flex",alignItems:"center",gap:3,padding:0,fontFamily:"inherit"}}>
-      {nm(cur)||"Select branch"}<span style={{fontSize:9,opacity:.7}}>▾</span>
-    </button>
-    {open && <div className="modal-pop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,zIndex:60,minWidth:190,maxWidth:260,background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"5px 0",boxShadow:"0 10px 28px rgba(0,0,0,.45)"}}>
-      {!pend ? locations.map(l=>(<button key={l.id} onClick={()=>choose(l)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",textAlign:"left",background:l.id===branch?"rgba(255,255,255,.10)":"none",border:"none",cursor:"pointer",color:"#fff",fontSize:13,padding:"9px 14px",whiteSpace:"nowrap"}}><span>{nm(l)}</span>{l.passcode?<span style={{fontSize:10,opacity:.55}}>🔒</span>:null}</button>)) : (
-        <div style={{padding:"8px 12px"}}>
-          <div style={{color:"var(--color-body-muted)",fontSize:11,marginBottom:6}}>Passcode · {nm(locations.find(x=>x.id===pend))}</div>
-          <input autoFocus inputMode="numeric" value={code} onChange={e=>{ setCode(e.target.value.replace(/\D/g,"")); setErr(""); }} onKeyDown={e=>e.key==="Enter"&&confirmCode()} placeholder="••••" style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.06)",color:"#fff",padding:"9px 10px",fontSize:15}} />
-          {err?<div style={{color:"#ff8a80",fontSize:11,marginTop:5}}>{err}</div>:null}
-          <div style={{display:"flex",gap:6,marginTop:9}}>
-            <button onClick={()=>{ setPend(null); setCode(""); setErr(""); }} style={{flex:1,background:"none",border:"1px solid rgba(255,255,255,.2)",color:"var(--color-body-muted)",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12}}>Back</button>
-            <button onClick={confirmCode} style={{flex:1,background:"var(--color-primary)",border:"none",color:"#fff",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12,fontWeight:700}}>Enter</button>
-          </div>
-        </div>
-      )}
+  const choose=(l)=>{ if(l.id===branch) return; if(l.passcode){ setPend(l.id); setCode(""); setErr(""); } else onSwitch(l.id); };
+  const confirmCode=()=>{ const l=locations.find(x=>x.id===pend); if(!l) return; const c=code.trim();
+    if(c!==MASTER && l.passcode && String(l.passcode)!==c){ setErr("Incorrect passcode"); return; }
+    onSwitch(pend); setPend(null); setCode(""); setErr(""); };
+  const odd=locations.length%2===1;
+  return <div>
+    <div className="segrid">
+      {locations.map((l,ix)=>{
+        const on=l.id===branch;
+        return <button key={l.id} type="button" aria-pressed={on} onClick={()=>choose(l)}
+          style={odd&&ix===locations.length-1?{gridColumn:"span 2"}:null}>
+          {on?<span className="tick" aria-hidden="true">✓</span>:null}{nm(l)}{l.passcode?<span className="lk" aria-hidden="true">🔒</span>:null}
+        </button>;
+      })}
+    </div>
+    {pend && <div style={{border:"3px solid var(--color-ink)",borderTop:0,background:"#fff",padding:"12px 12px 14px"}}>
+      <div className="k" style={{margin:"0 0 8px"}}>Passcode · {nm(locations.find(x=>x.id===pend))}</div>
+      <input autoFocus inputMode="numeric" value={code}
+        onChange={e=>{ setCode(e.target.value.replace(/\D/g,"")); setErr(""); }}
+        onKeyDown={e=>e.key==="Enter"&&confirmCode()} placeholder="••••"
+        style={{width:"100%",boxSizing:"border-box",border:"3px solid var(--color-ink)",background:"#fff",color:"var(--color-ink)",padding:"11px 12px",font:"inherit",fontSize:17,minHeight:48}} />
+      {err?<div style={{color:"var(--color-danger-text)",fontSize:13,fontWeight:700,marginTop:7}}>{err}</div>:null}
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <button type="button" className="btn2" style={{flex:1}} onClick={()=>{ setPend(null); setCode(""); setErr(""); }}>Back</button>
+        <button type="button" className="btn2 p" style={{flex:1}} onClick={confirmCode}>Enter</button>
+      </div>
     </div>}
   </div>;
 }
@@ -3486,10 +3512,15 @@ function App(){
     {sheet==="where" && <div className="sheet" onClick={()=>setSheet(null)}><div className="box" onClick={e=>e.stopPropagation()}>
       <div className="lbl" style={{marginBottom:6}}><span className="sh s"></span><span className="tag">Where are you</span></div>
       <div className="k">Department</div>
-      <div className="seg2" style={{marginBottom:6}}>{[["chef","Chef / Kitchen"],["barista","Barista / Front"]].map(([k,l])=><button key={k} type="button" aria-pressed={department===k} onClick={()=>{ if(k!==department) switchDept(k); }}>{l}</button>)}</div>
+      <div className="seg2 full">{[["chef","Chef / Kitchen"],["barista","Barista / Front"]].map(([k,l])=><button key={k} type="button" aria-pressed={department===k} onClick={()=>{ if(k!==department) switchDept(k); }}>{l}</button>)}</div>
       <div className="k">Branch</div>
-      <div style={{color:"var(--color-ink)"}}><LocMenu locations={locations} branch={branch} onSwitch={id=>{ switchBranch(id); setSheet(null); }} /></div>
-      <div className="k" style={{marginTop:6}}>Current: {(locations.find(l=>l.id===branch)||{}).name||"—"} · {department==="barista"?"Barista":"Chef"}</div>
+      <BranchPicker locations={locations} branch={branch} onSwitch={id=>{ switchBranch(id); setSheet(null); }} />
+      {/* The old control said "Current: X" in the same muted grey as every other label. Pressing a
+          branch changes what every tab shows, so the consequence is spelled out here instead. */}
+      <div style={{marginTop:12,padding:"11px 13px",border:"3px solid var(--color-ink)",background:"var(--color-warning)",fontSize:14,fontWeight:700,lineHeight:1.35}}>
+        You are on <span style={{textTransform:"uppercase",letterSpacing:".04em"}}>{(locations.find(l=>l.id===branch)||{}).name||"—"} · {department==="barista"?"Barista":"Chef"}</span>
+        <div style={{fontWeight:500,fontSize:13,marginTop:3,paddingRight:64}}>Orders, stock and today’s board all follow this. Tap another branch to move.</div>
+      </div>
       <div style={{display:"flex", justifyContent:"flex-end", marginTop:10}}><button type="button" className="btn2 p" onClick={()=>setSheet(null)}>Done</button></div>
     </div></div>}
 

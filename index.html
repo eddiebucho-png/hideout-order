@@ -374,6 +374,17 @@
   .seg2{ display:inline-flex; flex:none; } .seg2 button{ padding:10px 14px; min-height:44px; border:3px solid var(--color-ink); border-left-width:0; font:inherit; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:#fff; color:var(--color-ink); cursor:pointer; transition:background .15s,color .15s; white-space:nowrap; }
   .seg2 button:first-child{ border-left-width:3px; } .seg2 button[aria-pressed="true"]{ background:var(--color-ink); color:#f3f1ec; animation:popIn .3s cubic-bezier(.2,.8,.2,1); } .seg2 button:hover:not([aria-pressed="true"]){ background:var(--color-warning); }
   .seg2.dark button{ background:var(--color-ink); color:#f3f1ec; border-color:#f3f1ec; } .seg2.dark button[aria-pressed="true"]{ background:var(--color-warning); color:var(--color-ink); border-color:var(--color-warning); }
+  /* .seg2 is one row of two. .segrid is the same control when there are more choices than fit a
+     line: the cells sit on the container's ink and a 3px gap lets it through as the divider, so
+     wrapping needs no per-edge border rules. Same type, same pressed state as .seg2. */
+  .seg2.full{ display:flex; width:100%; } .seg2.full button{ flex:1 1 0; justify-content:center; }
+  .segrid{ display:grid; grid-template-columns:1fr 1fr; gap:3px; background:var(--color-ink); border:3px solid var(--color-ink); }
+  .segrid button{ display:flex; align-items:center; justify-content:center; gap:7px; padding:12px 10px; min-height:52px; border:0; font:inherit; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:#fff; color:var(--color-ink); cursor:pointer; transition:background .15s,color .15s; text-align:center; }
+  .segrid button[aria-pressed="true"]{ background:var(--color-ink); color:#f3f1ec; animation:popIn .3s cubic-bezier(.2,.8,.2,1); }
+  .segrid button:hover:not([aria-pressed="true"]){ background:var(--color-warning); }
+  .segrid button .lk{ font-size:11px; opacity:.6; }
+  .segrid button .tick{ font-size:13px; }
+  @media (max-width:380px){ .segrid{ grid-template-columns:1fr; } }
   .btn2{ font:inherit; font-weight:700; font-size:14px; text-transform:uppercase; letter-spacing:.04em; padding:11px 16px; min-height:44px; border:3px solid var(--color-ink); background:#fff; color:var(--color-ink); white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s,background .18s,color .18s; }
   .btn2:hover{ transform:translate(-3px,-3px); box-shadow:5px 5px 0 var(--color-ink); } .btn2:active{ transform:none; box-shadow:none; }
   .btn2.p{ background:var(--color-primary); border-color:var(--color-primary); color:#fff; } .btn2.y{ background:var(--color-warning); border-color:var(--color-warning); color:var(--color-ink); } .btn2.dark{ background:var(--color-ink); color:#f3f1ec; }
@@ -1704,7 +1715,37 @@ const ICONS={
 function Ico({name,size,stroke,style}){ const s=size||18; return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke||2} strokeLinecap="round" strokeLinejoin="round" style={{flex:"0 0 auto",...style}} aria-hidden="true" dangerouslySetInnerHTML={{__html:ICONS[name]||""}} />; }
 function Skeleton({rows,height}){ ensureSkCss(); const n=rows||5; return <div style={{display:"grid",gap:10,padding:"2px"}}>{Array.from({length:n}).map((_,i)=><div key={i} className="sk-shimmer" style={{height:height||52,borderRadius:14,background:"var(--color-canvas-parchment)"}} />)}</div>; }
 
-window.OUI = { LS, cx, money, uid, toast, ToastHost, Btn, Card, Field, Modal, Empty, Segmented, CountUp, Bar, Ico, Skeleton };
+/* Number field you can actually type "0.5" into.
+   [FIX 2026-09-20] These boxes were value={n} + onChange={Number(e.target.value)}: typing the "."
+   made Number("0.") - 0, React re-rendered "0", and the decimal point could never be entered - the
+   box sat stuck on 0. Keeps the raw text while focused, hands a number upward. `blank` decides what
+   an emptied box means (Cost wants "", min-order wants null, the RCC multiplier wants 1). */
+function NumIn({value, onNum, blank, style, placeholder, disabled, title, list}){
+  const [draft,setDraft]=useState(null);            // non-null only while the user is typing
+  /* A value arriving from outside this box (switching item, an RCC link recalculating) must win
+     over a half-typed draft, or the field keeps showing stale text. Compared as numbers so a
+     mid-typing "0." is left alone. */
+  useEffect(()=>{
+    if(draft==null) return;
+    const d=Number(draft); if(!Number.isFinite(d)) return;
+    const v=(value===""||value==null) ? 0 : Number(value);
+    if(d!==v) setDraft(null);
+  },[value]);
+  const shown = draft!=null ? draft : (value===""||value==null ? "" : String(value));
+  const handle=(e)=>{
+    const t=e.target.value.replace(/,/g,".").trim();
+    if(t!=="" && !/^-?\d*\.?\d*$/.test(t)) return;
+    setDraft(t);
+    if(t===""){ onNum(blank===undefined?0:blank); return; }
+    const n=Number(t);
+    onNum(Number.isFinite(n)?n:(blank===undefined?0:blank));
+  };
+  return <input type="text" inputMode="decimal" style={style} placeholder={placeholder} title={title}
+    disabled={disabled} list={list} value={shown}
+    onChange={handle} onFocus={e=>setDraft(e.target.value)} onBlur={()=>setDraft(null)} />;
+}
+
+window.OUI = { LS, cx, money, uid, toast, ToastHost, Btn, Card, Field, Modal, Empty, Segmented, CountUp, Bar, Ico, Skeleton, NumIn };
 
 </script>
 <script type="text/babel" data-presets="react">
@@ -2485,7 +2526,7 @@ window.OrderTabs = { TodaySummary, SubmitOrder, PeriodReport, StockTake, TrendsR
 (function(){
 const { useState, useEffect, useRef, useMemo } = React;
 const C = window.OrderCore;
-const { cx, money, uid, toast, Btn, Card, Field, Modal, Empty, Segmented } = window.OUI;
+const { cx, money, uid, toast, Btn, Card, Field, Modal, Empty, Segmented, NumIn } = window.OUI;
 const { inp, th, td, HScroll, SectionLabel, itemsByCat, useAsync } = window.OrderTabs;
 
 const SETTINGS_PASSWORD = "100100"; // legacy settings pw kept
@@ -2500,6 +2541,7 @@ function ItemsCard({ctx}){
   const [page,setPage]=useState(1);
   const [sel,setSel]=useState({});                     // {itemId:true} — bulk delete
   const [edit,setEdit]=useState(null); const [adding,setAdding]=useState(false);
+  const [rccQ,setRccQ]=useState("");                 // RCC link search text
 
   const catLabel=id=>{ const c=ctx.categories.find(c=>c.id===id); return c?c.label:"—"; };
   const catRank=id=>{ const i=ctx.categories.findIndex(c=>c.id===id); return i<0?9999:i; };  // uncategorised sinks to the bottom
@@ -2553,6 +2595,28 @@ function ItemsCard({ctx}){
     </th>;
   };
   const units=Array.from(new Set((ctx.items||[]).map(i=>(i.unit||"").trim()).filter(Boolean))).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+  /* RCC link options: ingredients and recipes in one list. A recipe carries k:"r" and is priced
+     p = whole batch, q = yield, u = yield unit — the same three fields an ingredient uses, so
+     itemCost() needs no special case: mode "unit" divides by the yield, "pack" takes the batch. */
+  const rccOpts=useMemo(()=>{
+    const seen={};
+    return (ctx.rccPrices||[]).map(g=>{
+      let label=g.k==="r" ? g.n+" (recipe)" : g.n;
+      if(seen[label]) label=label+" · "+g.i.slice(-4);   // two RCC rows with the same name
+      seen[label]=1;
+      return {...g, label};
+    });
+  },[ctx.rccPrices]);
+  /* The old <datalist> put all 575 rows into the DOM and let Chrome's popup filter them - slow to
+     open, slow to type, and it re-rendered on every keystroke anywhere in the modal. Now only the
+     top matches are rendered. Recipes come first because that is what a finished good links to;
+     a match at the START of the name beats one in the middle. */
+  const rccHits=useMemo(()=>{
+    const q=rccQ.trim().toLowerCase(); if(!q) return [];
+    const score=g=>{ const n=g.n.toLowerCase(); const i=n.indexOf(q); if(i<0) return -1; return (g.k==="r"?200:0)+(i===0?100:0)+(50-Math.min(50,i)); };
+    return rccOpts.map(g=>({g,s:score(g)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).slice(0,12).map(x=>x.g);
+  },[rccQ,rccOpts]);
+  const linkRcc=(g)=>{ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(g.k==="r"||Number(g.q)>1)?"unit":"pack"}); setRccQ(""); };
 
   return <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
     <div className="bar2">
@@ -2605,17 +2669,17 @@ function ItemsCard({ctx}){
           <Field label="Category"><select value={edit.cat} onChange={e=>setEdit({...edit,cat:e.target.value})} style={inp}>{ctx.categories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Field label={edit.rccId?"Cost (auto from RCC)":"Cost (optional)"}><input inputMode="decimal" disabled={!!edit.rccId} value={edit.rccId?C.itemCost(edit).toFixed(2):(edit.cost??"")} onChange={e=>setEdit({...edit,cost:e.target.value===""?"":Number(e.target.value)})} style={{...inp,...(edit.rccId?{opacity:.65,background:"var(--color-canvas-parchment)"}:{})}} /></Field>
-          <Field label="Min order qty (optional)"><input inputMode="decimal" value={edit.minOrderQty??""} onChange={e=>setEdit({...edit,minOrderQty:e.target.value===""?null:Number(e.target.value)})} style={inp} /></Field>
+          <Field label={edit.rccId?"Cost (auto from RCC)":"Cost (optional)"}><NumIn disabled={!!edit.rccId} value={edit.rccId?C.itemCost(edit).toFixed(2):(edit.cost??"")} blank="" onNum={n=>setEdit({...edit,cost:n})} style={{...inp,...(edit.rccId?{opacity:.65,background:"var(--color-canvas-parchment)"}:{})}} /></Field>
+          <Field label="Min order qty (optional)"><NumIn value={edit.minOrderQty??""} blank={null} onNum={n=>setEdit({...edit,minOrderQty:n})} style={inp} /></Field>
         </div>
         {/* RCC 재료 연결 (2026-08-26 주인 요청 "IOS 아이템들 RCC 에서 가격 불러오게, 매칭해서").
             ⚠ 이름 자동매칭은 안 쓴다 — 실측 81품목 중 정확일치 3개뿐 + 7월 substring 오매칭 전례(SOFT 교훈 1).
             사람이 한 번 고르면(datalist 정확일치) 그 뒤로 가격은 RCC 를 영원히 따라간다.
             packs per unit = 발주 단위 1개가 RCC 구매포장 몇 개인가 (예: bottle=2L팩 1개 → 1). */}
-        <Field label="RCC ingredient link (price follows RCC)">
+        <Field label="RCC link — ingredient or recipe (price follows RCC)">
           {edit.rccId ? (()=>{ const g=(ctx.rccPrices||[]).find(x=>x.i===edit.rccId); const mode=edit.rccMode||"pack"; return <div style={{display:"grid",gap:8,background:"var(--color-canvas-parchment)",borderRadius:10,padding:"9px 12px"}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{flex:"1 1 160px",fontSize:13}}><b>{g?g.n:edit.rccId}</b>{g?<span style={{color:"var(--color-ink-muted-48)"}}> — ${g.p}{g.q?` / ${g.q}${g.u||""}`:""}</span>:<span style={{color:"#b45309"}}> (가격표에 없음)</span>}</span>
+              <span style={{flex:"1 1 160px",fontSize:13}}>{g&&g.k==="r"?<span style={{fontSize:9.5,fontWeight:700,color:"var(--color-primary)",border:"1px solid var(--color-primary)",borderRadius:4,padding:"1px 4px",marginRight:6}}>RECIPE</span>:null}<b>{g?g.n:edit.rccId}</b>{g?<span style={{color:"var(--color-ink-muted-48)"}}> — ${g.p}{g.q?` / ${g.q}${g.u||""}`:""}</span>:<span style={{color:"#b45309"}}> (가격표에 없음)</span>}</span>
               <button onClick={()=>setEdit({...edit,rccId:null,rccQtyPerUnit:null,rccMode:null})} style={{background:"none",border:"none",color:"#d70015",cursor:"pointer",fontSize:12}}>unlink</button>
             </div>
             {/* 기준 선택 — '낱개' = 구매수량으로 나눔(60개들이 $91.65 → 개당 $1.5275), '팩' = 포장 통째 */}
@@ -2625,12 +2689,25 @@ function ItemsCard({ctx}){
                 <option value="pack">{`per pack ($${g?g.p:"?"})`}</option>
               </select>
               <span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>× per {edit.unit||"unit"}</span>
-              <input inputMode="decimal" value={edit.rccQtyPerUnit??1} onChange={e=>setEdit({...edit,rccQtyPerUnit:e.target.value===""?1:Number(e.target.value)})} style={{...inp,width:64,textAlign:"center"}} />
+              <NumIn value={edit.rccQtyPerUnit??1} blank={1} onNum={n=>setEdit({...edit,rccQtyPerUnit:n})} style={{...inp,width:64,textAlign:"center"}} />
               <span style={{fontSize:13,fontWeight:700}}>= ${C.itemCost(edit).toFixed(4)} / {edit.unit||"unit"}</span>
             </div>
+            {/* b=1 : RCC could not cost every line of this recipe (unconvertible unit, missing link,
+                circular sub-recipe). The number below is therefore too LOW, never too high. */}
+            {g&&g.b?<div style={{fontSize:11.5,color:"#b45309"}}>RCC can’t cost every line of this recipe yet, so this price is too low. Fix the recipe in RCC — the number here follows it.</div>:null}
           </div>; })() : <React.Fragment>
-            <input list="rcc-price-options" placeholder={(ctx.rccPrices&&ctx.rccPrices.length)?("Search "+ctx.rccPrices.length+" RCC ingredients…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} onChange={e=>{ const g=(ctx.rccPrices||[]).find(x=>x.n===e.target.value); if(g){ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(Number(g.q)>1?"unit":"pack")}); e.target.value=""; } }} style={inp} />
-            <datalist id="rcc-price-options">{(ctx.rccPrices||[]).map(g=><option key={g.i} value={g.n}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}</option>)}</datalist>
+            <input value={rccQ} onChange={e=>setRccQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"&&rccHits.length){ e.preventDefault(); linkRcc(rccHits[0]); } if(e.key==="Escape") setRccQ(""); }}
+                   placeholder={rccOpts.length?("Search "+rccOpts.length+" RCC ingredients & recipes…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} style={inp} autoComplete="off" />
+            {rccQ.trim()!=="" && <div style={{border:"1px solid var(--color-hairline-alpha)",borderRadius:10,background:"#fff",marginTop:6,maxHeight:300,overflowY:"auto"}}>
+              {rccHits.length===0 ? <div style={{padding:"10px 12px",fontSize:13,color:"var(--color-ink-muted-48)"}}>No RCC ingredient or recipe matches “{rccQ}”.</div>
+              : rccHits.map(g=>(<button key={g.i} type="button" onClick={()=>linkRcc(g)} className="row-live"
+                  style={{display:"flex",width:"100%",alignItems:"center",gap:10,padding:"9px 12px",background:"none",border:"none",borderBottom:"1px solid var(--color-hairline-alpha)",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                  {g.k==="r"?<span style={{fontSize:9.5,fontWeight:700,color:"var(--color-primary)",border:"1px solid var(--color-primary)",borderRadius:4,padding:"1px 4px",flex:"0 0 auto"}}>RECIPE</span>:null}
+                  <span style={{flex:"1 1 auto",minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.n}</span>
+                  <span style={{flex:"0 0 auto",fontSize:12,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}{g.b?<span style={{color:"#b45309"}}> · cost incomplete</span>:null}</span>
+                </button>))}
+              {rccHits.length===12 && <div style={{padding:"6px 12px",fontSize:11,color:"var(--color-ink-muted-48)"}}>Showing the 12 best matches — keep typing to narrow.</div>}
+            </div>}
           </React.Fragment>}
         </Field>
         <label style={{display:"flex",gap:9,alignItems:"flex-start",cursor:"pointer",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"10px 12px"}}>
@@ -3214,31 +3291,41 @@ function PowerMenu(){
 }
 
 // Top-left location display → tap to switch branch (passcode-aware; MASTER always works)
-function LocMenu({locations, branch, onSwitch}){
-  const [open,setOpen]=useState(false);
+/* Branch picker for the "Where are you" sheet. This replaced LocMenu, whose styling was written
+   for the dark header (muted text on a dark bar) and became near-invisible once the sheet went
+   light - it was the one thing in the sheet that did not look pressable.
+   The passcode gate is carried over unchanged: a branch that has one cannot be entered without it,
+   and MASTER still opens any of them. Live data has no passcodes today, but the field is honoured
+   the moment one is set, so do not drop this path. */
+function BranchPicker({locations, branch, onSwitch}){
   const [pend,setPend]=useState(null); const [code,setCode]=useState(""); const [err,setErr]=useState("");
-  const ref=useRef(null);
   const nm=(l)=>(l&&l.name?l.name.replace(/\s*\(.*\)/,""):"");
-  const cur=locations.find(l=>l.id===branch);
-  useEffect(()=>{ if(!open) return; const onDoc=(e)=>{ if(ref.current&&!ref.current.contains(e.target)){ setOpen(false); setPend(null); setCode(""); setErr(""); } }; document.addEventListener("mousedown",onDoc); document.addEventListener("touchstart",onDoc); return ()=>{ document.removeEventListener("mousedown",onDoc); document.removeEventListener("touchstart",onDoc); }; },[open]);
-  const choose=(l)=>{ if(l.id===branch){ setOpen(false); return; } if(l.passcode){ setPend(l.id); setCode(""); setErr(""); } else { onSwitch(l.id); setOpen(false); } };
-  const confirmCode=()=>{ const l=locations.find(x=>x.id===pend); if(!l) return; const c=code.trim(); if(c!==MASTER && l.passcode && String(l.passcode)!==c){ setErr("Incorrect passcode"); return; } onSwitch(pend); setOpen(false); setPend(null); setCode(""); setErr(""); };
-  return <div ref={ref} style={{position:"relative",display:"inline-flex"}}>
-    <button onClick={()=>setOpen(o=>!o)} title="Switch branch" style={{background:"none",border:"none",cursor:"pointer",color:open?"#fff":"var(--color-body-muted)",fontSize:12,display:"inline-flex",alignItems:"center",gap:3,padding:0,fontFamily:"inherit"}}>
-      {nm(cur)||"Select branch"}<span style={{fontSize:9,opacity:.7}}>▾</span>
-    </button>
-    {open && <div className="modal-pop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,zIndex:60,minWidth:190,maxWidth:260,background:"var(--color-surface-tile-2)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"5px 0",boxShadow:"0 10px 28px rgba(0,0,0,.45)"}}>
-      {!pend ? locations.map(l=>(<button key={l.id} onClick={()=>choose(l)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",textAlign:"left",background:l.id===branch?"rgba(255,255,255,.10)":"none",border:"none",cursor:"pointer",color:"#fff",fontSize:13,padding:"9px 14px",whiteSpace:"nowrap"}}><span>{nm(l)}</span>{l.passcode?<span style={{fontSize:10,opacity:.55}}>🔒</span>:null}</button>)) : (
-        <div style={{padding:"8px 12px"}}>
-          <div style={{color:"var(--color-body-muted)",fontSize:11,marginBottom:6}}>Passcode · {nm(locations.find(x=>x.id===pend))}</div>
-          <input autoFocus inputMode="numeric" value={code} onChange={e=>{ setCode(e.target.value.replace(/\D/g,"")); setErr(""); }} onKeyDown={e=>e.key==="Enter"&&confirmCode()} placeholder="••••" style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.06)",color:"#fff",padding:"9px 10px",fontSize:15}} />
-          {err?<div style={{color:"#ff8a80",fontSize:11,marginTop:5}}>{err}</div>:null}
-          <div style={{display:"flex",gap:6,marginTop:9}}>
-            <button onClick={()=>{ setPend(null); setCode(""); setErr(""); }} style={{flex:1,background:"none",border:"1px solid rgba(255,255,255,.2)",color:"var(--color-body-muted)",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12}}>Back</button>
-            <button onClick={confirmCode} style={{flex:1,background:"var(--color-primary)",border:"none",color:"#fff",borderRadius:8,padding:"7px 0",cursor:"pointer",fontSize:12,fontWeight:700}}>Enter</button>
-          </div>
-        </div>
-      )}
+  const choose=(l)=>{ if(l.id===branch) return; if(l.passcode){ setPend(l.id); setCode(""); setErr(""); } else onSwitch(l.id); };
+  const confirmCode=()=>{ const l=locations.find(x=>x.id===pend); if(!l) return; const c=code.trim();
+    if(c!==MASTER && l.passcode && String(l.passcode)!==c){ setErr("Incorrect passcode"); return; }
+    onSwitch(pend); setPend(null); setCode(""); setErr(""); };
+  const odd=locations.length%2===1;
+  return <div>
+    <div className="segrid">
+      {locations.map((l,ix)=>{
+        const on=l.id===branch;
+        return <button key={l.id} type="button" aria-pressed={on} onClick={()=>choose(l)}
+          style={odd&&ix===locations.length-1?{gridColumn:"span 2"}:null}>
+          {on?<span className="tick" aria-hidden="true">✓</span>:null}{nm(l)}{l.passcode?<span className="lk" aria-hidden="true">🔒</span>:null}
+        </button>;
+      })}
+    </div>
+    {pend && <div style={{border:"3px solid var(--color-ink)",borderTop:0,background:"#fff",padding:"12px 12px 14px"}}>
+      <div className="k" style={{margin:"0 0 8px"}}>Passcode · {nm(locations.find(x=>x.id===pend))}</div>
+      <input autoFocus inputMode="numeric" value={code}
+        onChange={e=>{ setCode(e.target.value.replace(/\D/g,"")); setErr(""); }}
+        onKeyDown={e=>e.key==="Enter"&&confirmCode()} placeholder="••••"
+        style={{width:"100%",boxSizing:"border-box",border:"3px solid var(--color-ink)",background:"#fff",color:"var(--color-ink)",padding:"11px 12px",font:"inherit",fontSize:17,minHeight:48}} />
+      {err?<div style={{color:"var(--color-danger-text)",fontSize:13,fontWeight:700,marginTop:7}}>{err}</div>:null}
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <button type="button" className="btn2" style={{flex:1}} onClick={()=>{ setPend(null); setCode(""); setErr(""); }}>Back</button>
+        <button type="button" className="btn2 p" style={{flex:1}} onClick={confirmCode}>Enter</button>
+      </div>
     </div>}
   </div>;
 }
@@ -3491,10 +3578,15 @@ function App(){
     {sheet==="where" && <div className="sheet" onClick={()=>setSheet(null)}><div className="box" onClick={e=>e.stopPropagation()}>
       <div className="lbl" style={{marginBottom:6}}><span className="sh s"></span><span className="tag">Where are you</span></div>
       <div className="k">Department</div>
-      <div className="seg2" style={{marginBottom:6}}>{[["chef","Chef / Kitchen"],["barista","Barista / Front"]].map(([k,l])=><button key={k} type="button" aria-pressed={department===k} onClick={()=>{ if(k!==department) switchDept(k); }}>{l}</button>)}</div>
+      <div className="seg2 full">{[["chef","Chef / Kitchen"],["barista","Barista / Front"]].map(([k,l])=><button key={k} type="button" aria-pressed={department===k} onClick={()=>{ if(k!==department) switchDept(k); }}>{l}</button>)}</div>
       <div className="k">Branch</div>
-      <div style={{color:"var(--color-ink)"}}><LocMenu locations={locations} branch={branch} onSwitch={id=>{ switchBranch(id); setSheet(null); }} /></div>
-      <div className="k" style={{marginTop:6}}>Current: {(locations.find(l=>l.id===branch)||{}).name||"—"} · {department==="barista"?"Barista":"Chef"}</div>
+      <BranchPicker locations={locations} branch={branch} onSwitch={id=>{ switchBranch(id); setSheet(null); }} />
+      {/* The old control said "Current: X" in the same muted grey as every other label. Pressing a
+          branch changes what every tab shows, so the consequence is spelled out here instead. */}
+      <div style={{marginTop:12,padding:"11px 13px",border:"3px solid var(--color-ink)",background:"var(--color-warning)",fontSize:14,fontWeight:700,lineHeight:1.35}}>
+        You are on <span style={{textTransform:"uppercase",letterSpacing:".04em"}}>{(locations.find(l=>l.id===branch)||{}).name||"—"} · {department==="barista"?"Barista":"Chef"}</span>
+        <div style={{fontWeight:500,fontSize:13,marginTop:3,paddingRight:64}}>Orders, stock and today’s board all follow this. Tap another branch to move.</div>
+      </div>
       <div style={{display:"flex", justifyContent:"flex-end", marginTop:10}}><button type="button" className="btn2 p" onClick={()=>setSheet(null)}>Done</button></div>
     </div></div>}
 

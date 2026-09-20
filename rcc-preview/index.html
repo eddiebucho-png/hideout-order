@@ -4880,6 +4880,65 @@ function toUnit(qty, from, to){ const f=normU(from), t=normU(to); if(!f||!t||f==
 function unitsComparable(from, to){ const f=normU(from), t=normU(to); if(!f||!t) return false; if(f===t) return true; return [U_MASS,U_VOL].some(tbl=>tbl[f]!=null && tbl[t]!=null); }
 const EACH_U=new Set(["each","ea","pc","pcs","piece","pieces","unit","units","ct","count"]);
 function sameUnit(a,b){ a=normU(a); b=normU(b); return a===b || (EACH_U.has(a)&&EACH_U.has(b)); }
+
+/* ── Pack line parser (2026-09-20 주인: "재료 새로 입력하는거 최적화 — 인보이스가 제각각이다") ──
+   인보이스 줄은 모양이 다 다르다:
+       5kg $10
+       1ctn 12pack 1.2kg each $88
+       38each 1ctn $88
+   예전엔 사람이 12 × 1.2 = 14.4 를 손으로 계산해 넣어야 했다. 그 곱셈이 틀리면 단가가
+   조용히 틀리고, 그 단가가 모든 레시피 원가로 번진다. 그래서 기계가 계산한다.
+
+   읽는 법: 숫자가 붙은 토큰만 본다.
+     · 용기(ctn·box·pack·bag…)  → 개수가 곱수다. "1ctn" 은 ×1 이라 사실상 포장 이름일 뿐이고,
+                                   "12pack" 은 ×12 다.
+     · 계량(kg·g·L·ml)          → 안쪽 하나의 크기
+     · 낱개(each·pc·dozen)      → 개수
+   숫자 없는 맨 "each"(=1.2kg each)는 단위가 아니라 말투라서 무시한다.
+   결과를 절대 조용히 적용하지 않는다 — 사람 말로 되읽어 주고 사람이 Apply 를 누른다. */
+const PACK_CONTAINER=new Set(["ctn","carton","cartons","box","boxes","case","cases","pack","packs","pk","pkt","packet","packets","bag","bags","tray","trays","tub","tubs","jar","jars","bottle","bottles","can","cans","tin","tins","punnet","punnets","sleeve","sleeves","bucket","drum"]);
+const PACK_COUNT={each:1,ea:1,pc:1,pcs:1,piece:1,pieces:1,unit:1,units:1,ct:1,count:1,dozen:12,doz:12};
+const PACK_TOKEN=/(\d+(?:\.\d+)?)\s*([a-z]+)/g;
+function parsePack(raw){
+  const text=String(raw||"").toLowerCase().replace(/[×✕]/g,"x").replace(/,/g,"").trim();
+  if(!text) return {ok:false};
+  let price=null;
+  const pm=text.match(/\$\s*(\d+(?:\.\d+)?)/);
+  if(pm) price=Number(pm[1]);
+  const body=text.replace(/\$\s*\d+(?:\.\d+)?/g,"  ");
+  let mult=1, measure=null, count=null, container=null, saw=false;
+  // "12 x 500g" / "6x1kg" — a bare number before an x is a multiplier
+  body.replace(/(\d+(?:\.\d+)?)\s*x(?![a-z])/g,(m,n)=>{ mult*=Number(n)||1; saw=true; return "  "; });
+  let m2; PACK_TOKEN.lastIndex=0;
+  while((m2=PACK_TOKEN.exec(body))){
+    const n=Number(m2[1]), u=m2[2];
+    if(!(n>0)) continue;
+    if(U_MASS[u]!=null||U_VOL[u]!=null){ if(!measure){ measure={n,u}; saw=true; } }
+    else if(PACK_COUNT[u]!=null){ if(!count){ count={n:n*PACK_COUNT[u]}; saw=true; } }
+    else if(PACK_CONTAINER.has(u)){ if(!container) container={n,u}; if(n>1){ mult*=n; } saw=true; }
+  }
+  /* "1 box of 24" / "$88 / ctn of 38" — the count trails the word "of" with no unit word on it.
+     Only when nothing else gave us a size, so it can't override a real measurement. */
+  if(!measure && !count){
+    const of=body.match(/\bof\s+(\d+(?:\.\d+)?)\b/);
+    if(of && Number(of[1])>0){ count={n:Number(of[1])}; saw=true; }
+  }
+  if(!saw) return {ok:false, price};
+  let size=null, unit=null;
+  if(measure){ size=mult*measure.n; unit=measure.u; }
+  else if(count){ size=mult*count.n; unit="each"; }
+  else return {ok:false, price};
+  const useUnit = U_MASS[unit]!=null ? "g" : (U_VOL[unit]!=null ? "ml" : "each");
+  // human readback — the multiplication written out, so a wrong read is obvious at a glance
+  const bits=[];
+  if(container) bits.push((container.n>1?container.n+" ":"1 ")+container.u);
+  if(measure && mult>1) bits.push(mult+" \u00d7 "+measure.n+" "+measure.u);
+  const tidy=x=>Math.round(x*1e6)/1e6;
+  const total=tidy(size)+" "+unit;
+  let say = bits.length ? bits.join(" = ")+" = "+total : total;
+  if(price!=null) say += "  \u00b7  $"+price;
+  return {ok:true, size:tidy(size), unit, useUnit, price, say};
+}
 function convItemQty(qty, from, ing){ const f=normU(from), to=normU(ing.useUnit); if(!f||!to||sameUnit(f,to)) return qty; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return qty*tbl[f]/tbl[to]; } if(ing.gramsPerEach>0){ if(U_MASS[f]!=null && EACH_U.has(to)) return (qty*U_MASS[f])/ing.gramsPerEach; if(EACH_U.has(f) && U_MASS[to]!=null) return (qty*ing.gramsPerEach)/U_MASS[to]; } return qty; }
 function unitResolvable(it, ing){ if(!it||!it.rawUnit||!ing) return true; const f=normU(it.rawUnit), to=normU(ing.useUnit); if(!f||!to||sameUnit(f,to)) return true; for(const tbl of [U_MASS,U_VOL]){ if(tbl[f]!=null && tbl[to]!=null) return true; } const cross=(U_MASS[f]!=null&&EACH_U.has(to))||(EACH_U.has(f)&&U_MASS[to]!=null); if(cross) return ing.gramsPerEach>0; return false; }
 function itemQtyInUse(it, ing){ if(!(it&&it.rawUnit&&ing)) return it?it.qty:0; if(!unitResolvable(it,ing)) return 0; return convItemQty(it.qty, it.rawUnit, ing); }
@@ -5184,6 +5243,39 @@ if(typeof window!=="undefined"){
   window.addEventListener("pointerdown", e=>{ Modal._lastOrigin={x:e.clientX,y:e.clientY}; }, true);
 }
 function Field({label, children}){ return <label className="block"><div className="text-xs text-stone-500 mb-1">{label}</div>{children}</label>; }
+
+/* Number field you can actually type "0.5" into.
+   [FIX 2026-09-20] The old inputs were value={n} + onChange={Number(e.target.value)}. Typing the
+   "." made Number("0.") → 0, React re-rendered "0", and the decimal point could never be entered —
+   the box sat stuck on 0 (and an emptied box snapped back to 0). This keeps the raw text while the
+   field has focus and only hands a number upward, so "0." survives long enough to become "0.5".
+   type=text + inputMode=decimal on purpose: keeps the phone numeric keypad, and a stray mouse
+   wheel can no longer silently change a price the way it does over type=number. */
+function NumIn({value, onNum, onRaw, className, style, placeholder, onKeyDown, disabled, title, autoFocus}){
+  const [draft,setDraft]=React.useState(null);        // non-null only while the user is typing
+  /* If the value arrives from somewhere OTHER than this box - Quick pack entry's Apply, a preset,
+     a reload - the half-typed draft has to go, or the field would keep showing the old text while
+     the real value underneath had already changed. Compared as NUMBERS, so "14." (which the form
+     stores as 14) is left alone and only a genuinely different value clears the draft. */
+  React.useEffect(()=>{
+    if(draft==null) return;
+    const d=Number(draft); if(!Number.isFinite(d)) return;      // mid-keystroke, leave it be
+    const v=(value===""||value==null) ? 0 : Number(value);
+    if(d!==v) setDraft(null);
+  },[value]);
+  const shown = draft!=null ? draft : (value===""||value==null ? "" : String(value));
+  const handle=(e)=>{
+    const t=e.target.value.replace(/,/g,".").trim();
+    if(t!=="" && !/^-?\d*\.?\d*$/.test(t)) return;   // ignore keystrokes that aren't heading for a number
+    setDraft(t);
+    if(onRaw){ onRaw(t); return; }
+    const n=Number(t);
+    onNum((t===""||!Number.isFinite(n)) ? 0 : n);      // empty/partial keeps the old meaning: 0
+  };
+  return <input type="text" inputMode="decimal" className={className} style={style} placeholder={placeholder}
+    title={title} disabled={disabled} autoFocus={autoFocus} value={shown}
+    onChange={handle} onFocus={e=>setDraft(e.target.value)} onBlur={()=>setDraft(null)} onKeyDown={onKeyDown} />;
+}
 function ImportExport({onImport, onExport}){
   const ref = useRef();
   return <div className="flex gap-2">
@@ -5425,7 +5517,7 @@ function CloudSyncModal({cloud,setCloud,fbRef,state,setState,onClose}){
   const dot = cloud.status==="on"?"bg-emerald-500":cloud.status==="error"?"bg-red-500":cloud.status==="signedout"?"bg-amber-400":"bg-stone-300";
   return <Modal onClose={onClose} title="Cloud Sync (Firestore realtime)" wide>
     <div className="flex items-center gap-2 text-sm mb-3"><span className={`inline-block w-2.5 h-2.5 rounded-full ${dot}`}></span>
-      <span className="text-stone-700">{cloud.status==="on"?("Live sync ON — signed in as "+((cloud.user&&cloud.user.email)||"")):cloud.status==="signedout"?"Connected, not signed in":cloud.status==="connecting"?"Connecting…":cloud.status==="error"?"Error":"Off (no config)"}</span></div>
+      <span className="text-stone-700">{cloud.status==="on"?("Live sync ON — signed in as "+((cloud.user&&cloud.user.email)||"")):cloud.status==="signedout"?"Connected, not signed in":cloud.status==="connecting"?"Connecting…":cloud.status==="saving"?"Saving…":cloud.status==="error"?"Error":"Off (no config)"}</span></div>
     {cloud.error && <div className="text-xs bg-red-50 text-red-600 rounded-lg p-2 mb-3">{cloud.error}</div>}
     <p className="text-xs text-stone-500 mb-2">Paste your Firebase web app config below (see the setup guide). Changes then sync live across all devices signed into the same Firebase project. Data lives in your Firestore.</p>
     <textarea value={cfgText} onChange={e=>setCfgText(e.target.value)} placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "appId": "..." }' className="w-full h-32 p-3 text-xs border border-stone-200 rounded-lg font-mono" />
@@ -5690,7 +5782,13 @@ function App(){
       err=>setCloud(c=>({...c,status:"error",error:String(err)})));
     return ()=>unsub();
   }, [cloud.status]);
-  useEffect(()=>{ const fb=fbRef.current; if(!fb||cloud.status!=="on") return;
+  /* SAVE RELIABILITY 2026-09-19: the guard used to be `cloud.status!=="on"`, and a failed write
+     set status:"error" with nothing but re-init or an auth change to clear it. One transient
+     failure therefore stopped every later save for the rest of the session, silently, while the
+     chef kept typing. "error" is now allowed through so the next edit retries; only signed-out
+     blocks, because then there is nobody to write as. */
+  useEffect(()=>{ const fb=fbRef.current; if(!fb) return;
+    if(cloud.status!=="on" && cloud.status!=="error" && cloud.status!=="saving") return;
     if(!hydrated.current) return;
     if(applyingRemote.current){ applyingRemote.current=false; return; }
     if(pushTimer.current) clearTimeout(pushTimer.current);
@@ -5700,17 +5798,25 @@ function App(){
       // Everything else in state is still last-writer-wins - only the sheet list gets this treatment.
       const ref=fb.db.collection(CLOUD_DOC().col).doc(CLOUD_DOC().doc);
       const local=JSON.parse(JSON.stringify(state));
-      fb.db.runTransaction(async tx=>{
+      const attempt=(tries)=> fb.db.runTransaction(async tx=>{
         const snap=await tx.get(ref); const rs=(snap.exists&&snap.data()&&snap.data().state)||{};
         const m=mergeCateringSheets(local, rs);
         local.cateringSheets=m.sheets; local.cateringRemoved=m.removed;
         tx.set(ref,{state:local, updatedAt:Date.now(), clientId:CLIENT_ID, by:((cloud.user&&cloud.user.email)||"app")});
         return m.changed;
-      }).then(changed=>{
+      }).catch(e=>{
+        /* A transaction aborts on contention, and every device writes to this one document -
+           so a clash is ordinary, not an error. Back off and try again before saying anything. */
+        if(tries>0){ setCloud(c=>(c.status==="error"?c:{...c,status:"saving",error:""}));
+          return new Promise(r=>setTimeout(r, 400*(4-tries))).then(()=>attempt(tries-1)); }
+        throw e;
+      });
+      attempt(3).then(changed=>{
         // our own write never comes back through onSnapshot (clientId guard), so mirror the reconciled
         // list into local state here; applyingRemote stops the push effect from echoing it straight back.
+        setCloud(c=>(c.status==="on"?c:{...c,status:"on",error:""}));
         if(changed){ applyingRemote.current=true; setState(s=>({...s, cateringSheets:local.cateringSheets, cateringRemoved:local.cateringRemoved})); }
-      }).catch(e=>setCloud(c=>({...c,status:"error",error:String(e)})));
+      }).catch(e=>setCloud(c=>({...c,status:"error",error:"Not saved yet \u2014 "+String((e&&e.message)||e)+". Your changes are still on this device; they will go up on the next edit."})));
       mirrorToSheet(state);
     }, 900);
   }, [state, cloud.status]);
@@ -7895,9 +8001,9 @@ function RecipeEditorV2({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDe
       <div className="main">
         <div className="f4">
           <div><div className="lab">POS name (Square till)</div><input className="inp" style={{width:"100%"}} placeholder="blank = same as name" value={f.posName||""} onChange={e=>set("posName",e.target.value)} /></div>
-          <div><div className="lab">Sell $</div><input type="number" inputMode="decimal" className="inp" style={{width:"100%"}} value={f.sellPrice} onChange={e=>set("sellPrice",Number(e.target.value))} /></div>
-          <div><div className="lab">Target %</div><input type="number" className="inp" style={{width:"100%"}} value={f.targetMargin} onChange={e=>set("targetMargin",Number(e.target.value))} /></div>
-          <div><div className="lab">Yield</div><input type="number" className="inp" style={{width:"100%"}} value={f.yield} onChange={e=>set("yield",Number(e.target.value))} /></div>
+          <div><div className="lab">Sell $</div><NumIn className="inp" style={{width:"100%"}} value={f.sellPrice} onNum={n=>set("sellPrice",n)} /></div>
+          <div><div className="lab">Target %</div><NumIn className="inp" style={{width:"100%"}} value={f.targetMargin} onNum={n=>set("targetMargin",n)} /></div>
+          <div><div className="lab">Yield</div><NumIn className="inp" style={{width:"100%"}} value={f.yield} onNum={n=>set("yield",n)} /></div>
           <div><div className="lab">Yield unit</div><input className="inp" style={{width:"100%"}} list="rv2-yu" value={f.yieldUnit} onChange={e=>set("yieldUnit",e.target.value)} /><datalist id="rv2-yu">{["serve","each","g","kg","ml","L","cup","portion","tray"].map(u=><option key={u} value={u} />)}</datalist></div>
         </div>
         <div className="f2" style={{marginTop:10}}>
@@ -7912,7 +8018,7 @@ function RecipeEditorV2({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDe
             {f.items.map((it,i)=>{ const ing=ingMap[it.ingredientId]; const sub=it.subRecipeId?recMapGet()[it.subRecipeId]:null; const subPer=sub?recipeCost(sub,ingMap)/(sub.yield||1):0; const lc=ing?unitCost(ing)*itemQtyInUse(it,ing):(sub?subPer*subQtyInYield(it,sub):0); const unmatched=it.rawName&&!it.ingredientId&&!it.subRecipeId;
               return <tr key={i} className="row-line">
                 <td style={{minWidth:240}}><IngredientPicker item={it} activeIngs={activeIngs} subRecipes={state.recipes.filter(x=>!x.archived&&x.id!==f.id)} onPick={v=>{ if(v.slice(0,4)==="rec:") setItem(i,{subRecipeId:v.slice(4),ingredientId:""}); else setItem(i,{ingredientId:v,subRecipeId:""}); }} onCreate={d=>onCreateIngredient(d)} />{unmatched&&<div className="sub"><span className="up">from import:</span> {it.rawName} — search or create</div>}</td>
-                <td><input type="number" inputMode="decimal" className="inp" style={{width:"100%", textAlign:"right"}} placeholder="qty" value={it.qty||""} onChange={e=>setItem(i,{qty:Number(e.target.value)})} onKeyDown={e=>{ if(e.key==="Enter"&&i===f.items.length-1) addRow(); }} /></td>
+                <td><NumIn className="inp" style={{width:"100%", textAlign:"right"}} placeholder="qty" value={it.qty||""} onNum={n=>setItem(i,{qty:n})} onKeyDown={e=>{ if(e.key==="Enter"&&i===f.items.length-1) addRow(); }} /></td>
                 <td><select className="inp" style={{width:"100%"}} value={it.rawUnit||(ing?ing.useUnit:(sub?sub.yieldUnit:"g"))} onChange={e=>setItem(i,{rawUnit:e.target.value})}>{[...new Set(["g","kg","ml","L","each",(it.rawUnit||""),(ing?ing.useUnit:""),(sub?sub.yieldUnit:"")])].filter(Boolean).map(u=><option key={u} value={u}>{u}</option>)}</select></td>
                 <td className="num" style={{whiteSpace:"nowrap", color:"var(--muted)", fontSize:14}}>{ing?(money(unitCost(ing))+"/"+ing.useUnit):(sub?(money(subPer)+"/"+(sub.yieldUnit||"unit")):"")}</td>
                 <td className="num" style={{fontWeight:700, whiteSpace:"nowrap"}}>{money(lc)}</td>
@@ -9255,7 +9361,18 @@ function IngredientEditor({ing, onClose, onSave, onDelete, panel, onDraft}){
             purchaseQty:(qty!=null&&qty>0)?+Number(qty).toFixed(6):q}; })();
   const [f,setF]=useState({...ing, ...seed}); const set=(k,v)=>{ setTouched(true); setF(p=>({...p,[k]:v})); };
   const [touched,setTouched]=useState(false);
+  const [packText,setPackText]=useState("");
   const unitOpts=[...new Set([...PU_LIST, canon(ing.useUnit)?null:String(ing.useUnit||"").trim(), canon(ing.purchaseUnit)?null:String(ing.purchaseUnit||"").trim()].filter(Boolean))];
+  const pp=parsePack(packText);
+  /* preview of the unit cost the parse would produce, so a misread is visible before Apply */
+  const ppUnit=(()=>{ if(!pp.ok||!(pp.price>0)) return null;
+    const c=conv(pp.size, canon(pp.unit), canon(pp.useUnit));
+    return (c>0) ? pp.price/c : null; })();
+  const applyPack=()=>{ if(!pp.ok) return;
+    setPack(pp.size, canon(pp.unit)||"kg", canon(pp.useUnit)||"g");
+    if(pp.price!=null) setF(prev=>({...prev, purchasePrice:pp.price}));
+    setPackText("");
+  };
   const packToUse=(n,P,U,gpe)=>{ if(!(n>0)) return null; const c=conv(n,P,U); if(c!=null&&c>0) return c;
     const a=canon(P), b=canon(U), g=Number(gpe)||0;
     if(g>0){ if(U_MASS[String(a).toLowerCase()]!=null && b==="each") return conv(n,P,"g")/g; if(a==="each" && U_MASS[String(b).toLowerCase()]!=null) return conv(n*g,"g",U); }
@@ -9274,25 +9391,45 @@ function IngredientEditor({ing, onClose, onSave, onDelete, panel, onDraft}){
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <Field label="Name"><input className="inp" value={f.name} onChange={e=>set("name",e.target.value)} /></Field>
       <Field label="Category"><input className="inp" value={f.category} onChange={e=>set("category",e.target.value)} /></Field>
+      {/* Quick pack entry (2026-09-20). Invoice lines are never the same shape twice —
+          "5kg $10", "1ctn 12pack 1.2kg each $88", "38each 1ctn $88". Doing the 12 × 1.2 in your
+          head is where the unit cost quietly goes wrong, and a wrong unit cost spreads into every
+          recipe that uses the ingredient. Type the line, read back what it understood, press Apply.
+          Nothing is applied until Apply — the fields below stay editable afterwards. */}
+      <div style={{gridColumn:"1 / -1"}}>
+        <Field label="Quick pack entry — type the line as the invoice writes it">
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <input className="inp" style={{flex:"1 1 240px"}} placeholder="e.g. 1ctn 12pack 1.2kg each $88"
+                   value={packText} onChange={e=>setPackText(e.target.value)}
+                   onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); applyPack(); } }} />
+            <Btn tone={pp.ok?"primary":"ghost"} onClick={applyPack} disabled={!pp.ok}>Apply</Btn>
+          </div>
+          {packText.trim()!=="" && <div style={{marginTop:6, fontSize:13}}>
+            {pp.ok
+              ? <span style={{color:"var(--g,#2e7d4f)"}}>{pp.say}{ppUnit!=null? <b>{"  →  "+money(ppUnit)+" / "+canon(pp.useUnit)}</b> : null}</span>
+              : <span style={{color:"var(--muted)"}}>Couldn’t read a pack size from that — fill the fields below by hand.</span>}
+          </div>}
+        </Field>
+      </div>
       <Field label="Purchase pack — how it's bought">
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <input type="number" inputMode="decimal" className="inp" style={{flex:"1 1 90px"}} value={f.packSize!=null?f.packSize:""} placeholder="e.g. 1" onChange={e=>setPack(e.target.value, f.purchaseUnit, f.useUnit)} />
+          <NumIn className="inp" style={{flex:"1 1 90px"}} value={f.packSize!=null?f.packSize:""} placeholder="e.g. 1" onRaw={t=>setPack(t, f.purchaseUnit, f.useUnit)} />
           <select className="inp" style={{width:96}} value={unitOpts.includes(f.purchaseUnit)?f.purchaseUnit:"kg"} onChange={e=>setPack(f.packSize, e.target.value, f.useUnit)}>{unitOpts.map(u=><option key={u} value={u}>{u}</option>)}</select>
         </div>
       </Field>
       <Field label="Use unit — how recipes measure it">
         <select className="inp" value={unitOpts.includes(f.useUnit)?f.useUnit:"g"} onChange={e=>setPack(f.packSize, f.purchaseUnit, e.target.value)}>{unitOpts.map(u=><option key={u} value={u}>{u}</option>)}</select>
       </Field>
-      <Field label="Purchase price ($) — price for one pack above"><input type="number" inputMode="decimal" className="inp" value={f.purchasePrice} onChange={e=>set("purchasePrice",Number(e.target.value))} /></Field>
+      <Field label="Purchase price ($) — price for one pack above"><NumIn className="inp" value={f.purchasePrice} onNum={n=>set("purchasePrice",n)} /></Field>
       <Field label="Allergens"><AllergenPicker value={f.allergens||[]} onChange={v=>set("allergens",v)} /></Field>
-      {(EACH_U.has(normU(f.useUnit))||EACH_U.has(normU(f.purchaseUnit))||Number(f.gramsPerEach)>0) && <Field label="Grams per each (weight-priced pieces, e.g. 1 avocado = 200)"><input type="number" className="inp" value={f.gramsPerEach||0} onChange={e=>{ const g=Number(e.target.value); setTouched(true); setF(p=>{ const c=packToUse(Number(p.packSize),p.purchaseUnit,p.useUnit,g); return {...p, gramsPerEach:g, purchaseQty:(c!=null&&c>0)?+Number(c).toFixed(6):p.purchaseQty}; }); }} /></Field>}
+      {(EACH_U.has(normU(f.useUnit))||EACH_U.has(normU(f.purchaseUnit))||Number(f.gramsPerEach)>0) && <Field label="Grams per each (weight-priced pieces, e.g. 1 avocado = 200)"><NumIn className="inp" value={f.gramsPerEach||0} onNum={g=>{ setTouched(true); setF(p=>{ const c=packToUse(Number(p.packSize),p.purchaseUnit,p.useUnit,g); return {...p, gramsPerEach:g, purchaseQty:(c!=null&&c>0)?+Number(c).toFixed(6):p.purchaseQty}; }); }} /></Field>}
       <Field label="Price trend"><CostTrend ing={f} /></Field>
       <Field label="Unit cost (calculated)"><div className="py-2 text-stone-700 font-medium">{money(unitCost(f))} / {f.useUnit||"?"}{(Number(f.packSize)>0&&Number(f.purchasePrice)>0)? <span className="text-stone-500 font-normal">{"  ·  "+money(Number(f.purchasePrice)/Number(f.packSize))+" / "+(f.purchaseUnit||"pack")}</span>:null}</div></Field>
     </div>
     <div className="mt-4"><div className="text-xs font-medium text-stone-500 mb-2">Suppliers</div>
       {(f.suppliers||[]).map((s,i)=>(<div key={i} className="flex gap-2 items-center mb-2">
         <input className="inp flex-1" placeholder="Supplier name" value={s.name} onChange={e=>{const sup=[...f.suppliers]; sup[i]={...s,name:e.target.value}; set("suppliers",sup);}} />
-        <input className="inp w-28" type="number" placeholder="Price" value={s.price} onChange={e=>{const sup=[...f.suppliers]; sup[i]={...s,price:Number(e.target.value)}; set("suppliers",sup);}} />
+        <NumIn className="inp w-28" placeholder="Price" value={s.price} onNum={n=>{const sup=[...f.suppliers]; sup[i]={...s,price:n}; set("suppliers",sup);}} />
         <label className="text-xs text-stone-500 flex items-center gap-1"><input type="checkbox" checked={!!s.preferred} onChange={e=>{const sup=f.suppliers.map((x,j)=>({...x,preferred:j===i?e.target.checked:false})); set("suppliers",sup);}} />preferred</label>
         <button onClick={()=>set("suppliers",f.suppliers.filter((_,j)=>j!==i))} className="text-red-400 text-xs">remove</button>
       </div>))}
@@ -10114,10 +10251,10 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
         <input className="inp" placeholder="e.g. Avo and Feta (VE/GFO) - leave blank if identical to the name above" value={f.posName||""} onChange={e=>set("posName",e.target.value)} />
         <div className="text-[11px] text-stone-400 mt-1">Exactly how this dish is written on the Square till. Sales reports use it to match takings to this recipe's cost - type it once and every later report picks it up.</div>
       </Field></div>
-      <Field label="Yield"><input type="number" className="inp" value={f.yield} onChange={e=>set("yield",Number(e.target.value))} /></Field>
+      <Field label="Yield"><NumIn className="inp" value={f.yield} onNum={n=>set("yield",n)} /></Field>
       <Field label="Yield unit"><input className="inp" value={f.yieldUnit} onChange={e=>set("yieldUnit",e.target.value)} /></Field>
-      <Field label="Sell price ($)"><input type="number" className="inp" value={f.sellPrice} onChange={e=>set("sellPrice",Number(e.target.value))} /></Field>
-      <Field label="Target margin (%)"><input type="number" className="inp" value={f.targetMargin} onChange={e=>set("targetMargin",Number(e.target.value))} /></Field>
+      <Field label="Sell price ($)"><NumIn className="inp" value={f.sellPrice} onNum={n=>set("sellPrice",n)} /></Field>
+      <Field label="Target margin (%)"><NumIn className="inp" value={f.targetMargin} onNum={n=>set("targetMargin",n)} /></Field>
     </div>
     <div className="mt-4 grid grid-cols-1 gap-3">
       <Field label="Photo">
@@ -10152,7 +10289,7 @@ function RecipeEditor({rec,state,ingMap,onCreateIngredient,onClose,onSave,onDele
               onCreate={d=>onCreateIngredient(d)} />
             {unmatched && <div className="text-[11px] text-amber-500 mt-0.5">from import: {it.rawName} — no auto-match, search or create below</div>}
           </div>
-          <input type="number" className="inp w-24" placeholder="qty" value={it.qty} onChange={e=>{const items=[...f.items]; items[i]={...it,qty:Number(e.target.value)}; set("items",items);}} />
+          <NumIn className="inp w-24" placeholder="qty" value={it.qty} onNum={n=>{const items=[...f.items]; items[i]={...it,qty:n}; set("items",items);}} />
           <select className="inp w-16 px-1 text-xs" value={it.rawUnit||(ing?ing.useUnit:(sub?sub.yieldUnit:"g"))} onChange={e=>{const items=[...f.items]; items[i]={...it,rawUnit:e.target.value}; set("items",items);}}>
             {[...new Set(["g","kg","ml","L","each",(it.rawUnit||""),(ing?ing.useUnit:""),(sub?sub.yieldUnit:"")])].filter(Boolean).map(u=><option key={u} value={u}>{u}</option>)}
           </select>

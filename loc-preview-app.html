@@ -2541,6 +2541,7 @@ function ItemsCard({ctx}){
   const [page,setPage]=useState(1);
   const [sel,setSel]=useState({});                     // {itemId:true} — bulk delete
   const [edit,setEdit]=useState(null); const [adding,setAdding]=useState(false);
+  const [rccQ,setRccQ]=useState("");                 // RCC link search text
 
   const catLabel=id=>{ const c=ctx.categories.find(c=>c.id===id); return c?c.label:"—"; };
   const catRank=id=>{ const i=ctx.categories.findIndex(c=>c.id===id); return i<0?9999:i; };  // uncategorised sinks to the bottom
@@ -2606,6 +2607,16 @@ function ItemsCard({ctx}){
       return {...g, label};
     });
   },[ctx.rccPrices]);
+  /* The old <datalist> put all 575 rows into the DOM and let Chrome's popup filter them - slow to
+     open, slow to type, and it re-rendered on every keystroke anywhere in the modal. Now only the
+     top matches are rendered. Recipes come first because that is what a finished good links to;
+     a match at the START of the name beats one in the middle. */
+  const rccHits=useMemo(()=>{
+    const q=rccQ.trim().toLowerCase(); if(!q) return [];
+    const score=g=>{ const n=g.n.toLowerCase(); const i=n.indexOf(q); if(i<0) return -1; return (g.k==="r"?200:0)+(i===0?100:0)+(50-Math.min(50,i)); };
+    return rccOpts.map(g=>({g,s:score(g)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).slice(0,12).map(x=>x.g);
+  },[rccQ,rccOpts]);
+  const linkRcc=(g)=>{ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(g.k==="r"||Number(g.q)>1)?"unit":"pack"}); setRccQ(""); };
 
   return <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
     <div className="bar2">
@@ -2685,11 +2696,18 @@ function ItemsCard({ctx}){
                 circular sub-recipe). The number below is therefore too LOW, never too high. */}
             {g&&g.b?<div style={{fontSize:11.5,color:"#b45309"}}>RCC can’t cost every line of this recipe yet, so this price is too low. Fix the recipe in RCC — the number here follows it.</div>:null}
           </div>; })() : <React.Fragment>
-            <input list="rcc-price-options" placeholder={rccOpts.length?("Search "+rccOpts.length+" RCC ingredients & recipes…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} onChange={e=>{ const g=rccOpts.find(x=>x.label===e.target.value); if(g){ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(g.k==="r"||Number(g.q)>1)?"unit":"pack"}); e.target.value=""; } }} style={inp} />
-            {/* Recipe and ingredient names collide in RCC (Plain Croissant is modelled as both), so the
-                option value is a disambiguated label, not the bare name — matching on g.n would link
-                whichever happened to come first in the list. */}
-            <datalist id="rcc-price-options">{rccOpts.map(g=><option key={g.i} value={g.label}>{(g.k==="r"?"recipe · ":"")+"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")+(g.b?" · cost incomplete":"")}</option>)}</datalist>
+            <input value={rccQ} onChange={e=>setRccQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"&&rccHits.length){ e.preventDefault(); linkRcc(rccHits[0]); } if(e.key==="Escape") setRccQ(""); }}
+                   placeholder={rccOpts.length?("Search "+rccOpts.length+" RCC ingredients & recipes…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} style={inp} autoComplete="off" />
+            {rccQ.trim()!=="" && <div style={{border:"1px solid var(--color-hairline-alpha)",borderRadius:10,background:"#fff",marginTop:6,maxHeight:300,overflowY:"auto"}}>
+              {rccHits.length===0 ? <div style={{padding:"10px 12px",fontSize:13,color:"var(--color-ink-muted-48)"}}>No RCC ingredient or recipe matches “{rccQ}”.</div>
+              : rccHits.map(g=>(<button key={g.i} type="button" onClick={()=>linkRcc(g)} className="row-live"
+                  style={{display:"flex",width:"100%",alignItems:"center",gap:10,padding:"9px 12px",background:"none",border:"none",borderBottom:"1px solid var(--color-hairline-alpha)",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                  {g.k==="r"?<span style={{fontSize:9.5,fontWeight:700,color:"var(--color-primary)",border:"1px solid var(--color-primary)",borderRadius:4,padding:"1px 4px",flex:"0 0 auto"}}>RECIPE</span>:null}
+                  <span style={{flex:"1 1 auto",minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.n}</span>
+                  <span style={{flex:"0 0 auto",fontSize:12,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}{g.b?<span style={{color:"#b45309"}}> · cost incomplete</span>:null}</span>
+                </button>))}
+              {rccHits.length===12 && <div style={{padding:"6px 12px",fontSize:11,color:"var(--color-ink-muted-48)"}}>Showing the 12 best matches — keep typing to narrow.</div>}
+            </div>}
           </React.Fragment>}
         </Field>
         <label style={{display:"flex",gap:9,alignItems:"flex-start",cursor:"pointer",background:"var(--color-canvas-parchment)",borderRadius:10,padding:"10px 12px"}}>

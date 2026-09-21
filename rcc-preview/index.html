@@ -5028,7 +5028,7 @@ function newIngredient(d){
   d=d||{};
   const uu=String(d.useUnit||"each").trim()||"each";
   const price=Number(d.purchasePrice)||0;
-  return { id:rid("ing"), name:String(d.name||"").trim(), category:d.category||"",
+  return { id:rid("ing"), createdAt:Date.now(), name:String(d.name||"").trim(), category:d.category||"",
     purchaseUnit:(d.purchaseUnit||uu), useUnit:uu,
     purchaseQty:Number(d.purchaseQty)||1, purchasePrice:price,
     gramsPerEach:Number(d.gramsPerEach)||0,
@@ -5659,7 +5659,7 @@ function App(){
       ingredients:()=> (stateRef.current.ingredients||[]).filter(i=>!i.archived),
       matchIngredient:(name)=> matchIngredient(name, stateRef.current.ingredients||[]),
       createIngredient:(d)=>{ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; },
-      addRecipe:(rec)=>{ const id=rid("rec"); update(s=>{ s.recipes.push({ id, name:(rec.name||"New recipe").trim(), category:rec.category||"", yield:Number(rec.yield)||1, yieldUnit:rec.yieldUnit||"serve", sellPrice:Number(rec.sellPrice)||0, targetMargin:70, items:(rec.items||[]).map(it=>({ ingredientId:it.ingredientId||"", qty:Number(it.qty)||0, rawName:it.rawName, rawUnit:it.rawUnit||"" })), importedCost:0, ingredientListText:"", allergens:rec.allergens||[], image:"", procedure:rec.procedure||"", showInDish:(Number(rec.sellPrice)||0)>0, archived:false }); }); return id; },
+      addRecipe:(rec)=>{ const id=rid("rec"); update(s=>{ s.recipes.push({ id, createdAt:Date.now(), name:(rec.name||"New recipe").trim(), category:rec.category||"", yield:Number(rec.yield)||1, yieldUnit:rec.yieldUnit||"serve", sellPrice:Number(rec.sellPrice)||0, targetMargin:70, items:(rec.items||[]).map(it=>({ ingredientId:it.ingredientId||"", qty:Number(it.qty)||0, rawName:it.rawName, rawUnit:it.rawUnit||"" })), importedCost:0, ingredientListText:"", allergens:rec.allergens||[], image:"", procedure:rec.procedure||"", showInDish:(Number(rec.sellPrice)||0)>0, archived:false }); }); return id; },
       costMap:()=>{ const s=stateRef.current; const im=Object.fromEntries((s.ingredients||[]).map(i=>[i.id,i])); const m={}; (s.recipes||[]).forEach(r=>{ if(r.archived) return; try{ const x=marginOf(r,im); m[r.id]={cost:x.unitCost||0, margin:(x.margin||0)*100}; }catch(e){} }); return m; },
       remember:(text)=>{ const t=(typeof text==="string"?text:JSON.stringify(text)).trim().slice(0,300); if(!t) return; update(s=>{ if(!Array.isArray(s.botMemory)) s.botMemory=[]; if(s.botMemory.some(n=>((typeof n==="string"?n:(n&&n.text)||"").toLowerCase()===t.toLowerCase()))) return; s.botMemory.push({ts:Date.now(), text:t, by:"bot"}); if(s.botMemory.length>300) s.botMemory=s.botMemory.slice(-300); }); },
       logQuestion:(e)=>{ update(s=>{ if(!Array.isArray(s.botLog)) s.botLog=[]; s.botLog.push(e); if(s.botLog.length>400) s.botLog=s.botLog.slice(-400); }); },
@@ -7493,7 +7493,21 @@ const RV2_CSS=`
   .rv2 .exprow{display:grid;grid-template-columns:1.3fr 1fr;gap:22px}
   .rv2 .mini th{border-bottom:2px solid var(--ink);padding:6px 8px;cursor:default} .rv2 .mini td{padding:6px 8px;font-size:14px}
   .rv2 .bigm{font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:.9;animation:rv2-pop .5s cubic-bezier(.2,.8,.2,1) both} .rv2 .bigm small{display:block;font-size:14px;color:var(--muted);font-weight:500;margin-top:8px;letter-spacing:0}
-  .rv2 .more{position:relative} .rv2 .menu{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:3px solid var(--ink);min-width:230px;z-index:30;box-shadow:6px 6px 0 var(--ink);animation:rv2-rise .2s both}
+  .rv2 .more{position:relative} .rv2 .menu{position:fixed;background:#fff;border:3px solid var(--ink);min-width:230px;z-index:80;box-shadow:6px 6px 0 var(--ink);animation:rv2-rise .2s both;max-height:calc(100vh - 24px);overflow:auto}
+  /* table screens: the ingredient table has eight columns at 16px and did not fit 1360 */
+  .rv2 .screen.wide{max-width:1600px}
+  .rv2 td.wrapcell{max-width:230px} .rv2 td.wrapcell .badge{white-space:normal;text-align:left;line-height:1.25;padding:4px 8px}
+  .rv2 td.added{color:var(--muted);white-space:nowrap}
+  /* Prep board view - the list's rows in three columns, same frame, same type */
+  .rv2 .kan{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .rv2 .kan .col{border-right:3px solid var(--ink);min-height:46vh;transition:background .15s} .rv2 .kan .col:last-child{border-right:0}
+  .rv2 .kan .col.over{background:rgba(242,193,0,.22)}
+  .rv2 .kan .h{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:3px solid var(--ink);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase} .rv2 .kan .h .n{color:var(--muted);font-weight:500;letter-spacing:0}
+  .rv2 .kan .col.urgent .h{background:var(--r);color:#fff} .rv2 .kan .col.urgent .h .n{color:rgba(255,255,255,.75)}
+  .rv2 .kan .drag{cursor:grab} .rv2 .kan .drag:active{cursor:grabbing} .rv2 .kan .drag.lift{opacity:.35}
+  .rv2 .kan .drop{margin:14px;padding:28px 14px;border:2px dashed var(--line);color:var(--muted);text-align:center;font-size:14px}
+  .rv2 .kan .task{grid-template-columns:48px minmax(0,1fr) auto;padding:10px 12px;min-height:68px} .rv2 .kan .task .th{width:48px;height:48px} .rv2 .kan .task .tn{font-size:16px}
+  @media (max-width:900px){ .rv2 .kan{grid-template-columns:minmax(0,1fr)} .rv2 .kan .col{border-right:0;border-bottom:3px solid var(--ink);min-height:0} .rv2 .kan .col:last-child{border-bottom:0} }
   .rv2 .menu button,.rv2 .menu label{display:block;width:100%;text-align:left;padding:11px 14px;border:0;border-bottom:1.5px solid var(--line);background:#fff;font:inherit;font-weight:600;cursor:pointer;color:var(--ink)} .rv2 .menu button:hover,.rv2 .menu label:hover{background:var(--y)} .rv2 .menu button.danger{color:var(--r)}
   .rv2 .empty{padding:30px 14px;color:var(--muted);text-align:left}
   .rv2 .lbl{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 14px}
@@ -7657,8 +7671,42 @@ const RV2_CSS=`
   @media (max-width:640px){ .rv2.fs .cur{padding-bottom:220px} .rv2.fs .actbar{padding:10px 12px} }
   @media (prefers-reduced-motion:reduce){ .rv2 *,.rv2 *::before,.rv2 *::after{animation:none!important;transition:none!important} }
 `;
+/* Dropdown that escapes its bar. `.bar` scrolls sideways on small screens (overflow-x:auto), and
+   an element that scrolls on one axis clips on the other - so a menu positioned inside it was cut
+   off at the bar's bottom edge, which is exactly what "Manage" looked like on Dishes. This renders
+   the same `.menu` at the document root, fixed under its button, and follows the button when the
+   page scrolls. Closes on Esc (through the layer stack, so it does not also close the editor
+   behind it), on a click anywhere else, and when its own items call onClose. */
+function RV2Menu({anchorRef, onClose, children}){
+  const [pos,setPos]=useState(null); const box=useRef(null);
+  useEscLayer(true, onClose);
+  useEffect(()=>{
+    const place=()=>{ const el=anchorRef&&anchorRef.current; if(!el) return; const r=el.getBoundingClientRect(); const W=window.innerWidth;
+      setPos({top:Math.round(r.bottom+6), right:Math.round(Math.min(Math.max(8, W-r.right), Math.max(8, W-238)))}); };
+    place();
+    const onDoc=e=>{ const el=anchorRef&&anchorRef.current; if(el&&el.contains(e.target)) return; if(box.current&&box.current.contains(e.target)) return; onClose&&onClose(); };
+    document.addEventListener("mousedown", onDoc, true); document.addEventListener("touchstart", onDoc, true);
+    window.addEventListener("scroll", place, true); window.addEventListener("resize", place);
+    return ()=>{ document.removeEventListener("mousedown", onDoc, true); document.removeEventListener("touchstart", onDoc, true); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, []);
+  return ReactDOM.createPortal(<div className="rv2"><div ref={box} className="menu" role="menu" style={pos?{top:pos.top, right:pos.right}:{visibility:"hidden", top:0, right:0}}>{children}</div></div>, document.body);
+}
+/* When a row was first added. New rows carry createdAt from 2026-09-21 on; older rows never stored
+   one, so fall back to the timestamp rid() bakes into the id (prefix + Date.now() in base36 + 4
+   random chars), then to the first entry on an ingredient's cost history - written the day it was
+   made. 0 means "unknown" and sorts to the far end either way. */
+function rv2CreatedAt(x){
+  if(!x) return 0;
+  if(Number(x.createdAt)>0) return Number(x.createdAt);
+  const m=/^(rec|ing|dish|meet)([0-9a-z]{7,9})[0-9a-z]{4}$/.exec(String(x.id||""));
+  if(m){ const t=parseInt(m[2],36); if(t>1.5e12 && t<Date.now()+86400000) return t; }
+  const h=x.costHistory&&x.costHistory[0]&&x.costHistory[0].date;
+  if(h){ const t=new Date(String(h).slice(0,10)+"T00:00:00").getTime(); if(t>0) return t; }
+  return 0;
+}
+function rv2FmtAdded(ts){ if(!(ts>0)) return "—"; const d=new Date(ts), now=new Date(); return d.toLocaleDateString("en-AU", d.getFullYear()===now.getFullYear()?{day:"numeric",month:"short"}:{day:"numeric",month:"short",year:"2-digit"}); }
 function rv2Sort(rows, key, dir, getters){ const g=getters[key]; if(!g) return rows; const s=[...rows].sort((a,b)=>{ const x=g(a), y=g(b); if(typeof x==="number"&&typeof y==="number") return x-y; return String(x??"").localeCompare(String(y??"")); }); return dir<0?s.reverse():s; }
-function rv2Th({label,k,sort,setSort,num,cls}){ const on=sort.k===k; const go=()=>setSort(s=>({k, d:(s.k===k?-s.d:1)})); return <th tabIndex={0} role="columnheader" aria-sort={on?(sort.d>0?"ascending":"descending"):"none"} className={(num?"num":"")+(on?" on":"")+(cls?" "+cls:"")} onClick={go} onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } }}>{label}{on?(sort.d>0?" ▲":" ▼"):""}</th>; }
+function rv2Th({label,k,sort,setSort,num,cls}){ const on=sort.k===k; const go=()=>setSort(s=>({k, d:(s.k===k?-s.d:(k==="added"?-1:1))})); return <th tabIndex={0} role="columnheader" aria-sort={on?(sort.d>0?"ascending":"descending"):"none"} className={(num?"num":"")+(on?" on":"")+(cls?" "+cls:"")} onClick={go} onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } }}>{label}{on?(sort.d>0?" ▲":" ▼"):""}</th>; }
 const RV2Th=rv2Th;
 function rv2RecentPrice(ing, days){ const h=(ing.costHistory||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))); if(h.length<2) return null; const last=h[h.length-1]; const cut=new Date(Date.now()-days*86400000).toISOString().slice(0,10); if(!last.date||String(last.date)<cut) return null; const prev=h[h.length-2]; if(!(prev.price>0)) return null; return {pct:(last.price-prev.price)/prev.price*100, date:last.date}; }
 function rv2UnitProblem(ing){ return !(Number(ing.purchaseQty)>0) || !(Number(ing.purchasePrice)>0) || !ing.useUnit; }
@@ -7666,7 +7714,7 @@ function rv2AllergenState(ing){ const a=(ing.allergens||[]).map(x=>String(x).tri
 
 function IngredientsV2({state, update, setState, ingMap}){
   const [q,setQ]=useState(""); const [chip,setChip]=useState(""); const [cat,setCat]=useState(""); const [sort,setSort]=useState({k:"name", d:1});
-  const [edit,setEdit]=useState(null); const [draft,setDraft]=useState(null); const [sel,setSel]=useState(()=>new Set()); const [uses,setUses]=useState(null); const [more,setMore]=useState(false);
+  const [edit,setEdit]=useState(null); const [draft,setDraft]=useState(null); const [sel,setSel]=useState(()=>new Set()); const [uses,setUses]=useState(null); const [more,setMore]=useState(false); const moreRef=useRef(null);
   const active=state.ingredients.filter(i=>!i.archived);
   const recs=state.recipes.filter(r=>!r.archived);
   const usedIn=useMemo(()=>{ const m={}; recs.forEach(r=>(r.items||[]).forEach(it=>{ if(it.ingredientId){ (m[it.ingredientId]=m[it.ingredientId]||[]).push(r); } })); return m; }, [state.recipes]);
@@ -7676,12 +7724,12 @@ function IngredientsV2({state, update, setState, ingMap}){
   let list=active.filter(i=>!ql || (i.name||"").toLowerCase().includes(ql) || (i.category||"").toLowerCase().includes(ql) || (i.suppliers||[]).some(s=>(s.name||"").toLowerCase().includes(ql)))
     .filter(i=>!cat || (i.category||"Other")===cat)
     .filter(i=>chip==="unknown"?rv2AllergenState(i)==="unknown":chip==="nosup"?!(i.suppliers||[]).length:chip==="price"?!!rv2RecentPrice(i,7):chip==="unit"?rv2UnitProblem(i):true);
-  list=rv2Sort(list, sort.k, sort.d, {name:i=>i.name, cat:i=>i.category||"Other", price:i=>Number(i.purchasePrice)||0, cost:i=>unitCost(i), sup:i=>((i.suppliers||[]).find(s=>s.preferred)||(i.suppliers||[])[0]||{}).name||"", used:i=>(usedIn[i.id]||[]).length});
+  list=rv2Sort(list, sort.k, sort.d, {name:i=>i.name, cat:i=>i.category||"Other", price:i=>Number(i.purchasePrice)||0, cost:i=>unitCost(i), sup:i=>((i.suppliers||[]).find(s=>s.preferred)||(i.suppliers||[])[0]||{}).name||"", used:i=>(usedIn[i.id]||[]).length, added:i=>rv2CreatedAt(i)});
   /* Impact preview: margins of every recipe using this ingredient, now vs with the draft. */
   const impact=useMemo(()=>{ if(!edit||!edit.id||!draft) return null; const rs=usedIn[edit.id]||[]; if(!rs.length) return {rows:[]}; const m2={...ingMap, [edit.id]:draft};
     const rows=rs.map(r=>{ const a=marginOf(r,ingMap), b=marginOf(r,m2); const isM=r.sellPrice>0; return {r, isM, a:isM?a.margin:recipeCost(r,ingMap), b:isM?b.margin:recipeCost(r,m2), tgt:(r.targetMargin||0)/100}; });
     const changed=rows.some(x=>Math.abs(x.a-x.b)>0.0005); return {rows, changed, newBelow:rows.filter(x=>x.isM&&x.b<x.tgt&&x.a>=x.tgt).length}; }, [edit&&edit.id, draft, usedIn, ingMap]);
-  function commit(ing){ update(s=>{ if(ing.id){ const idx=s.ingredients.findIndex(i=>i.id===ing.id); if(idx>=0){ const old=s.ingredients[idx]; if(Number(old.purchasePrice)!==Number(ing.purchasePrice)) ing.costHistory=[...(old.costHistory||[]), {date:rv2Today(), price:Number(ing.purchasePrice)}]; s.ingredients[idx]=ing; } else s.ingredients.push(ing); } else { ing.id=rid("ing"); ing.costHistory=[{date:rv2Today(), price:Number(ing.purchasePrice)}]; s.ingredients.push(ing); } }); setEdit(null); setDraft(null); }
+  function commit(ing){ update(s=>{ if(ing.id){ const idx=s.ingredients.findIndex(i=>i.id===ing.id); if(idx>=0){ const old=s.ingredients[idx]; if(Number(old.purchasePrice)!==Number(ing.purchasePrice)) ing.costHistory=[...(old.costHistory||[]), {date:rv2Today(), price:Number(ing.purchasePrice)}]; s.ingredients[idx]=ing; } else s.ingredients.push(ing); } else { ing.id=rid("ing"); ing.createdAt=Date.now(); ing.costHistory=[{date:rv2Today(), price:Number(ing.purchasePrice)}]; s.ingredients.push(ing); } }); setEdit(null); setDraft(null); }
   const blank={id:"", name:"", category:cat||"", purchaseUnit:"", purchaseQty:1, purchasePrice:0, useUnit:"g", gramsPerEach:0, allergens:[], suppliers:[], costHistory:[], archived:false};
   const toggle=id=>setSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n; });
   const allShown=list.length>0&&list.every(i=>sel.has(i.id));
@@ -7698,19 +7746,19 @@ function IngredientsV2({state, update, setState, ingMap}){
   return <div className="rv2">
     <RV2Style />
     <div className="lbl"><span className="sh c"></span><span className="tag">Ingredients</span><span className="c2">{active.length} active · click a row to edit on the right · price changes preview their effect on recipes</span></div>
-    <div className="screen">
+    <div className="screen wide">
       <div className="bar">
         <input type="search" placeholder={"Search "+active.length+" ingredients — name, category, supplier"} value={q} onChange={e=>setQ(e.target.value)} />
         <div className="seg" role="group"><button type="button" aria-pressed={chip===""} onClick={()=>setChip("")}>All</button><button type="button" aria-pressed={chip!==""} onClick={()=>setChip(chip||"unknown")}>Needs work</button></div>
         <span className="cnt">{list.length} / {active.length}</span>
         <button type="button" className="btn p" onClick={()=>{ setEdit({...blank}); setDraft(null); }}>+ Ingredient</button>
-        <div className="more"><button type="button" className="btn" onClick={()=>setMore(v=>!v)}>More ▾</button>
-          {more && <div className="menu" onMouseLeave={()=>setMore(false)}>
+        <div className="more"><button type="button" className="btn" ref={moreRef} aria-haspopup="menu" aria-expanded={more} onClick={()=>setMore(v=>!v)}>More ▾</button>
+          {more && <RV2Menu anchorRef={moreRef} onClose={()=>setMore(false)}>
             <label>Import xlsx<input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={e=>{ if(e.target.files[0]){ importXlsx(e.target.files[0]); e.target.value=""; } setMore(false); }} /></label>
             <button type="button" onClick={()=>{ exportXlsx(); setMore(false); }}>Export xlsx</button>
             <button type="button" className="danger" disabled={!sel.size} onClick={()=>{ bulkDelete(); setMore(false); }}>Delete selected{sel.size?(" ("+sel.size+")"):""}</button>
             <button type="button" onClick={()=>{ localStorage.setItem("hideout_rcc_v1","1"); location.reload(); }}>Switch to legacy view</button>
-          </div>}
+          </RV2Menu>}
         </div>
       </div>
       <div className="chips">
@@ -7725,10 +7773,10 @@ function IngredientsV2({state, update, setState, ingMap}){
           <table>
             <thead><tr>
               <th className="chk-col" style={{width:44, textAlign:"center"}} onClick={()=>setSel(allShown?new Set():new Set(list.map(i=>i.id)))} title="Select all shown">{allShown?"☑":"☐"}</th>
-              <RV2Th label="Ingredient" k="name" sort={sort} setSort={setSort} cls="stick" /><RV2Th label="Cost / use" k="cost" sort={sort} setSort={setSort} num /><RV2Th label="Pack $" k="price" sort={sort} setSort={setSort} num /><RV2Th label="Pack" k="cat" sort={sort} setSort={setSort} cls="m2" /><RV2Th label="Supplier" k="sup" sort={sort} setSort={setSort} /><RV2Th label="Used in" k="used" sort={sort} setSort={setSort} num cls="m2" /><th className="m2">Allergens</th>
+              <RV2Th label="Ingredient" k="name" sort={sort} setSort={setSort} cls="stick" /><RV2Th label="Cost / use" k="cost" sort={sort} setSort={setSort} num /><RV2Th label="Pack $" k="price" sort={sort} setSort={setSort} num /><RV2Th label="Pack" k="cat" sort={sort} setSort={setSort} cls="m2" /><RV2Th label="Supplier" k="sup" sort={sort} setSort={setSort} /><RV2Th label="Used in" k="used" sort={sort} setSort={setSort} num cls="m2" /><th className="m2">Allergens</th><RV2Th label="Added" k="added" sort={sort} setSort={setSort} num cls="m2" />
             </tr></thead>
             <tbody>
-              {list.length===0 && <tr><td colSpan={8} className="empty">Nothing matches — clear the search or the chips.</td></tr>}
+              {list.length===0 && <tr><td colSpan={9} className="empty">Nothing matches — clear the search or the chips.</td></tr>}
               {list.slice(0,400).map((i,idx)=>{ const on=sel.has(i.id); const pref=(i.suppliers||[]).find(s=>s.preferred)||(i.suppliers||[])[0]; const rp=rv2RecentPrice(i,7); const st=rv2AllergenState(i); const used=usedIn[i.id]||[]; const isOpen=edit&&edit.id===i.id;
                 return <React.Fragment key={i.id}>
                   <tr className={"row"+(on?" sel":"")+(isOpen?" open":"")} style={{animationDelay:(Math.min(idx,20)*0.03)+"s"}} onClick={()=>{ setEdit(JSON.parse(JSON.stringify(i))); setDraft(null); }}>
@@ -7739,9 +7787,9 @@ function IngredientsV2({state, update, setState, ingMap}){
                     <td className="m2">{packLabel(i)}</td>
                     <td>{pref?pref.name:<span className="up">No supplier</span>}</td>
                     <td className="num m2">{used.length?<button type="button" className="link" onClick={e=>{ e.stopPropagation(); setUses(uses===i.id?null:i.id); }}>{used.length} recipe{used.length>1?"s":""}</button>:<span style={{color:"var(--muted)"}}>—</span>}</td>
-                    <td className="m2">{st==="unknown"?<span className="badge warn">▲ allergens unknown</span>:st==="none"?<span className="badge ok">none</span>:<span className="badge ok">{(i.allergens||[]).slice(0,2).join(", ")}{(i.allergens||[]).length>2?" +"+((i.allergens||[]).length-2):""}</span>}</td>
+                    <td className="m2 wrapcell">{st==="unknown"?<span className="badge warn">▲ allergens unknown</span>:st==="none"?<span className="badge ok">none</span>:<span className="badge ok">{(i.allergens||[]).slice(0,2).join(", ")}{(i.allergens||[]).length>2?" +"+((i.allergens||[]).length-2):""}</span>}</td><td className="num m2 added">{rv2FmtAdded(rv2CreatedAt(i))}</td>
                   </tr>
-                  {uses===i.id && <tr className="exp"><td colSpan={8}>
+                  {uses===i.id && <tr className="exp"><td colSpan={9}>
                     <div style={{fontSize:12, fontWeight:700, letterSpacing:".18em", textTransform:"uppercase", marginBottom:8}}>Used in {used.length} recipe{used.length>1?"s":""}</div>
                     <table className="mini"><thead><tr><th>Recipe</th><th className="num">Qty</th><th className="num">Line cost</th><th className="num">Margin</th></tr></thead><tbody>
                       {used.map(r=>{ const it=(r.items||[]).find(x=>x.ingredientId===i.id)||{}; const lc=unitCost(i)*itemQtyInUse(it,i); const m=marginOf(r,ingMap); const isM=r.sellPrice>0; const below=isM&&m.margin<(r.targetMargin/100);
@@ -7769,8 +7817,8 @@ function IngredientsV2({state, update, setState, ingMap}){
 }
 
 function RecipesV2({state, update, setState, ingMap}){
-  const [q,setQ]=useState(""); const [scope,setScope]=useState("menu"); const [chip,setChip]=useState(""); const [cat,setCat]=useState(""); const [sort,setSort]=useState({k:"vs", d:1});
-  const [open,setOpen]=useState(null); const [edit,setEdit]=useState(null); const [sel,setSel]=useState(()=>new Set()); const [more,setMore]=useState(false); const [showRcc,setShowRcc]=useState(false); const [prepUnit,setPrepUnit]=useState("g");
+  const [q,setQ]=useState(""); const [scope,setScope]=useState("all"); const [chip,setChip]=useState(""); const [cat,setCat]=useState(""); const [sort,setSort]=useState({k:"vs", d:1});
+  const [open,setOpen]=useState(null); const [edit,setEdit]=useState(null); const [sel,setSel]=useState(()=>new Set()); const [more,setMore]=useState(false); const moreRef=useRef(null); const [showRcc,setShowRcc]=useState(false); const [prepUnit,setPrepUnit]=useState("g");
   const active=state.recipes.filter(r=>!r.archived);
   const isMenu=r=>r.sellPrice>0;
   const U2G={g:1,kg:1000,ml:1,l:1000};
@@ -7788,8 +7836,8 @@ function RecipesV2({state, update, setState, ingMap}){
     .filter(r=>!ql || (r.name||"").toLowerCase().includes(ql) || (r.category||"").toLowerCase().includes(ql) || (r.posName||"").toLowerCase().includes(ql))
     .filter(r=>!cat || ((r.category||"").trim()||"(none)")===cat)
     .filter(r=>chip==="below"?infos[r.id].below:chip==="hit"?infos[r.id].hit.length>0:chip==="inc"?infos[r.id].incomplete:chip==="unfin"?!r.finalised:true);
-  list=rv2Sort(list, sort.k, sort.d, {name:r=>r.name, cost:r=>infos[r.id].isM?infos[r.id].uc:infos[r.id].bc, sell:r=>Number(r.sellPrice)||0, margin:r=>infos[r.id].m, vs:r=>infos[r.id].isM?infos[r.id].vs:(infos[r.id].bc), per:r=>per(r)||0, items:r=>(r.items||[]).length, used:r=>infos[r.id].usedBy.length});
-  function commit(rec){ update(s=>{ if(rec.id){ const idx=s.recipes.findIndex(r=>r.id===rec.id); if(idx>=0) s.recipes[idx]=rec; else s.recipes.push(rec); /* deleted on another device meanwhile - keep this edit rather than lose it */ } else { rec.id=rid("rec"); s.recipes.push(rec); } }); setEdit(null); }
+  list=rv2Sort(list, sort.k, sort.d, {name:r=>r.name, cost:r=>infos[r.id].isM?infos[r.id].uc:infos[r.id].bc, sell:r=>Number(r.sellPrice)||0, margin:r=>infos[r.id].m, vs:r=>infos[r.id].isM?infos[r.id].vs:(infos[r.id].bc), per:r=>per(r)||0, items:r=>(r.items||[]).length, used:r=>infos[r.id].usedBy.length, added:r=>rv2CreatedAt(r)});
+  function commit(rec){ update(s=>{ if(rec.id){ const idx=s.recipes.findIndex(r=>r.id===rec.id); if(idx>=0) s.recipes[idx]=rec; else s.recipes.push(rec); /* deleted on another device meanwhile - keep this edit rather than lose it */ } else { rec.id=rid("rec"); rec.createdAt=Date.now(); s.recipes.push(rec); } }); setEdit(null); }
   function createIngredient(d){ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; }
   const blank={id:"", name:"", category:cat&&cat!=="(none)"?cat:"", yield:1, yieldUnit:scope==="prep"?"g":"serve", sellPrice:0, targetMargin:70, items:[], importedCost:0, ingredientListText:"", allergens:[], image:"", procedure:"", showInDish:scope!=="prep", archived:false};
   const toggle=id=>setSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n; });
@@ -7805,21 +7853,21 @@ function RecipesV2({state, update, setState, ingMap}){
   return <div className="rv2">
     <RV2Style />
     <div className="lbl"><span className="sh s"></span><span className="tag">Recipes</span><span className="c2">{menuN} menu · {prepN} prep · click a row for its cost breakdown · risky ones first</span></div>
-    <div className="screen">
+    <div className="screen wide">
       <div className="bar">
         <input type="search" placeholder="Search recipes — name, category, POS name" value={q} onChange={e=>setQ(e.target.value)} />
         <div className="seg" role="group"><button type="button" aria-pressed={scope==="all"} onClick={()=>setScope("all")}>All {active.length}</button><button type="button" aria-pressed={scope==="menu"} onClick={()=>setScope("menu")}>Menu {menuN}</button><button type="button" aria-pressed={scope==="prep"} onClick={()=>setScope("prep")}>Prep {prepN}</button></div>
         <span className="cnt">{list.length} shown</span>
         <button type="button" className="btn p" onClick={()=>setEdit({...blank, items:[]})}>+ Recipe</button>
-        <div className="more"><button type="button" className="btn" onClick={()=>setMore(v=>!v)}>More ▾</button>
-          {more && <div className="menu" onMouseLeave={()=>setMore(false)}>
+        <div className="more"><button type="button" className="btn" ref={moreRef} aria-haspopup="menu" aria-expanded={more} onClick={()=>setMore(v=>!v)}>More ▾</button>
+          {more && <RV2Menu anchorRef={moreRef} onClose={()=>setMore(false)}>
             <label>Import xlsx<input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={e=>{ if(e.target.files[0]){ importXlsx(e.target.files[0]); e.target.value=""; } setMore(false); }} /></label>
             <button type="button" onClick={()=>{ exportXlsx(); setMore(false); }}>Export xlsx</button>
             <button type="button" onClick={()=>{ setShowRcc(true); setMore(false); }}>RCC API import</button>
             <button type="button" onClick={()=>{ if(!confirm("Collapse flattened prep-recipe ingredients into sub-recipe lines across all menu recipes?")) return; let c=0; setState(s=>{ const n=JSON.parse(JSON.stringify(s)); c=collapsePrepSubs(n); return n; }); setTimeout(()=>alert(c+" recipe(s) collapsed."),50); setMore(false); }}>Collapse preps</button>
             <button type="button" className="danger" disabled={!sel.size} onClick={()=>{ bulkDelete(); setMore(false); }}>Delete selected{sel.size?(" ("+sel.size+")"):""}</button>
             <button type="button" onClick={()=>{ localStorage.setItem("hideout_rcc_v1","1"); location.reload(); }}>Switch to legacy view (Trello import lives there)</button>
-          </div>}
+          </RV2Menu>}
         </div>
       </div>
       <div className="chips">
@@ -7837,10 +7885,10 @@ function RecipesV2({state, update, setState, ingMap}){
             <RV2Th label="Recipe" k="name" sort={sort} setSort={setSort} cls="stick" /><th>Status</th>
             {scope==="prep" ? <><RV2Th label="Batch cost" k="cost" sort={sort} setSort={setSort} num /><RV2Th label={"$ / "+prepUnit} k="per" sort={sort} setSort={setSort} num /><RV2Th label="Items" k="items" sort={sort} setSort={setSort} num cls="m2" /><RV2Th label="Used by" k="used" sort={sort} setSort={setSort} num cls="m2" /></>
               : <><RV2Th label="Margin" k="margin" sort={sort} setSort={setSort} num /><RV2Th label="vs target" k="vs" sort={sort} setSort={setSort} num /><RV2Th label="Cost" k="cost" sort={sort} setSort={setSort} num cls="m2" /><RV2Th label="Sell" k="sell" sort={sort} setSort={setSort} num cls="m2" /></>}
-            <th className="m2">Last change</th><th className="m2"></th>
+            <th className="m2">Last change</th><RV2Th label="Added" k="added" sort={sort} setSort={setSort} num cls="m2" /><th className="m2"></th>
           </tr></thead>
           <tbody>
-            {list.length===0 && <tr><td colSpan={9} className="empty">Nothing matches — clear the search or the chips.</td></tr>}
+            {list.length===0 && <tr><td colSpan={10} className="empty">Nothing matches — clear the search or the chips.</td></tr>}
             {list.slice(0,300).map((r,idx)=>{ const inf=infos[r.id]; const on=sel.has(r.id); const isOpen=open===r.id; const isM=inf.isM; const p=per(r);
               const status = inf.incomplete? <span className="badge warn">▲ cost incomplete</span> : inf.below? <span className="badge bad">▲ below target</span> : r.finalised? <span className="badge ok">confirmed</span> : <span className="badge dim">not confirmed</span>;
               const last = inf.hit.length? <span className="sub" style={{display:"inline"}}><span className="up">{inf.hit[0].name}</span>{inf.hit.length>1?" +"+(inf.hit.length-1):""} ↑ price · 7d</span> : <span className="sub" style={{display:"inline"}}>—</span>;
@@ -7852,9 +7900,10 @@ function RecipesV2({state, update, setState, ingMap}){
                   {scope==="prep" ? <><td className="num">{money(inf.bc)}{usesImported(r,ingMap)&&<span className="sub" style={{display:"inline"}}> imp.</span>}</td><td className="num">{p!=null?fmtPer(p):"—"}</td><td className="num m2">{(r.items||[]).length}</td><td className="num m2">{inf.usedBy.length||"—"}</td></>
                     : <><td className={"num"+(inf.below?" up":"")} style={{fontWeight:700}}>{isM?pct(inf.m):"—"}</td><td className={"num "+(isM?(inf.vs<0?"up":"down"):"")}>{isM?((inf.vs>=0?"+":"−")+Math.abs(inf.vs).toFixed(0)+" pt"):"—"}</td><td className="num m2">{isM?money(inf.uc):money(inf.bc)}</td><td className="num m2">{isM?money(r.sellPrice):"—"}</td></>}
                   <td className="m2">{last}</td>
+                  <td className="num m2 added">{rv2FmtAdded(rv2CreatedAt(r))}</td>
                   <td className="m2"><button type="button" className="btn sm" onClick={e=>{ e.stopPropagation(); setEdit(JSON.parse(JSON.stringify(r))); }}>Edit</button></td>
                 </tr>
-                {isOpen && <tr className="exp"><td colSpan={9}>
+                {isOpen && <tr className="exp"><td colSpan={10}>
                   <div className="exprow">
                     <div>
                       <table className="mini"><thead><tr><th>Ingredient</th><th className="num">Qty</th><th className="num">@</th><th className="num">Line</th></tr></thead><tbody>
@@ -8172,7 +8221,7 @@ function DishDetailV2({rec, ingMap, onClose, onEdit, onMove, cats, onRemove, rem
 }
 function DishesV2({state, ingMap, update, branch}){
   const [view,setView]=useState(null); const [q,setQ]=useState(""); const [showLib,setShowLib]=useState(false); const [showAdd,setShowAdd]=useState(false); const [addQ,setAddQ]=useState("");
-  const [catFilter,setCatFilter]=useState("All"); const [dept,setDept]=useState("kitchen"); const [showCats,setShowCats]=useState(false); const [pickFor,setPickFor]=useState(null); const [editRec,setEditRec]=useState(null); const [more,setMore]=useState(false);
+  const [catFilter,setCatFilter]=useState("All"); const [dept,setDept]=useState("kitchen"); const [showCats,setShowCats]=useState(false); const [pickFor,setPickFor]=useState(null); const [editRec,setEditRec]=useState(null); const [more,setMore]=useState(false); const moreRef=useRef(null);
   const deptList=branchDepts(state,branch,"dish");
   useEffect(()=>{ if(!deptList.some(d=>d[0]===dept)) setDept("kitchen"); }, [branch]);
   const addDish=id=>update(s=>{ const t=s.recipes.find(x=>x.id===id); if(!t) return; if(dept==="bakery") setBk(t,branch,"dish",true); else if(dept==="barista") setBa(t,branch,"dish",true); else { setBranchField(t,branch,"dish",true); t.showInDish=true; } });
@@ -8208,12 +8257,12 @@ function DishesV2({state, ingMap, update, branch}){
         <input type="search" placeholder="Search dish, ingredient or allergen" value={q} onChange={e=>setQ(e.target.value)} />
         <span className="cnt">{filtered.length} shown</span>
         <button type="button" className="btn p" onClick={()=>{ setShowAdd(true); setAddQ(""); }}>+ Add to menu</button>
-        <div className="more"><button type="button" className="btn" onClick={()=>setMore(v=>!v)}>Manage ▾</button>
-          {more && <div className="menu" onMouseLeave={()=>setMore(false)}>
+        <div className="more"><button type="button" className="btn" ref={moreRef} aria-haspopup="menu" aria-expanded={more} onClick={()=>setMore(v=>!v)}>Manage ▾</button>
+          {more && <RV2Menu anchorRef={moreRef} onClose={()=>setMore(false)}>
             <button type="button" onClick={()=>{ setShowCats(true); setMore(false); }}>Categories</button>
             <button type="button" onClick={()=>{ setShowLib(true); setMore(false); }}>Photo library</button>
             <button type="button" onClick={()=>{ localStorage.setItem("hideout_rcc_v1","1"); location.reload(); }}>Switch to legacy view</button>
-          </div>}
+          </RV2Menu>}
         </div>
       </div>
       <div className="chips">
@@ -8274,7 +8323,62 @@ function PrepBoardV2({state, ingMap, update, branch, meEmail}){
           : <button type="button" className="done back" title="Back to To do" aria-label="Back to to do" onClick={()=>mark(r,"todo")}>↺</button>}
       </div>
     </div>; };
-  if(board) return <div className="rv2"><RV2Style /><div className="lbl"><span className="sh s"></span><span className="tag">Prep board</span><span className="c2">kanban view</span><button type="button" className="btn sm" style={{marginLeft:"auto"}} onClick={()=>setBoard(false)}>← List view</button></div><PrepBoard state={state} ingMap={ingMap} update={update} branch={branch} meEmail={meEmail} /></div>;
+  /* Shared by both views (list and board) - one copy, so a fix lands in both. */
+  const overlays=<React.Fragment>
+    {undo && <div className="toast" role="status"><span>✓ {undo.name} done</span><button type="button" onClick={()=>{ setStatusAt(undo.id, undo.prev==="done"?"todo":undo.prev, undo.branch, undo.dept); setUndo(null); }}>Undo</button></div>}
+    {view && <DishDetailV2 rec={view} ingMap={ingMap} onClose={()=>setView(null)} onEdit={()=>{ setEditRec(view); setView(null); }} onRemove={()=>{ if(removeTask(view.id)) setView(null); }} removeLabel="Remove from board" />}
+    {editRec && <RecipeEditorV2 rec={editRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={prepCreateIng} onClose={()=>setEditRec(null)} onSave={r=>{ update(s=>{ const i=s.recipes.findIndex(x=>x.id===r.id); if(i>=0) s.recipes[i]=r; else s.recipes.push(r); }); setEditRec(null); }} onDelete={id=>{ update(s=>{ s.recipes=s.recipes.filter(x=>x.id!==id); }); setEditRec(null); }} />}
+    {showAdd && <Modal title="Add prep tasks" onClose={()=>setShowAdd(false)}>
+      <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} />
+      <div className="max-h-[50vh] overflow-auto divide-y divide-stone-100">
+        {off.slice(0,80).map(r=><button key={r.id} type="button" onClick={()=>addTask(r.id)} className="w-full text-left flex items-center justify-between py-2.5 px-1 hover:bg-stone-50 text-sm" style={{background:"none", border:"none", cursor:"pointer", minHeight:44}}><span className="truncate text-stone-800">{r.name}<span className="text-stone-400 text-xs"> · {dishCategory(r)}</span></span><span className="text-xs font-semibold shrink-0" style={{color:"var(--color-primary)"}}>+ Add</span></button>)}
+        {off.length===0 && <div className="py-6 text-center text-sm text-stone-400">Everything is already on the board.</div>}
+      </div>
+      <div className="flex justify-end mt-4"><Btn tone="ghost" onClick={()=>setShowAdd(false)}>Done</Btn></div>
+    </Modal>}
+  </React.Fragment>;
+  const tomorrow=<React.Fragment>
+      <details className="tomorrow"><summary><span>Tomorrow · handover note</span><span style={{color:"var(--muted)", fontWeight:500}}>add tasks · write the note</span></summary>
+        <div className="b"><div style={{marginBottom:12}}><button type="button" className="btn" onClick={()=>{ setShowAdd(true); setAddQ(""); }}>+ Add tomorrow’s tasks</button></div><PrepHandover state={state} update={update} branch={branch} meEmail={meEmail} /></div>
+      </details>
+  </React.Fragment>;
+  /* Board view, in the same design as the list. It used to hand off to the pre-September kanban
+     (dark tiles, rounded cards) - the one Prep screen still wearing the old clothes. Same three
+     columns, same drag between them, the list view's own rows, so nothing is learned twice.
+     Dropping on a column is the same call as the row's own button (mark), so undo works here too. */
+  const [dragId,setDragId]=useState(null); const [overCol,setOverCol]=useState(null);
+  const kanCols=[["urgent","Fire first",urgent,"t"],["todo","To do",todo,"c"],["done","Done",done,"s"]];
+  const kanban=<div className="kan">
+    {kanCols.map(([key,label,items,shape])=><div key={key} className={"col "+key+(overCol===key&&dragId?" over":"")}
+        onDragOver={e=>{ e.preventDefault(); e.dataTransfer.dropEffect="move"; if(overCol!==key) setOverCol(key); }}
+        onDragLeave={e=>{ if(!e.currentTarget.contains(e.relatedTarget)) setOverCol(null); }}
+        onDrop={e=>{ e.preventDefault(); const id=e.dataTransfer.getData("text/prep")||dragId; if(id){ const r=filtered.find(x=>x.id===id); if(r && st(r)!==key) mark(r,key); } setDragId(null); setOverCol(null); }}>
+      <div className="h"><span className={"sh "+shape} style={key==="urgent"?{borderBottomColor:"#fff"}:null} aria-hidden="true"></span>{label}<span className="n">{items.length}</span></div>
+      <div>
+        {items.map((r,i)=><div key={r.id} className={"drag"+(dragId===r.id?" lift":"")} draggable
+            onDragStart={e=>{ setDragId(r.id); e.dataTransfer.setData("text/prep", r.id); e.dataTransfer.effectAllowed="move"; }}
+            onDragEnd={()=>{ setDragId(null); setOverCol(null); }}>{row(r,i,key)}</div>)}
+        {items.length===0 && <div className="drop">{key==="done"?"Nothing done yet":key==="urgent"?"Drag a task here to fire it first":"Drag a task here"}</div>}
+      </div>
+    </div>)}
+  </div>;
+  if(board) return <div className="rv2">
+    <RV2Style />
+    <div className="lbl"><span className="sh s"></span><span className="tag">Prep board</span><span className="c2">{dateLabel}{branchName?(" · "+branchName):""} · drag between columns · ✓ when it’s done</span></div>
+    <div className="screen">
+      <div className="bar">
+        <DeptSeg dept={dept} setDept={setDept} depts={deptList} />
+        <input type="search" placeholder="Search prep tasks" value={q} onChange={e=>setQ(e.target.value)} />
+        <span className="cnt">{doneN} / {total} done</span>
+        <button type="button" className="btn p" onClick={()=>{ setShowAdd(true); setAddQ(""); }}>+ Add task</button>
+        <button type="button" className="btn" onClick={()=>setBoard(false)} title="One list, grouped">List view</button>
+      </div>
+      <div className="prog" aria-label={pctDone+"% done"} style={{margin:"12px 14px"}}><i style={{width:pctDone+"%"}}></i></div>
+      {kanban}
+      {tomorrow}
+    </div>
+    {overlays}
+  </div>;
   return <div className="rv2">
     <RV2Style />
     <div className="lbl"><span className="sh s"></span><span className="tag">Prep board</span><span className="c2">{dateLabel}{branchName?(" · "+branchName):""} · tap ✓ when it’s done · ! fires it first</span></div>
@@ -8298,21 +8402,9 @@ function PrepBoardV2({state, ingMap, update, branch, meEmail}){
       {(filter==="all"||filter==="urgent") && urgent.length>0 && <div className="first"><div className="h"><span className="sh t" style={{borderBottomColor:"#fff"}} aria-hidden="true"></span>Fire first · {urgent.length}</div>{urgent.map((r,i)=>row(r,i,"urgent"))}</div>}
       {(filter==="all"||filter==="todo") && <><div className="grp">To do <span className="n">{todo.length}</span></div>{todo.length===0 && <div className="empty" style={{padding:"14px"}}>{total===0?"Nothing on the board yet — + Add task.":"Everything is either fired or done."}</div>}{todo.map((r,i)=>row(r,i,"todo"))}</>}
       {(filter==="all"||filter==="done") && <><div className="grp">Done <span className="n">{doneN}</span>{filter==="all" && doneN>0 && <button type="button" className="link" style={{marginLeft:"auto"}} onClick={()=>setShowDone(v=>!v)}>{showDone?"hide":"show"}</button>}</div>{(filter==="done"||showDone) && done.map((r,i)=>row(r,i,"done"))}</>}
-      <details className="tomorrow"><summary><span>Tomorrow · handover note</span><span style={{color:"var(--muted)", fontWeight:500}}>add tasks · write the note</span></summary>
-        <div className="b"><div style={{marginBottom:12}}><button type="button" className="btn" onClick={()=>{ setShowAdd(true); setAddQ(""); }}>+ Add tomorrow’s tasks</button></div><PrepHandover state={state} update={update} branch={branch} meEmail={meEmail} /></div>
-      </details>
+      {tomorrow}
     </div>
-    {undo && <div className="toast" role="status"><span>✓ {undo.name} done</span><button type="button" onClick={()=>{ setStatusAt(undo.id, undo.prev==="done"?"todo":undo.prev, undo.branch, undo.dept); setUndo(null); }}>Undo</button></div>}
-    {view && <DishDetailV2 rec={view} ingMap={ingMap} onClose={()=>setView(null)} onEdit={()=>{ setEditRec(view); setView(null); }} onRemove={()=>{ if(removeTask(view.id)) setView(null); }} removeLabel="Remove from board" />}
-    {editRec && <RecipeEditorV2 rec={editRec} state={state} ingMap={ingMap} update={update} onCreateIngredient={prepCreateIng} onClose={()=>setEditRec(null)} onSave={r=>{ update(s=>{ const i=s.recipes.findIndex(x=>x.id===r.id); if(i>=0) s.recipes[i]=r; else s.recipes.push(r); }); setEditRec(null); }} onDelete={id=>{ update(s=>{ s.recipes=s.recipes.filter(x=>x.id!==id); }); setEditRec(null); }} />}
-    {showAdd && <Modal title="Add prep tasks" onClose={()=>setShowAdd(false)}>
-      <input autoFocus className="inp mb-3" placeholder="Search recipes…" value={addQ} onChange={e=>setAddQ(e.target.value)} />
-      <div className="max-h-[50vh] overflow-auto divide-y divide-stone-100">
-        {off.slice(0,80).map(r=><button key={r.id} type="button" onClick={()=>addTask(r.id)} className="w-full text-left flex items-center justify-between py-2.5 px-1 hover:bg-stone-50 text-sm" style={{background:"none", border:"none", cursor:"pointer", minHeight:44}}><span className="truncate text-stone-800">{r.name}<span className="text-stone-400 text-xs"> · {dishCategory(r)}</span></span><span className="text-xs font-semibold shrink-0" style={{color:"var(--color-primary)"}}>+ Add</span></button>)}
-        {off.length===0 && <div className="py-6 text-center text-sm text-stone-400">Everything is already on the board.</div>}
-      </div>
-      <div className="flex justify-end mt-4"><Btn tone="ghost" onClick={()=>setShowAdd(false)}>Done</Btn></div>
-    </Modal>}
+    {overlays}
   </div>;
 }
 
@@ -8372,7 +8464,7 @@ function MeetingLiveV2({meeting, meetings, branches, update, onClose}){
   </div>, document.body);
 }
 function TeamMeetingsV2({state, update, branch, branches}){
-  const [br,setBr]=useState(branch||((branches||[])[0]||{}).id); const [editId,setEditId]=useState(null); const [creating,setCreating]=useState(false); const [guide,setGuide]=useState(false); const [more,setMore]=useState(false); const [q,setQ]=useState("");
+  const [br,setBr]=useState(branch||((branches||[])[0]||{}).id); const [editId,setEditId]=useState(null); const [creating,setCreating]=useState(false); const [guide,setGuide]=useState(false); const [more,setMore]=useState(false); const moreRef=useRef(null); const [q,setQ]=useState("");
   const meetings=(state.teamMeetings||[]).slice().sort((a,b)=>((b.date||"")+(b.time||"")).localeCompare((a.date||"")+(a.time||"")));
   const editing=meetings.find(m=>m.id===editId);
   const bName=id=>((branches||[]).find(b=>b.id===id)||{}).name||id;
@@ -8391,7 +8483,7 @@ function TeamMeetingsV2({state, update, branch, branches}){
         <input type="search" placeholder="Search notes, actions, people, dates" value={q} onChange={e=>setQ(e.target.value)} />
         <span className="cnt">{shown.length} meeting{shown.length===1?"":"s"}</span>
         <button type="button" className="btn p" onClick={()=>setCreating(true)}>+ New meeting</button>
-        <div className="more"><button type="button" className="btn" onClick={()=>setMore(v=>!v)}>More ▾</button>{more && <div className="menu" onMouseLeave={()=>setMore(false)}><button type="button" onClick={()=>{ setGuide(true); setMore(false); }}>How to run this meeting</button><button type="button" onClick={()=>{ localStorage.setItem("hideout_rcc_v1","1"); location.reload(); }}>Switch to legacy view</button></div>}</div>
+        <div className="more"><button type="button" className="btn" ref={moreRef} aria-haspopup="menu" aria-expanded={more} onClick={()=>setMore(v=>!v)}>More ▾</button>{more && <RV2Menu anchorRef={moreRef} onClose={()=>setMore(false)}><button type="button" onClick={()=>{ setGuide(true); setMore(false); }}>How to run this meeting</button><button type="button" onClick={()=>{ localStorage.setItem("hideout_rcc_v1","1"); location.reload(); }}>Switch to legacy view</button></RV2Menu>}</div>
       </div>
       {br!=="__orph" && <div style={{padding:"14px 14px 6px"}}>
         <div className="grp" style={{padding:"0 0 8px"}}>Open actions <span className="n">{openActs.length}</span></div>
@@ -8614,7 +8706,7 @@ function AivStyle(){
 }
 /* NOTE: template literal — never put a backtick inside this string. */
 const AIV_CSS = `
-  .rv2 .sum.aiv5{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .rv2 .sum.aiv5{grid-template-columns:repeat(5,minmax(0,1fr))} .rv2 .sum.aiv6{grid-template-columns:repeat(6,minmax(0,1fr))}
   .rv2 .sum>div.tap{cursor:pointer;transition:background .15s} .rv2 .sum>div.tap:hover{background:rgba(242,193,0,.28)}
   .rv2 .aiv-spark{display:inline-block;vertical-align:middle}
   .rv2 .aiv-note{padding:2px 14px 16px;color:var(--muted);font-size:14px;font-weight:400;max-width:84ch}
@@ -8648,7 +8740,7 @@ const AIV_CSS = `
   .rv2 .aiv-sug{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
   .rv2 .aiv-chart{width:100%;height:auto;display:block;border:2px solid var(--ink);background:#fff}
   @media (max-width:900px){
-    .rv2 .sum.aiv5{grid-template-columns:1fr 1fr}
+    .rv2 .sum.aiv5,.rv2 .sum.aiv6{grid-template-columns:1fr 1fr}
     .rv2 .aiv-mv .b{grid-template-columns:minmax(80px,1fr) minmax(0,1.2fr) 62px;gap:8px}
     .rv2 .aiv-hero .big{font-size:40px}
   }
@@ -8763,7 +8855,7 @@ function InvoicesV2({state, update, ingMap}){
   const [card,setCard]=useState(null);
   const [open,setOpen]=useState(null);
   const [days,setDays]=useState(30);
-  const [view,setView]=useState("queue");
+  const [view,setView]=useState("impact");
   const cut = new Date(Date.now()-days*86400000).toISOString().slice(0,10);
   const tod = today();
   const recent = log.filter(r=>String(r.date||"")>=cut);
@@ -8877,6 +8969,49 @@ function InvoicesV2({state, update, ingMap}){
     return out;
   }, [recent, ings, series, checked]);
 
+  /* COST CONTROL. What the window's price changes did to the menu. Each ingredient's cost history
+     gives the pack price it carried before the window opened (or its first price, if it was made
+     inside the window); every recipe is re-costed at those prices and at today's, and the two are
+     compared like for like - same recipe, same yield, only the ingredient prices differ. This is
+     the link the tab was missing: an invoice moves a price, and a dish somewhere loses margin. */
+  const impact = useMemo(()=>{
+    const before={}, changed={};
+    ings.forEach(g=>{
+      const h=(g.costHistory||[]).slice().sort((x,y)=>String(x.date||"").localeCompare(String(y.date||"")));
+      if(!h.length) return;
+      let p=null; for(const e of h){ if(String(e.date||"")<cut) p=e.price; else break; }
+      if(p==null) p=h[0].price;
+      const now=Number(g.purchasePrice)||0;
+      if(!(p>0) || !(now>0) || Math.abs(now-p)<0.005) return;
+      before[g.id]={...g, purchasePrice:p}; changed[g.id]={name:g.name, pct:(now-p)/p*100};
+    });
+    const ids=Object.keys(changed);
+    if(!ids.length) return {dishes:[], preps:[], changed:0, newBelow:0};
+    const map2={...ingMap, ...before};
+    const recs=(state.recipes||[]).filter(r=>!r.archived);
+    const rmap=recMapGet();
+    const uses=(r,seen)=>{ seen=seen||new Set(); if(!r||seen.has(r.id)) return false; seen.add(r.id);
+      return (r.items||[]).some(it=>(it.ingredientId&&changed[it.ingredientId]) || (it.subRecipeId && uses(rmap[it.subRecipeId], seen))); };
+    const driverOf=r=>{ let best=null; (r.items||[]).forEach(it=>{ const c=it.ingredientId&&changed[it.ingredientId]; if(!c) return; const g=ingMap[it.ingredientId]; if(!g) return;
+      const d=itemQtyInUse(it,g)*(unitCost(g)-unitCost(map2[it.ingredientId])); if(best==null||Math.abs(d)>Math.abs(best.d)) best={name:c.name, pct:c.pct, d}; }); return best; };
+    const dishes=[], preps=[];
+    recs.forEach(r=>{
+      if(!uses(r)) return;
+      const driver=driverOf(r);
+      if(r.sellPrice>0){
+        const a=marginOf(r,map2), b=marginOf(r,ingMap), tgt=(r.targetMargin||0)/100, dpt=(b.margin-a.margin)*100;
+        if(Math.abs(dpt)<0.05) return;
+        dishes.push({r, before:a, now:b, dpt, tgt, newBelow:b.margin<tgt && a.margin>=tgt, below:b.margin<tgt, driver});
+      } else {
+        const a=recipeCost(r,map2), b=recipeCost(r,ingMap);
+        if(!(a>0) || Math.abs(b-a)<0.005) return;
+        preps.push({r, a, b, pct:(b-a)/a*100, driver});
+      }
+    });
+    dishes.sort((x,y)=>x.dpt-y.dpt); preps.sort((x,y)=>y.pct-x.pct);
+    return {dishes, preps, changed:ids.length, newBelow:dishes.filter(d=>d.newBelow).length};
+  }, [ings, ingMap, state.recipes, cut]);
+
   const suggestions = useMemo(()=>unmatched.map(u=>({u:u, cands:aivSuggest(u, ings)})), [unmatched, ings]);
   /* Auto-linkable only when the winner is both confident AND clearly ahead of the runner-up.
      A 71-vs-70 pair is a coin toss, and a coin toss is what put "Soy Milk" on "Milk". */
@@ -8977,12 +9112,13 @@ function InvoicesV2({state, update, ingMap}){
 
   return <div className="rv2">
     <RV2Style /><AivStyle />
-    <div className="lbl"><span className="sh c"></span><span className="tag">AI invoice</span><span className="c2">prices updated automatically from supplier invoices every morning · fix what it couldn’t, and watch what it costs you</span></div>
+    <div className="lbl"><span className="sh c"></span><span className="tag">Cost control</span><span className="c2">AI invoice · supplier prices land every morning · see what they did to your margins · fix what the robot couldn’t</span></div>
     <div className="screen">
       <div className="bar">
         <span className="cnt" style={{fontWeight:700, color:"var(--ink)"}}>Last run {last? (last.date+" · "+(last.supplier||"?")) : "— none yet"}</span>
         <span style={{flex:1}}></span>
         <div className="seg" role="group" aria-label="Section">
+          <button type="button" aria-pressed={view==="impact"} onClick={go("impact")}>Menu impact{impact.dishes.length? " ("+impact.dishes.length+")":""}</button>
           <button type="button" aria-pressed={view==="queue"} onClick={go("queue")}>To fix{queueN? " ("+queueN+")":""}</button>
           <button type="button" aria-pressed={view==="trend"} onClick={go("trend")}>Trends</button>
           <button type="button" aria-pressed={view==="log"} onClick={go("log")}>Log</button>
@@ -8991,7 +9127,8 @@ function InvoicesV2({state, update, ingMap}){
         <div className="seg" role="group" aria-label="Window">{[7,30,90].map(d=><button key={d} type="button" aria-pressed={days===d} onClick={()=>setDays(d)}>{d}d</button>)}</div>
       </div>
 
-      <div className="sum aiv5">
+      <div className="sum aiv6">
+        <div className={"tap "+(impact.newBelow?"bad":impact.dishes.length?"hot":"")} onClick={go("impact")}><div className="v">{impact.dishes.length}</div><div className="l">dishes moved · {days}d</div></div>
         <div className="tap" onClick={go("log")}><div className="v">{changes.length}</div><div className="l">price updates · {days}d</div></div>
         <div className={"tap "+(basket&&basket.pct>=2?"hot":"")} onClick={go("trend")}>
           <div className="v">{basket? ((basket.pct>=0?"+":"−")+Math.abs(basket.pct).toFixed(1)+"%") : "—"}</div>
@@ -9001,6 +9138,43 @@ function InvoicesV2({state, update, ingMap}){
         <div className={"tap "+(unmatched.length?"bad":"")} onClick={go("queue")}><div className="v">{unmatched.length}</div><div className="l">needs linking</div></div>
         <div className={"tap "+(anomalies.length||flagged.length?"hot":"")} onClick={go("queue")}><div className="v">{anomalies.length+flagged.length}</div><div className="l">needs a check</div></div>
       </div>
+
+      {view==="impact" && <React.Fragment>
+        <div className="aiv-hero">
+          <div><div className={"big "+(impact.newBelow?"up":impact.dishes.length?"":"down")}>{impact.dishes.length}</div></div>
+          <div className="cap"><b>{impact.dishes.length}</b> menu item{impact.dishes.length===1?"":"s"} changed margin in the last {days} days because <b>{impact.changed}</b> ingredient price{impact.changed===1?"":"s"} moved{impact.newBelow? <span> — <b>{impact.newBelow}</b> fell below target</span> : null}. Each row is the recipe re-costed at the prices it had when the window opened, against what it costs today. Same recipe, same yield; only the ingredient prices differ.</div>
+        </div>
+        <div className="grp" style={{padding:"14px 14px 8px"}}><span className="sh s" style={{marginRight:8}}></span>Dishes · margin then → now <span className="n">{impact.dishes.length}</span></div>
+        <div style={{overflowX:"auto"}}><table>
+          <thead><tr><th>Dish</th><th>Driven by</th><th className="num">Cost</th><th className="num">Margin</th><th className="num">Change</th><th>Target</th></tr></thead>
+          <tbody>
+            {impact.dishes.length===0 && <tr><td colSpan={6} className="empty">No menu item changed cost in the last {days} days.</td></tr>}
+            {impact.dishes.slice(0,120).map((d,i)=><tr key={d.r.id} className="row" style={{animationDelay:(Math.min(i,12)*0.03)+"s"}}>
+              <td><span className="name">{d.r.name}</span><span className="sub">{(d.r.category||"").trim()||"Uncategorized"} · sells {money(d.r.sellPrice)}</span></td>
+              <td>{d.driver? <React.Fragment><span className={d.driver.pct>=0?"up":"down"}>{d.driver.name}</span><span className="sub">{(d.driver.pct>=0?"↑ ":"↓ ")+Math.abs(d.driver.pct).toFixed(0)}% on the ingredient</span></React.Fragment> : <span className="sub" style={{display:"inline"}}>via a sub-recipe</span>}</td>
+              <td className="num">{money(d.before.unitCost)} → <b>{money(d.now.unitCost)}</b></td>
+              <td className="num">{Math.round(d.before.margin*100)}% → <b>{Math.round(d.now.margin*100)}%</b></td>
+              <td className={"num "+(d.dpt<0?"up":"down")}>{(d.dpt>0?"+":"−")+Math.abs(d.dpt).toFixed(1)} pt</td>
+              <td>{d.newBelow? <span className="badge bad">▲ now below target</span> : d.below? <span className="badge warn">still below {Math.round(d.tgt*100)}%</span> : <span className="badge ok">above {Math.round(d.tgt*100)}%</span>}</td>
+            </tr>)}
+          </tbody>
+        </table></div>
+        <div className="aiv-note">Sorted worst first. “Driven by” is the changed ingredient that moved this dish’s cost the most; a dish with no direct line was hit through a prep recipe it uses. Reprice, reformulate or renegotiate — the Recipes tab has the full breakdown.</div>
+
+        <div className="grp" style={{padding:"18px 14px 8px"}}><span className="sh c" style={{marginRight:8}}></span>Prep batches · cost then → now <span className="n">{impact.preps.length}</span></div>
+        <div style={{overflowX:"auto"}}><table>
+          <thead><tr><th>Prep recipe</th><th>Driven by</th><th className="num">Batch cost</th><th className="num">Change</th></tr></thead>
+          <tbody>
+            {impact.preps.length===0 && <tr><td colSpan={4} className="empty">No prep recipe changed cost in the last {days} days.</td></tr>}
+            {impact.preps.slice(0,80).map((p,i)=><tr key={p.r.id} className="row" style={{animationDelay:(Math.min(i,12)*0.03)+"s"}}>
+              <td><span className="name">{p.r.name}</span><span className="sub">{(p.r.category||"").trim()||"Prep"} · makes {p.r.yield} {p.r.yieldUnit||""}</span></td>
+              <td>{p.driver? <React.Fragment><span className={p.driver.pct>=0?"up":"down"}>{p.driver.name}</span><span className="sub">{(p.driver.pct>=0?"↑ ":"↓ ")+Math.abs(p.driver.pct).toFixed(0)}%</span></React.Fragment> : <span className="sub" style={{display:"inline"}}>via a sub-recipe</span>}</td>
+              <td className="num">{money(p.a)} → <b>{money(p.b)}</b></td>
+              <td className={"num "+(p.pct>0?"up":"down")}>{(p.pct>0?"↑ ":"↓ ")+Math.abs(p.pct).toFixed(1)}%</td>
+            </tr>)}
+          </tbody>
+        </table></div>
+      </React.Fragment>}
 
       {view==="queue" && <React.Fragment>
         <div className="grp" style={{padding:"18px 14px 8px"}}>
@@ -9460,7 +9634,7 @@ function Recipes({state, update, setState, ingMap}){
   const allCats=[...new Set(activeAll.map(r=>(r.category||"").trim()||"(none)"))].sort((a,b)=>a.localeCompare(b));
   function bulkDelete(){ const refd=state.recipes.filter(r=>!sel[r.id]&&!r.archived&&(r.items||[]).some(it=>it.subRecipeId&&sel[it.subRecipeId])).map(r=>r.name); if(refd.length&&!confirm("Warning: "+refd.length+" other recipe(s) use a selected recipe as a prep/sub-recipe (\u25b8): "+refd.slice(0,8).join(", ")+(refd.length>8?"\u2026":"")+"\n\nDeleting will break those links. Continue?")) return; if(!confirm("Delete "+selIds.length+" recipe(s) permanently?\n\nOK = delete \u00b7 Cancel = keep")) return; update(s=>{ s.recipes=s.recipes.filter(r=>!sel[r.id]); }); setSel({}); }
   function applyBulk(){ update(s=>{ s.recipes.forEach(r=>{ if(!sel[r.id]) return; if(bulk.category.trim()) r.category=bulk.category.trim(); if(bulk.targetMargin!=="") r.targetMargin=Number(bulk.targetMargin)||r.targetMargin; if(bulk.showInDish!=="") r.showInDish=bulk.showInDish==="on"; if(bulk.showInPrep!=="") r.showInPrep=bulk.showInPrep==="on"; if(bulk.finalised) r.finalised=bulk.finalised==="on"; }); }); setBulk(null); setSel({}); }
-  function commit(rec){ update(s=>{ if(rec.id){ const idx=s.recipes.findIndex(r=>r.id===rec.id); s.recipes[idx]=rec; } else { rec.id=rid("rec"); s.recipes.push(rec); } }); setEdit(null); }
+  function commit(rec){ update(s=>{ if(rec.id){ const idx=s.recipes.findIndex(r=>r.id===rec.id); s.recipes[idx]=rec; } else { rec.id=rid("rec"); rec.createdAt=Date.now(); s.recipes.push(rec); } }); setEdit(null); }
   function createIngredient(d){ const ing=newIngredient(d); update(s=>{ s.ingredients.push(ing); }); return ing.id; }
   function importXlsx(file){
     readSheet(file, rows=>{

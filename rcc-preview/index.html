@@ -8716,6 +8716,10 @@ function AivStyle(){
 /* NOTE: template literal — never put a backtick inside this string. */
 const AIV_CSS = `
   .rv2 .sum.aiv5{grid-template-columns:repeat(5,minmax(0,1fr))} .rv2 .sum.aiv6{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .rv2 .sum .h{font-size:12.5px;line-height:1.35;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;margin-top:6px}
+  .rv2 .sum>div.bad .h,.rv2 .sum>div.hot .h{color:inherit;opacity:.85}
+  .rv2 .sum>div{min-height:132px}
+  .rv2 .aiv-guide{margin:0;padding:12px 14px;border-bottom:3px solid var(--ink);border-left:10px solid var(--y);background:#fff;font-size:14px;font-weight:400;line-height:1.5} .rv2 .aiv-guide b{font-weight:700}
   .rv2 .sum>div.tap{cursor:pointer;transition:background .15s} .rv2 .sum>div.tap:hover{background:rgba(242,193,0,.28)}
   .rv2 .aiv-spark{display:inline-block;vertical-align:middle}
   .rv2 .aiv-note{padding:2px 14px 16px;color:var(--muted);font-size:14px;font-weight:400;max-width:84ch}
@@ -8757,6 +8761,20 @@ const AIV_CSS = `
 
 /* Inline sparkline — square end marker, no smoothing, ink weight. Matches the flat
    3px-border language of the rest of the screen rather than importing a chart library. */
+/* A rate in a unit a kitchen thinks in. Per-gram and per-millilitre rates are what the master
+   stores, and nobody has a feel for $0.0335/g; $33.50/kg is a number you can argue with a
+   supplier about. Anything already per kg / per L / per each stays as it is. */
+function aivNice(price, unit){
+  const p=Number(price); if(!(p>0)) return { v:"–", u:"" };
+  const u=String(unit||"").trim().toLowerCase();
+  if(u==="g") return { v:money(p*1000), u:"/kg" };
+  if(u==="ml") return { v:money(p*1000), u:"/L" };
+  if(u==="kg"||u==="l") return { v:money(p), u:"/"+(u==="l"?"L":"kg") };
+  if(!u) return { v:money(p), u:"" };
+  return { v:money(p), u:"/"+u };
+}
+/* the bulk-link placeholder supplier, shown as what it means */
+function aivWho(sup){ return (!sup || sup==="Multiple") ? "linked by hand in the app" : sup; }
 function AivSpark({pts, w, h}){
   w=w||92; h=h||26;
   const v=(pts||[]).filter(p=>p>0);
@@ -9136,16 +9154,21 @@ function InvoicesV2({state, update, ingMap}){
         <div className="seg" role="group" aria-label="Window">{[7,30,90].map(d=><button key={d} type="button" aria-pressed={days===d} onClick={()=>setDays(d)}>{d}d</button>)}</div>
       </div>
 
+      {/* Each tile: the number, what it counts, and what to do about it. The old labels
+          ("input cost", "moved ≥ 10%", "needs linking") meant something to whoever wrote them. */}
       <div className="sum aiv6">
-        <div className={"tap "+(impact.newBelow?"bad":impact.dishes.length?"hot":"")} onClick={go("impact")}><div className="v">{impact.dishes.length}</div><div className="l">dishes moved · {days}d</div></div>
-        <div className="tap" onClick={go("log")}><div className="v">{changes.length}</div><div className="l">price updates · {days}d</div></div>
+        <div className={"tap "+(impact.newBelow?"bad":impact.dishes.length?"hot":"")} onClick={go("impact")}><div className="v">{impact.dishes.length}</div><div className="l">Dishes whose margin moved</div><div className="h">{impact.newBelow? impact.newBelow+" fell below target — reprice or accept" : "because an ingredient price changed — open to see which"}</div></div>
+        <div className="tap" onClick={go("log")}><div className="v">{changes.length}</div><div className="l">Ingredient prices updated</div><div className="h">from supplier invoices in the last {days} days</div></div>
         <div className={"tap "+(basket&&basket.pct>=2?"hot":"")} onClick={go("trend")}>
           <div className="v">{basket? ((basket.pct>=0?"+":"−")+Math.abs(basket.pct).toFixed(1)+"%") : "—"}</div>
-          <div className="l">input cost · {days}d</div>
+          <div className="l">Ingredients overall</div><div className="h">average move of the prices that changed — up is bad</div>
         </div>
-        <div className={"tap "+(big.length?"hot":"")} onClick={go("trend")}><div className="v">{big.length}</div><div className="l">moved ≥ 10%</div></div>
-        <div className={"tap "+(unmatched.length?"bad":"")} onClick={go("queue")}><div className="v">{unmatched.length}</div><div className="l">needs linking</div></div>
-        <div className={"tap "+(anomalies.length||flagged.length?"hot":"")} onClick={go("queue")}><div className="v">{anomalies.length+flagged.length}</div><div className="l">needs a check</div></div>
+        <div className={"tap "+(big.length?"hot":"")} onClick={go("trend")}><div className="v">{big.length}</div><div className="l">Big jumps</div><div className="h">prices that moved 10% or more — worth a look</div></div>
+        <div className={"tap "+(unmatched.length?"bad":"")} onClick={go("queue")}><div className="v">{unmatched.length}</div><div className="l">Unmatched invoice lines</div><div className="h">the robot could not tell which ingredient — you pick</div></div>
+        <div className={"tap "+(anomalies.length||flagged.length?"hot":"")} onClick={go("queue")}><div className="v">{anomalies.length+flagged.length}</div><div className="l">Prices that look wrong</div><div className="h">huge jumps, odd units — confirm or undo</div></div>
+      </div>
+      <div className="aiv-guide">
+        <b>How to read this page.</b> Red first: <b>Prices that look wrong</b> and <b>Unmatched invoice lines</b> need a decision. Then <b>Dishes whose margin moved</b> — reprice, reformulate or accept. <b>Trends</b> is the monthly picture. All prices here are per kg, per litre or per piece.
       </div>
 
       {view==="impact" && <React.Fragment>
@@ -9208,7 +9231,7 @@ function InvoicesV2({state, update, ingMap}){
               <span className="sub">{(a.r.supplier||"?")+(a.r.invoiceNo?" · "+a.r.invoiceNo:"")+" · "+(a.r.date||"")}</span>
               <span className="aiv-why">{a.reasons.join(" · ")}</span>
             </td>
-            <td className="num">{a.u.old!=null? money(a.u.old):"–"} → <b>{money(a.u.new)}</b>{a.u.unit? <span className="sub" style={{display:"inline"}}>/{a.u.unit}</span>:null}</td>
+            <td className="num">{a.u.old!=null? aivNice(a.u.old,a.u.unit).v : "–"} → <b>{aivNice(a.u.new,a.u.unit).v}</b><span className="sub" style={{display:"inline"}}>{aivNice(a.u.new,a.u.unit).u}</span></td>
             <td className="num" style={{whiteSpace:"nowrap"}}>
               <button type="button" className="btn sm" onClick={()=>setCard({row:a.u, entry:a.r})}>Open</button>{" "}
               {a.u.old!=null && a.g && <React.Fragment><button type="button" className="btn sm" onClick={()=>revertPrice(a)}>Undo</button>{" "}</React.Fragment>}
@@ -9258,20 +9281,20 @@ function InvoicesV2({state, update, ingMap}){
 
       {view==="log" && <React.Fragment>
         <div className="grp" style={{padding:"18px 14px 8px"}}>Price changes · {days}d <span className="n">{changes.length}</span></div>
+        <div className="aiv-note">Newest first. Each line is one ingredient's price before and after an invoice, per kg / per litre / per piece. Click a line for its full history.</div>
         <div style={{overflowX:"auto"}}><table>
-          <thead><tr><th>Ingredient</th><th>Trend</th><th>Supplier</th><th className="num">Was</th><th className="num">Now</th><th className="num">Change</th><th>Date</th></tr></thead>
+          <thead><tr><th>Ingredient</th><th className="num">Was → now</th><th className="num">Change</th><th className="m2">History</th></tr></thead>
           <tbody>
-            {changes.length===0 && <tr><td colSpan={7} className="empty">No price updates in the last {days} days.</td></tr>}
-            {changes.slice(0,200).map((c,i)=>{
+            {changes.length===0 && <tr><td colSpan={4} className="empty">No price updates in the last {days} days.</td></tr>}
+            {changes.slice().sort((a,b)=>String(b.r.date||"").localeCompare(String(a.r.date||""))||Math.abs(b.pct||0)-Math.abs(a.pct||0)).slice(0,200).map((c,i)=>{
               const k=c.u.id||("n:"+(c.u.name||""));
+              const was=aivNice(c.u.old, c.u.unit), now=aivNice(c.u.new, c.u.unit);
+              const when=c.r.date? new Date(c.r.date+"T00:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"}) : "";
               return <tr key={i} className="row" style={{animationDelay:(Math.min(i,12)*0.03)+"s"}} onClick={()=>setCard({row:c.u, entry:c.r})}>
-                <td><span className="name">{c.u.name}</span></td>
-                <td><AivSpark pts={(series[k]||[]).map(r=>r.price)} /></td>
-                <td>{c.r.supplier||"?"}{c.r.invoiceNo? <span className="sub" style={{display:"inline"}}> · {c.r.invoiceNo}</span>:null}</td>
-                <td className="num">{c.u.old!=null? money(c.u.old):"–"}</td>
-                <td className="num" style={{fontWeight:700}}>{money(c.u.new)}<span className="sub" style={{display:"inline"}}>{c.u.unit?("/"+c.u.unit):""}</span></td>
-                <td className={"num "+(c.pct==null?"":c.pct>0?"up":"down")}>{c.pct==null? "new" : ((c.pct>0?"↑ ":"↓ ")+Math.abs(c.pct).toFixed(0)+"%")}</td>
-                <td>{c.r.date}</td>
+                <td><span className="name">{c.u.name}</span><span className="sub">{aivWho(c.r.supplier)}{c.r.invoiceNo? " · "+c.r.invoiceNo:""}{when? " · "+when:""}{c.u.created? " · new ingredient":""}</span></td>
+                <td className="num">{c.u.old!=null? was.v : <span className="sub" style={{display:"inline"}}>new</span>} → <b>{now.v}</b><span className="sub" style={{display:"inline"}}>{now.u}</span></td>
+                <td className={"num "+(c.pct==null?"":c.pct>0?"up":"down")} style={{whiteSpace:"nowrap"}}>{c.pct==null? "—" : ((c.pct>0?"up ":"down ")+Math.abs(c.pct).toFixed(0)+"%")}</td>
+                <td className="m2"><AivSpark pts={(series[k]||[]).map(r=>r.price)} /></td>
               </tr>;
             })}
           </tbody>

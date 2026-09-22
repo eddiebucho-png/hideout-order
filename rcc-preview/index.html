@@ -7453,7 +7453,7 @@ const RV2_CSS=`
   .rv2 .sh{display:inline-block;width:12px;height:12px;flex:none;vertical-align:middle}
   .rv2 .sh.c{border-radius:50%!important;background:var(--b)} .rv2 .sh.s{background:var(--r)}
   .rv2 .sh.t{width:0;height:0;background:none;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid var(--y)}
-  .rv2 .screen{background:#fff;border:3px solid var(--ink);max-width:1360px;animation:rv2-rise .5s cubic-bezier(.2,.8,.2,1) both}
+  .rv2 .screen{background:#fff;border:3px solid var(--ink);max-width:1360px;animation:rv2-rise .5s cubic-bezier(.2,.8,.2,1) both;container-type:inline-size}
   .rv2 .bar{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:3px solid var(--ink);overflow-x:auto}
   .rv2 .bar input[type=search],.rv2 .bar input[type=text]{flex:1 1 240px;min-width:180px;border:3px solid var(--ink);padding:10px 12px;font:inherit;font-size:16px;font-weight:500;background:#fff;color:var(--ink);outline:none}
   .rv2 .bar input:focus{box-shadow:4px 4px 0 var(--y)}
@@ -7624,7 +7624,16 @@ const RV2_CSS=`
   @media (max-width:900px){ .rv2 .dgrid{grid-template-columns:repeat(3,minmax(0,1fr))} .rv2.fs .live{grid-template-columns:minmax(0,1fr)} .rv2.fs .live .head{grid-column:1} .rv2.fs .rail{position:static;max-height:none;border-right:0;border-bottom:3px solid var(--ink);display:flex;overflow-x:auto;padding:0} .rv2.fs .rail button{width:auto;flex:none;border-bottom:0;border-right:1px solid var(--line);grid-template-columns:30px auto} .rv2.fs .rail small{display:none} .rv2.fs .acts{position:static;max-height:none;border-left:0;border-top:3px solid var(--ink)} .rv2 .navcol{grid-template-columns:minmax(0,1fr)} .rv2 .navcol .nav{border-right:0;border-bottom:3px solid var(--ink);display:flex;overflow-x:auto;padding:0} .rv2 .nav .g{display:none} .rv2 .nav button{width:auto;flex:none} .rv2 .lp{grid-template-columns:minmax(0,1fr)} .rv2 .lp .list{border-right:0;border-bottom:3px solid var(--ink);max-height:40vh} .rv2 .sum{grid-template-columns:1fr 1fr} .rv2 .kv{grid-template-columns:1fr} }
   @media (max-width:640px){ .rv2 .dgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 10px 14px} .rv2 .dish .dname{font-size:15px} .rv2 .task{grid-template-columns:48px minmax(0,1fr) auto;padding:10px 10px} .rv2 .task .th{width:48px;height:48px} .rv2 .stat .big{font-size:36px} .rv2.dd{padding:0} .rv2.dd .box{border-left:0;border-right:0;box-shadow:none;min-height:100%} }
   @media (min-width:1440px){ .rv2 .dgrid{grid-template-columns:repeat(5,minmax(0,1fr))} .rv2 td,.rv2 th{padding-left:14px;padding-right:14px} }
-  @media (max-width:640px){ .rv2 td,.rv2 th{padding:10px 10px} .rv2 td{height:56px} .rv2 .m2{display:none} .rv2 .chk-col{display:none} .rv2 th.stick,.rv2 td.stick{position:sticky;left:0;z-index:1;background:#fff;min-width:160px;max-width:200px;box-shadow:3px 0 0 var(--ink)} .rv2 tbody tr.row:hover td.stick{background:rgba(242,193,0,.18)} .rv2 tbody tr.row.open td.stick{background:rgba(242,193,0,.28)} .rv2 .bar{padding:10px 12px} .rv2 .chips{padding:10px 12px} .rv2 .btn{padding:11px 12px} }
+  /* FIT 2026-09-22: column hiding used to key off the VIEWPORT (this 640px rule). The card is often
+     narrow while the viewport is wide - a side panel, a split screen, the assistant docked - and then ten
+     nowrap columns spilled past the card's border. The tiers below key off the CARD (.screen is a size
+     container): first the nice-to-know columns (.m3: Last change, Added), then the detail columns and the
+     Edit button (.m2 - the opened row still has "Edit recipe"), then the checkbox. The viewport rule stays
+     as a fallback for browsers without container queries. */
+  @container (max-width:1280px){ .rv2 .m3{display:none} }
+  @container (max-width:1040px){ .rv2 .m2{display:none} .rv2 td,.rv2 th{padding-left:10px;padding-right:10px} }
+  @container (max-width:720px){ .rv2 .chk-col{display:none} .rv2 td{height:56px} .rv2 th.stick,.rv2 td.stick{position:sticky;left:0;z-index:1;background:#fff;min-width:160px;max-width:200px;box-shadow:3px 0 0 var(--ink)} .rv2 tbody tr.row:hover td.stick{background:rgba(242,193,0,.18)} .rv2 tbody tr.row.open td.stick{background:rgba(242,193,0,.28)} }
+  @media (max-width:640px){ .rv2 td,.rv2 th{padding:10px 10px} .rv2 td{height:56px} .rv2 .m2,.rv2 .m3{display:none} .rv2 .chk-col{display:none} .rv2 th.stick,.rv2 td.stick{position:sticky;left:0;z-index:1;background:#fff;min-width:160px;max-width:200px;box-shadow:3px 0 0 var(--ink)} .rv2 tbody tr.row:hover td.stick{background:rgba(242,193,0,.18)} .rv2 tbody tr.row.open td.stick{background:rgba(242,193,0,.28)} .rv2 .bar{padding:10px 12px} .rv2 .chips{padding:10px 12px} .rv2 .btn{padding:11px 12px} }
   /* ── motion, same language as Today: hard easings, shapes that drop/spin/pop, bars that wipe in ── */
   @keyframes rv2-wipe{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   @keyframes rv2-drop{0%{transform:translateY(-40px);opacity:0}60%{transform:translateY(6px);opacity:1}80%{transform:translateY(-3px)}100%{transform:none}}
@@ -7885,7 +7894,7 @@ function RecipesV2({state, update, setState, ingMap}){
             <RV2Th label="Recipe" k="name" sort={sort} setSort={setSort} cls="stick" /><th>Status</th>
             {scope==="prep" ? <><RV2Th label="Batch cost" k="cost" sort={sort} setSort={setSort} num /><RV2Th label={"$ / "+prepUnit} k="per" sort={sort} setSort={setSort} num /><RV2Th label="Items" k="items" sort={sort} setSort={setSort} num cls="m2" /><RV2Th label="Used by" k="used" sort={sort} setSort={setSort} num cls="m2" /></>
               : <><RV2Th label="Margin" k="margin" sort={sort} setSort={setSort} num /><RV2Th label="vs target" k="vs" sort={sort} setSort={setSort} num /><RV2Th label="Cost" k="cost" sort={sort} setSort={setSort} num cls="m2" /><RV2Th label="Sell" k="sell" sort={sort} setSort={setSort} num cls="m2" /></>}
-            <th className="m2">Last change</th><RV2Th label="Added" k="added" sort={sort} setSort={setSort} num cls="m2" /><th className="m2"></th>
+            <th className="m3">Last change</th><RV2Th label="Added" k="added" sort={sort} setSort={setSort} num cls="m3" /><th className="m2"></th>
           </tr></thead>
           <tbody>
             {list.length===0 && <tr><td colSpan={10} className="empty">Nothing matches — clear the search or the chips.</td></tr>}
@@ -7899,8 +7908,8 @@ function RecipesV2({state, update, setState, ingMap}){
                   <td>{status}</td>
                   {scope==="prep" ? <><td className="num">{money(inf.bc)}{usesImported(r,ingMap)&&<span className="sub" style={{display:"inline"}}> imp.</span>}</td><td className="num">{p!=null?fmtPer(p):"—"}</td><td className="num m2">{(r.items||[]).length}</td><td className="num m2">{inf.usedBy.length||"—"}</td></>
                     : <><td className={"num"+(inf.below?" up":"")} style={{fontWeight:700}}>{isM?pct(inf.m):"—"}</td><td className={"num "+(isM?(inf.vs<0?"up":"down"):"")}>{isM?((inf.vs>=0?"+":"−")+Math.abs(inf.vs).toFixed(0)+" pt"):"—"}</td><td className="num m2">{isM?money(inf.uc):money(inf.bc)}</td><td className="num m2">{isM?money(r.sellPrice):"—"}</td></>}
-                  <td className="m2">{last}</td>
-                  <td className="num m2 added">{rv2FmtAdded(rv2CreatedAt(r))}</td>
+                  <td className="m3">{last}</td>
+                  <td className="num m3 added">{rv2FmtAdded(rv2CreatedAt(r))}</td>
                   <td className="m2"><button type="button" className="btn sm" onClick={e=>{ e.stopPropagation(); setEdit(JSON.parse(JSON.stringify(r))); }}>Edit</button></td>
                 </tr>
                 {isOpen && <tr className="exp"><td colSpan={10}>

@@ -9142,7 +9142,7 @@ function InvoicesV2({state, update, ingMap}){
     <div className="lbl"><span className="sh c"></span><span className="tag">Cost control</span><span className="c2">AI invoice · supplier prices land every morning · see what they did to your margins · fix what the robot couldn’t</span></div>
     <div className="screen">
       <div className="bar">
-        <span className="cnt" style={{fontWeight:700, color:"var(--ink)"}}>Last run {last? (last.date+" · "+(last.supplier||"?")) : "— none yet"}</span>
+        <span className="cnt" style={{fontWeight:700, color:"var(--ink)"}}>Last run {last? (last.date+" · "+aivWho(last.supplier)) : "— none yet"}</span>
         <span style={{flex:1}}></span>
         <div className="seg" role="group" aria-label="Section">
           <button type="button" aria-pressed={view==="impact"} onClick={go("impact")}>Menu impact{impact.dishes.length? " ("+impact.dishes.length+")":""}</button>
@@ -9308,7 +9308,7 @@ function InvoicesV2({state, update, ingMap}){
             {log.slice(0,120).map((r,i)=><React.Fragment key={i}>
               <tr className={"row"+(open===i?" open":"")} onClick={()=>setOpen(open===i?null:i)}>
                 <td><span className="name">{r.date}</span></td>
-                <td>{r.supplier||"?"}{r.invoiceNo? <span className="sub" style={{display:"inline"}}> · {r.invoiceNo}</span>:null}</td>
+                <td>{aivWho(r.supplier)}{r.invoiceNo? <span className="sub" style={{display:"inline"}}> · {r.invoiceNo}</span>:null}</td>
                 <td className="num">{(r.updated||[]).length}</td>
                 <td className="num">{(r.added||[]).length||"—"}</td>
                 <td className="num">{(r.flagged||[]).length? <span className="badge warn">{(r.flagged||[]).length}</span>:"—"}</td>

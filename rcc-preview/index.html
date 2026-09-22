@@ -5912,6 +5912,11 @@ function App(){
     {/* Instagram-style staff story row — same slot as IOS (below header, above content). Filled by shared postcards.js. */}
     <div id="pc-tray-host"></div>
     <main key={tab} className="max-w-5xl mx-auto px-5 md:px-9 py-8 tab-in">
+    {/* LEGACY-BACK 2026-09-22: the legacy flag is per device and used to be a one-way door. */}
+    {!RCC_V2() && <div role="note" style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",margin:"0 0 18px",padding:"10px 14px",border:"3px solid #141312",borderLeft:"10px solid #f2c100",background:"#fff",color:"#141312",fontSize:14,fontFamily:"Jost,Archivo,system-ui,sans-serif"}}>
+      <span><b>Legacy view</b> · the pre-September design, remembered on this device only.</span>
+      <button type="button" onClick={()=>{ try{ localStorage.removeItem("hideout_rcc_v1"); }catch(e){} location.reload(); }} style={{marginLeft:"auto",padding:"8px 14px",border:"3px solid #141312",background:"#141312",color:"#f3f1ec",fontWeight:700,fontSize:13,textTransform:"uppercase",letterSpacing:".04em",cursor:"pointer"}}>Switch back to the new design</button>
+    </div>}
     {tab==="daily" && <DailyReminder state={state} ingMap={ingMap} update={update} setTab={setTab} branch={curBranch} branchName={branchName} fbRef={fbRef} meEmail={(cloud.user&&cloud.user.email)||""} />}
     {tab==="prep" && (RCC_V2()? <PrepBoardV2 state={state} ingMap={ingMap} update={update} branch={curBranch} meEmail={(cloud.user&&cloud.user.email)||""} /> : <PrepBoard state={state} ingMap={ingMap} update={update} branch={curBranch} meEmail={(cloud.user&&cloud.user.email)||""} />)}
     {tab==="ing" && (RCC_V2()? <IngredientsV2 state={state} update={update} setState={setState} ingMap={ingMap} /> : <Ingredients state={state} update={update} setState={setState} />)}

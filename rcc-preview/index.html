@@ -5822,8 +5822,8 @@ function App(){
   }, [state, cloud.status]);
   const archN = state.ingredients.filter(i=>i.archived).length + state.recipes.filter(r=>r.archived).length;
   const auditN = useMemo(()=>{ const g=auditData(state, ingMap); return Object.keys(g).reduce((n,k)=>n+g[k].length,0); }, [state, ingMap]);
-  const tabs = [["daily","Today"],["dish","Dishes"],["prep","Prep"],["rec","Recipes"],["ing","Ingredients"],["meet","Team Meeting"],["inv","Cost control"],["set","Settings"]];
-  const TT={daily:["Today at The Hideout","Your morning check — bookings, prep priorities & alerts"],prep:["Prep board","What to fire first — drag between columns"],ing:["Ingredients","Everything your dishes are built from"],rec:["Recipes","Menu & prep recipes — cost and method"],dish:["Dishes","The menu — presentation, ingredients, method"],inv:["Cost control","Supplier prices in from invoices · what they did to your margins"],meet:["Kitchen Team Meeting","Run, record & review the weekly kitchen meeting"],audit:["Audit","Data issues & conflicts"],arch:["Archive","Everything archived"],set:["Settings","Routines, documents & app configuration"]};
+  const tabs = [["daily","Today"],["dish","Dishes"],["prep","Prep"],["rec","Recipes"],["ing","Ingredients"],["meet","Team Meeting"],["venue","Venue audit"],["inv","Cost control"],["set","Settings"]];
+  const TT={daily:["Today at The Hideout","Your morning check — bookings, prep priorities & alerts"],prep:["Prep board","What to fire first — drag between columns"],ing:["Ingredients","Everything your dishes are built from"],rec:["Recipes","Menu & prep recipes — cost and method"],dish:["Dishes","The menu — presentation, ingredients, method"],inv:["Cost control","Supplier prices in from invoices · what they did to your margins"],meet:["Kitchen Team Meeting","Run, record & review the weekly kitchen meeting"],audit:["Audit","Data issues & conflicts"],venue:["Venue audit","Score each venue · photos, comments & sign-off"],arch:["Archive","Everything archived"],set:["Settings","Routines, documents & app configuration"]};
   const allBranches = (state.branches&&state.branches.length)?state.branches:[{id:"b1",name:"Main"}];
   // Managers see every branch. Staff see only the branches they're assigned to (none assigned = no restriction).
   const myBrIds = ((me&&typeof me==="object"&&me.role)==="manager") ? [] : myBranchIds(me);
@@ -5891,6 +5891,8 @@ function App(){
           {tabMenu && <div className="menu2" style={{zIndex:60}}>
             {isMgr && <div className="k">Go to</div>}
             {isMgr && tabs.filter(([k])=>!PRIMARY_TABS.includes(k)).map(([k,l])=>(<button key={k} type="button" onClick={()=>{ setTab(k); setTabMenu(false); }}>{l}</button>))}
+            {!isMgr && <div className="k">Go to</div>}
+            {!isMgr && <button type="button" onClick={()=>{ setTab("venue"); setTabMenu(false); }}>Venue audit</button>}
             <div className="k">Tools</div>
             <a href="https://order.hideoutdb.com" style={{display:"block", padding:"12px 14px", minHeight:46, borderBottom:"1px solid rgba(20,19,18,.28)", fontWeight:600, fontSize:15, color:"#141312", textDecoration:"none"}}>Switch app → IOS</a>
             <button type="button" onClick={()=>{ setTabMenu(false); try{ window.HideoutPostcards&&window.HideoutPostcards.open(); }catch(e){} }}>Staff board</button>
@@ -5899,7 +5901,7 @@ function App(){
           </div>}
         </div>
       </div>
-      <div className="tabs" role="tablist">{tabs.filter(([k])=>isMgr||PRIMARY_TABS.includes(k)).map(([k,l])=>(<button key={k} type="button" role="tab" aria-selected={tab===k} aria-pressed={tab===k} onClick={()=>{ setTab(k); setTabMenu(false); }}>{l}</button>))}</div>
+      <div className="tabs" role="tablist">{tabs.filter(([k])=>isMgr||PRIMARY_TABS.includes(k)||k==="venue").map(([k,l])=>(<button key={k} type="button" role="tab" aria-selected={tab===k} aria-pressed={tab===k} onClick={()=>{ setTab(k); setTabMenu(false); }}>{l}</button>))}</div>
       <nav className="bnav" aria-label="Main">
         {[["daily","Today","c"],["dish","Dishes","s"],["prep","Prep","t"]].map(([k,l,shape])=><button key={k} type="button" aria-pressed={tab===k} onClick={()=>setTab(k)}><span className={"sh "+shape} aria-hidden="true"></span>{l}</button>)}
         <button type="button" aria-pressed={!PRIMARY_TABS.includes(tab)} onClick={()=>setTabMenu(true)}><span aria-hidden="true" style={{fontSize:16,lineHeight:1}}>☰</span>More</button>
@@ -5924,6 +5926,7 @@ function App(){
     {tab==="dish" && (RCC_V2()? <DishesV2 state={state} ingMap={ingMap} update={update} branch={curBranch} /> : <Dishes state={state} ingMap={ingMap} update={update} branch={curBranch} />)}
     {tab==="inv" && (RCC_V2()? <InvoicesV2 state={state} update={update} ingMap={ingMap} /> : <Invoices state={state} update={update} />)}
     {tab==="meet" && (RCC_V2()? <TeamMeetingsV2 state={state} update={update} branch={curBranch} branches={branches} /> : <TeamMeetings state={state} update={update} branch={curBranch} branches={branches} />)}
+    {tab==="venue" && <VenueAudit fbRef={fbRef} me={me} isMgr={isMgr} branches={branches} branch={curBranch} />}
     {tab==="audit" && <Audit state={state} ingMap={ingMap} setTab={setTab} update={update} />}
     {tab==="arch" && <Archive state={state} update={update} ingMap={ingMap} />}
     {tab==="set" && RCC_V2() && <SettingsV2 state={state} update={update} setTab={setTab} openBranches={()=>setShowBranches(true)} openSync={()=>setShowSync(true)} fbRef={fbRef} isMgr={isMgr} meEmail={(cloud.user&&cloud.user.email)||""} ingMap={ingMap} onReset={()=>{ if(confirm("Reset to sample data? All data will be deleted.")) setState(seed()); }} />}
@@ -8519,6 +8522,412 @@ function TeamMeetingsV2({state, update, branch, branches}){
     {guide && <Modal wide title="How to run this meeting" onClose={()=>setGuide(false)}><MeetingGuide /></Modal>}
   </div>;
 }
+/* VENUE-AUDIT-START — Venue audit (2026-10-04, Ju An: "Venue audit 페이지 … 사진 추가 · 직원이 기존 로그인으로 사인 · 코멘트")
+   ═══════════════════════════════════════════════════════════════════════════════
+   One scored walk-through per venue, the way the 5 Aug audit was run:
+     PASS / FIX / N/A per line · every FIX becomes an action (owner, due)
+     DONE  is ticked by whoever did it (their login is recorded)
+     CHECKED is ticked by a manager on the floor — a line closes only when both are ticked
+   Photos (Cloudinary, tag "venue_audit"), a comment thread on every line and on the audit,
+   and sign-off with the staff member's existing RCC login + a drawn signature.
+
+   STORAGE — deliberately NOT in state (recipe_cost is ~650 KB of a 1 MB cap):
+     hideout_app/venue_audit_<id>     one doc per audit (items map + signoffs + comments)
+     hideout_app/venue_audit_index    { audits: { <id>: summary } } for the list screen
+   Firestore rule `match /hideout_app/{doc} … signedIn()` already covers both — no rules change.
+   Writes are field-path updates + arrayUnion so two tablets editing different lines, or a
+   chef commenting while the manager scores, never overwrite each other.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const VA_CHECKLIST_VERSION = "v1-2026-10";
+const VA_SECTIONS = [
+  { id:"temp", title:"Temperature control", items:[
+    { id:"t1", text:"Every fridge reading 0–5 °C on the probe (not the display)", critical:true },
+    { id:"t2", text:"Freezers holding −18 °C or colder", critical:true },
+    { id:"t3", text:"Temperature log filled in today for every unit" },
+    { id:"t4", text:"Hot food held at 60 °C or above · cooling done within time" },
+    { id:"t5", text:"Probe thermometer on site, clean and reading correctly" },
+  ]},
+  { id:"store", title:"Storage & labelling", items:[
+    { id:"s1", text:"Raw stored below ready-to-eat in every fridge", critical:true },
+    { id:"s2", text:"Every decanted container labelled — product / date in / use-by (a date alone is not a label)" },
+    { id:"s3", text:"Nothing past use-by · oldest stock at the front" },
+    { id:"s4", text:"Dry store: bags sealed, nothing on the floor or on crates, no spills" },
+    { id:"s5", text:"Scoops kept in a holder, not left in the product" },
+    { id:"s6", text:"Nut / allergen ingredients stored separately and labelled" },
+  ]},
+  { id:"clean", title:"Cleaning", items:[
+    { id:"c1", text:"Benches, shelves and splashbacks clean — including underneath shelves" },
+    { id:"c2", text:"Under and behind equipment clean (fridges, oven, cabinet)" },
+    { id:"c3", text:"Fryer — no oil or grease build-up" },
+    { id:"c4", text:"Canopy and filters — no grease build-up" },
+    { id:"c5", text:"Dishwasher clean and descaled · tray emptied" },
+    { id:"c6", text:"Cleaning schedule signed off for this week" },
+  ]},
+  { id:"pest", title:"Pest control", items:[
+    { id:"p1", text:"No sign of pests — droppings, flies, insects", critical:true },
+    { id:"p2", text:"Bins lidded, emptied and clean" },
+    { id:"p3", text:"Drains and floor wastes clean" },
+    { id:"p4", text:"Pest control service report current" },
+  ]},
+  { id:"hyg", title:"Personal hygiene", items:[
+    { id:"h1", text:"Hand basin: soap and paper towel, unobstructed, used for hands only", critical:true },
+    { id:"h2", text:"No personal bags, phones or food in the kitchen" },
+    { id:"h3", text:"Clean uniform and apron · hair tied back · no jewellery" },
+    { id:"h4", text:"Nobody working while unwell · team knows the sick policy" },
+  ]},
+  { id:"chem", title:"Chemicals & equipment", items:[
+    { id:"e1", text:"Chemicals labelled and stored away from food and packaging", critical:true },
+    { id:"e2", text:"Sanitiser made up at the right strength" },
+    { id:"e3", text:"Equipment working — any fault photographed and reported" },
+    { id:"e4", text:"First aid kit stocked · fire blanket and extinguisher reachable" },
+  ]},
+  { id:"docs", title:"Allergens & records", items:[
+    { id:"d1", text:"Current allergy chart on display" },
+    { id:"d2", text:"Staff member on shift can answer an allergen question from the chart" },
+    { id:"d3", text:"Food Safety Supervisor certificate on site" },
+    { id:"d4", text:"Deliveries checked and recorded (temperature, condition)" },
+  ]},
+];
+const VA_SIGN_ROLES = [
+  { id:"auditor", label:"Auditor",          mgrOnly:true },
+  { id:"lead",    label:"Venue lead",       mgrOnly:false },
+  { id:"staff",   label:"Staff — read & understood", mgrOnly:false },
+];
+const VA_CSS = `
+  .va{--r:#ec3013;--b:#1e4fb0;--y:#f2c100;--ink:#141312;--muted:rgba(20,19,18,.68);--line:rgba(20,19,18,.22);--ok:#1e7a46;--paper:#f3f1ec;color:var(--ink);font-family:Jost,Archivo,system-ui,sans-serif;font-weight:500}
+  .va *{box-sizing:border-box}
+  .va .screen{background:#fff;border:3px solid var(--ink);max-width:1360px}
+  .va .bar{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:3px solid var(--ink);flex-wrap:wrap}
+  .va .seg{display:flex;flex-wrap:wrap} .va .seg button{padding:9px 13px;border:3px solid var(--ink);border-left-width:0;font:inherit;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#fff;color:var(--ink);cursor:pointer}
+  .va .seg button:first-child{border-left-width:3px} .va .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .va .btn{font:inherit;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.04em;padding:10px 14px;border:3px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap}
+  .va .btn:disabled{opacity:.4;cursor:not-allowed}
+  .va .btn.p{background:var(--r);border-color:var(--r);color:#fff} .va .btn.sm{padding:5px 9px;font-size:11px;border-width:2px}
+  .va .btn.k{background:var(--ink);color:var(--paper)}
+  .va .grp{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:16px 14px 8px;display:flex;gap:8px;align-items:center}
+  .va .grp .n{background:var(--ink);color:var(--paper);padding:1px 7px;font-size:11px}
+  .va table{width:100%;border-collapse:collapse} .va th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px;border-bottom:2px solid var(--ink)}
+  .va td{padding:10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top} .va tr.row{cursor:pointer} .va tr.row:hover td{background:#fbf6dc}
+  .va .num{text-align:right;font-variant-numeric:tabular-nums} .va .sub{color:var(--muted);font-size:12px}
+  .va .empty{padding:22px 14px;color:var(--muted)}
+  .va .pill{display:inline-block;white-space:nowrap;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border:2px solid var(--ink)}
+  .va .pill.ok{background:var(--ok);border-color:var(--ok);color:#fff} .va .pill.bad{background:var(--r);border-color:var(--r);color:#fff}
+  .va .pill.warn{background:var(--y)} .va .pill.mute{border-color:var(--line);color:var(--muted)}
+  .va .note{margin:12px 14px;padding:10px 12px;border-left:8px solid var(--y);background:#fffbe6;font-size:13px;line-height:1.45}
+  .va-fs{position:fixed;inset:0;z-index:80;background:var(--paper);overflow:auto;-webkit-overflow-scrolling:touch}
+  .va-fs .top{position:sticky;top:0;z-index:2;background:var(--ink);color:var(--paper);display:flex;gap:12px;align-items:center;padding:10px 14px;flex-wrap:wrap}
+  .va-fs .top .t{font-size:18px;font-weight:700} .va-fs .top .s{font-size:12px;opacity:.75}
+  .va-fs .top .btn{border-color:var(--paper);background:transparent;color:var(--paper)}
+  .va-fs .wrap{max-width:980px;margin:0 auto;padding:16px 12px 120px}
+  .va .score{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:0 0 14px}
+  .va .score .big{background:#fff;border:3px solid var(--ink);padding:10px 14px}
+  .va .score .big b{display:block;font-size:34px;line-height:1} .va .score .big span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .va .sec{background:#fff;border:3px solid var(--ink);margin:0 0 14px}
+  .va .sec>h3{margin:0;padding:10px 12px;border-bottom:3px solid var(--ink);font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;display:flex;gap:10px;align-items:center;cursor:pointer}
+  .va .sec>h3 .r{margin-left:auto;font-size:12px;font-weight:700;color:var(--muted);text-transform:none;letter-spacing:0}
+  .va .it{padding:12px;border-bottom:1px solid var(--line)} .va .it:last-child{border-bottom:none}
+  .va .it.fix{border-left:8px solid var(--r)} .va .it.pass{border-left:8px solid var(--ok)} .va .it.na{border-left:8px solid var(--line)}
+  .va .it .q{font-size:15px;line-height:1.35} .va .it .q .crit{color:var(--r);font-weight:800;font-size:11px;letter-spacing:.05em;margin-left:6px}
+  .va .res{display:flex;gap:0;margin:8px 0 0} .va .res button{font:inherit;font-weight:800;font-size:12px;padding:8px 14px;border:2px solid var(--ink);border-left-width:0;background:#fff;cursor:pointer;letter-spacing:.04em}
+  .va .res button:first-child{border-left-width:2px}
+  .va .res button[data-v="pass"][aria-pressed="true"]{background:var(--ok);color:#fff;border-color:var(--ok)}
+  .va .res button[data-v="fix"][aria-pressed="true"]{background:var(--r);color:#fff;border-color:var(--r)}
+  .va .res button[data-v="na"][aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .va .act{margin:10px 0 0;padding:10px;background:#fff5f2;border:2px solid var(--r);display:grid;gap:8px}
+  .va .act .f{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .va input[type=text],.va input[type=date],.va select,.va textarea{font:inherit;font-size:15px;border:2px solid var(--ink);padding:8px 10px;background:#fff;color:var(--ink);border-radius:0}
+  .va textarea{width:100%;min-height:44px;resize:vertical}
+  .va .tick{display:inline-flex;gap:6px;align-items:center;font-size:13px;padding:6px 10px;border:2px solid var(--ink);background:#fff;cursor:pointer;font:inherit;font-weight:700}
+  .va .tick[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+  .va .who{font-size:11px;color:var(--muted)}
+  .va .ph{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+  .va .ph .p{position:relative;width:92px;height:92px;border:2px solid var(--ink);background:#eee}
+  .va .ph .p img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+  .va .ph .p button{position:absolute;top:2px;right:2px;width:24px;height:24px;border:0;background:rgba(20,19,18,.8);color:#fff;font-size:14px;line-height:24px;padding:0;cursor:pointer}
+  .va .ph label{width:92px;height:92px;border:2px dashed var(--ink);display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:800;text-transform:uppercase;cursor:pointer;background:#fff;padding:4px}
+  .va .ph label input{display:none}
+  .va .cm{margin:10px 0 0;display:grid;gap:6px}
+  .va .cm .c{background:var(--paper);padding:7px 9px;font-size:14px;line-height:1.4} .va .cm .c .h{font-size:11px;color:var(--muted);margin:0 0 2px;display:flex;gap:8px}
+  .va .cm .c .h button{margin-left:auto;border:0;background:none;color:var(--muted);cursor:pointer;font:inherit;font-size:11px;text-decoration:underline}
+  .va .cm .add{display:flex;gap:6px} .va .cm .add input{flex:1;min-width:0}
+  .va .tools{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+  .va .sig{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;padding:12px}
+  .va .sig .s{border:2px solid var(--ink);background:#fff;padding:8px}
+  .va .sig .s img{width:100%;height:70px;object-fit:contain;background:#fafafa;border-bottom:1px solid var(--line);margin:0 0 6px}
+  .va .pad{width:100%;height:180px;background:#fff;border:2px solid var(--ink);touch-action:none;display:block}
+  .va-modal{position:fixed;inset:0;z-index:90;background:rgba(20,19,18,.55);display:flex;align-items:flex-end;justify-content:center}
+  @media(min-width:700px){.va-modal{align-items:center}}
+  .va-modal .box{background:#fff;border:3px solid var(--ink);width:100%;max-width:560px;max-height:92vh;overflow:auto;padding:16px}
+  .va-modal .box h2{margin:0 0 12px;font-size:18px;font-weight:800}
+  .va-modal .row2{display:grid;gap:6px;margin:0 0 12px} .va-modal .row2>span{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+  .va-lb{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+  .va-lb img{max-width:96vw;max-height:92vh}
+  @media print{ .va-fs{position:static;overflow:visible} .va-fs .top .btn,.va .res button:not([aria-pressed="true"]),.va .ph label,.va .cm .add,.va .tools,.va .noprint{display:none!important} body>*:not(.va-print-host){display:none!important} }
+`;
+function VAStyle(){ React.useEffect(()=>{ let el=document.getElementById("va-css"); if(!el){ el=document.createElement("style"); el.id="va-css"; document.head.appendChild(el); } if(el.textContent!==VA_CSS) el.textContent=VA_CSS; },[]); return null; }
+const vaFV=()=>window.firebase.firestore.FieldValue;
+const vaId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const vaToday=()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const vaFmtDate=s=>{ if(!s) return ""; const d=new Date(s+"T00:00:00"); return isNaN(d)?s:d.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"}); };
+const vaFmtTime=ms=>ms?new Date(ms).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}):"";
+const vaWho=me=>({ email:((me&&me.email)||"").toLowerCase(), name:((me&&me.name)||"").trim()||(((me&&me.email)||"").split("@")[0]) });
+function vaAllItems(a){ const secs=(a&&a.checklist)||VA_SECTIONS; const out=[]; secs.forEach(s=>(s.items||[]).forEach(it=>out.push({...it, sec:s.id}))); Object.values((a&&a.extra)||{}).forEach(x=>out.push({...x, custom:true})); return out; }
+function vaSummary(a){
+  const items=vaAllItems(a); let pass=0,fix=0,na=0,uns=0,crit=0,open=0;
+  items.forEach(it=>{ const r=((a.items||{})[it.id]||{}); const v=r.result||"";
+    if(v==="pass") pass++; else if(v==="na") na++; else if(v==="fix"){ fix++; if(it.critical) crit++; if(!(r.done&&r.checked)) open++; } else uns++; });
+  const signed={}; (a.signoffs||[]).forEach(s=>{ signed[s.role]=true; });
+  return { id:a.id, venue:a.venue, venueName:a.venueName||"", date:a.date||"", auditor:(a.auditor&&a.auditor.name)||"", score:(pass+fix)?Math.round(pass/(pass+fix)*100):null,
+    pass, fix, na, unscored:uns, critical:crit, openActions:open, signedAuditor:!!signed.auditor, signedVenue:!!signed.lead, status:a.status||"open", updatedAt:a.updatedAt||0 };
+}
+async function vaDownscale(file, max){
+  max=max||1600;
+  return new Promise((res)=>{ try{
+    const img=new Image(); const url=URL.createObjectURL(file);
+    img.onload=()=>{ try{ const k=Math.min(1, max/Math.max(img.width,img.height)); const c=document.createElement("canvas"); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); c.toBlob(b=>res(b||file),"image/jpeg",0.82); }catch(e){ res(file); } };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res(file); }; img.src=url;
+  }catch(e){ res(file); } });
+}
+function vaPortal(node){ return ReactDOM.createPortal(node, document.body); }
+
+function VenueAudit({fbRef, me, isMgr, branches, branch}){
+  const db=fbRef&&fbRef.current&&fbRef.current.db;
+  const col=db?db.collection("hideout_app"):null;
+  const [index,setIndex]=React.useState(null); const [err,setErr]=React.useState("");
+  const [venue,setVenue]=React.useState("all"); const [openId,setOpenId]=React.useState(null); const [creating,setCreating]=React.useState(false);
+  React.useEffect(()=>{ if(!col) return; return col.doc("venue_audit_index").onSnapshot(s=>{ setIndex((s.exists&&s.data().audits)||{}); setErr(""); }, e=>setErr("Could not load audits — "+(e.message||e))); },[db]);
+  const bName=id=>((branches||[]).find(b=>b.id===id)||{}).name||id||"";
+  /* staff see their own venue(s) only — `branches` is already the signed-in user's visible list */
+  const visible=new Set((branches||[]).map(b=>b.id));
+  const rows=Object.values(index||{}).filter(a=>isMgr||visible.has(a.venue)).filter(a=>venue==="all"||a.venue===venue).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.updatedAt||0)-(a.updatedAt||0));
+  const open=rows.filter(a=>a.status!=="closed");
+  const create=async({venueId,date,auditorName})=>{
+    const who=vaWho(me); const id=vaId("va"); const now=Date.now();
+    const doc={ id, venue:venueId, venueName:bName(venueId), date, auditor:{email:who.email, name:auditorName||who.name}, createdBy:who, createdAt:now, updatedAt:now,
+      checklistVersion:VA_CHECKLIST_VERSION, checklist:VA_SECTIONS, items:{}, extra:{}, signoffs:[], comments:[], status:"open" };
+    await col.doc("venue_audit_"+id).set(doc);
+    await col.doc("venue_audit_index").set({ audits:{ [id]: vaSummary(doc) } },{merge:true});
+    setCreating(false); setOpenId(id);
+  };
+  if(!db) return <div className="va"><VAStyle /><div className="note">Sign in to use venue audits.</div></div>;
+  return <div className="va">
+    <VAStyle />
+    <div className="screen">
+      <div className="bar">
+        <div className="seg">{[["all","All venues"]].concat((branches||[]).map(b=>[b.id,b.name])).map(([k,l])=><button key={k} type="button" aria-pressed={venue===k} onClick={()=>setVenue(k)}>{l}</button>)}</div>
+        <span style={{marginLeft:"auto"}} className="sub">{rows.length} audit{rows.length===1?"":"s"}</span>
+        {isMgr && <button type="button" className="btn p" onClick={()=>setCreating(true)}>+ New audit</button>}
+      </div>
+      {err && <div className="note" style={{borderLeftColor:"var(--r)"}}>{err}</div>}
+      <div className="note"><b>How we check:</b> open it, don't look at it. Open a bin, open the freezer, look under the equipment and behind the machine. <b>DONE</b> is ticked by whoever did the fix · <b>CHECKED</b> by a manager on the floor · a line closes only when both are ticked.</div>
+      <div className="grp">Open audits <span className="n">{open.length}</span></div>
+      <VAList rows={open} bName={bName} onOpen={setOpenId} empty={index===null?"Loading…":"No open audits"+(venue==="all"?"":" for "+bName(venue))+"."} />
+      <div className="grp">Closed <span className="n">{rows.length-open.length}</span></div>
+      <VAList rows={rows.filter(a=>a.status==="closed")} bName={bName} onOpen={setOpenId} empty="Nothing closed yet." />
+    </div>
+    {creating && <VACreate branches={branches} defVenue={venue!=="all"?venue:(branch||((branches||[])[0]||{}).id)} me={me} onClose={()=>setCreating(false)} onCreate={create} />}
+    {openId && <VADetail key={openId} id={openId} col={col} me={me} isMgr={isMgr} bName={bName} indexEntry={(index||{})[openId]} onClose={()=>setOpenId(null)} />}
+  </div>;
+}
+function VAList({rows, bName, onOpen, empty}){
+  return <div style={{overflowX:"auto"}}><table>
+    <thead><tr><th>Date</th><th>Venue</th><th>Auditor</th><th className="num">Score</th><th className="num">Critical</th><th className="num">Open actions</th><th>Signed</th></tr></thead>
+    <tbody>
+      {rows.length===0 && <tr><td colSpan={7} className="empty">{empty}</td></tr>}
+      {rows.map(a=><tr key={a.id} className="row" onClick={()=>onOpen(a.id)}>
+        <td><b>{vaFmtDate(a.date)}</b></td>
+        <td>{a.venueName||bName(a.venue)}</td>
+        <td>{a.auditor}</td>
+        <td className="num">{a.score==null?<span className="sub">—</span>:<b>{a.score}%</b>}{a.unscored>0 && <div className="sub">{a.unscored} to score</div>}</td>
+        <td className="num">{a.critical>0?<span className="pill bad">{a.critical}</span>:<span className="sub">0</span>}</td>
+        <td className="num">{a.openActions>0?<span className="pill warn">{a.openActions}</span>:<span className="sub">0</span>}</td>
+        <td>{a.signedAuditor?<span className="pill ok">Auditor</span>:<span className="pill mute">Auditor</span>} {a.signedVenue?<span className="pill ok">Venue</span>:<span className="pill mute">Venue</span>}</td>
+      </tr>)}
+    </tbody>
+  </table></div>;
+}
+function VAModal({title, onClose, children}){
+  React.useEffect(()=>{ const h=e=>{ if(e.key==="Escape") onClose(); }; window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); },[]);
+  return vaPortal(<div className="va"><div className="va-modal" onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}><div className="box" role="dialog" aria-modal="true" aria-label={title}><h2>{title}</h2>{children}</div></div></div>);
+}
+function VACreate({branches, defVenue, me, onClose, onCreate}){
+  const [v,setV]=React.useState(defVenue||""); const [d,setD]=React.useState(vaToday()); const [a,setA]=React.useState(vaWho(me).name); const [busy,setBusy]=React.useState(false); const [e,setE]=React.useState("");
+  return <VAModal title="New venue audit" onClose={onClose}>
+    <label className="row2"><span>Venue</span><select value={v} onChange={x=>setV(x.target.value)}>{(branches||[]).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+    <label className="row2"><span>Date</span><input type="date" value={d} onChange={x=>setD(x.target.value)} /></label>
+    <label className="row2"><span>Auditor</span><input type="text" value={a} onChange={x=>setA(x.target.value)} /></label>
+    {e && <div className="note" style={{margin:"0 0 12px",borderLeftColor:"var(--r)"}}>{e}</div>}
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button type="button" className="btn" onClick={onClose}>Cancel</button>
+      <button type="button" className="btn p" disabled={!v||!d||busy} onClick={async()=>{ setBusy(true); setE(""); try{ await onCreate({venueId:v,date:d,auditorName:a.trim()}); }catch(x){ setE("Could not create — "+(x.message||x)); setBusy(false); } }}>{busy?"Creating…":"Start audit"}</button></div>
+  </VAModal>;
+}
+
+function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
+  const ref=col.doc("venue_audit_"+id);
+  const [a,setA]=React.useState(null); const [err,setErr]=React.useState(""); const [busy,setBusy]=React.useState("");
+  const [shut,setShut]=React.useState({}); const [lb,setLb]=React.useState(null); const [signing,setSigning]=React.useState(false); const [adding,setAdding]=React.useState(null);
+  const who=vaWho(me); const FV=vaFV();
+  React.useEffect(()=>ref.onSnapshot(s=>{ if(!s.exists){ setErr("This audit was deleted."); setA(null); return; } setA(s.data()); setErr(""); }, e=>setErr("Could not load — "+(e.message||e))),[id]);
+  React.useEffect(()=>{ const h=e=>{ if(e.key==="Escape" && !signing && !adding && !lb) onClose(); }; window.addEventListener("keydown",h); const o=document.body.style.overflow; document.body.style.overflow="hidden"; return ()=>{ window.removeEventListener("keydown",h); document.body.style.overflow=o; }; },[signing,adding,lb]);
+  /* keep the list row in step with the doc — idempotent, so several open tablets settle on the same value */
+  React.useEffect(()=>{ if(!a) return; const s=vaSummary(a); const cur=indexEntry||{}; const keys=Object.keys(s).filter(k=>k!=="updatedAt");
+    if(keys.some(k=>JSON.stringify(s[k])!==JSON.stringify(cur[k]))) col.doc("venue_audit_index").set({audits:{[id]:s}},{merge:true}).catch(()=>{}); },[a]);
+  const run=async(label, fn)=>{ setBusy(label); setErr(""); try{ await fn(); }catch(e){ setErr(label+" failed — "+(e.message||e)); } setBusy(""); };
+  const up=(patch)=>ref.update({...patch, updatedAt:Date.now()});
+  const itemPath=(iid,f)=>"items."+iid+"."+f;
+  if(!a) return vaPortal(<div className="va"><VAStyle /><div className="va-fs"><div className="top"><span className="t">Venue audit</span><button type="button" className="btn" style={{marginLeft:"auto"}} onClick={onClose}>Close</button></div><div className="wrap"><div className="note">{err||"Loading…"}</div></div></div></div>);
+  const closed=a.status==="closed"; const canEdit=isMgr&&!closed;
+  const sum=vaSummary(a); const secs=a.checklist||VA_SECTIONS; const extras=Object.values(a.extra||{});
+  const fixes=vaAllItems(a).filter(it=>((a.items||{})[it.id]||{}).result==="fix");
+  const allChecked=fixes.every(it=>{ const r=(a.items||{})[it.id]||{}; return r.done&&r.checked; });
+  const canClose=isMgr && !closed && sum.unscored===0 && allChecked && sum.signedAuditor && sum.signedVenue;
+  const closeWhy=sum.unscored>0?sum.unscored+" line(s) not scored":!allChecked?"open actions remain":!sum.signedAuditor?"auditor has not signed":!sum.signedVenue?"venue lead has not signed":"";
+  const setResult=(iid,v)=>run("Save", ()=>up({[itemPath(iid,"result")]:v, [itemPath(iid,"scoredBy")]:{...who, at:Date.now()}}));
+  const setField=(iid,f,v)=>run("Save", ()=>up({[itemPath(iid,f)]:v}));
+  const toggleStamp=(iid,f,on)=>run("Save", ()=>up({[itemPath(iid,f)]: on?{...who, at:Date.now()}:FV.delete()}));
+  const addPhoto=(iid)=>async(e)=>{ const files=[...(e.target.files||[])]; e.target.value=""; if(!files.length) return;
+    await run("Photo upload", async()=>{ for(const f of files){ const blob=await vaDownscale(f,1600); const r=await cloudinaryUpload(blob,"venue_audit");
+      const ph={id:vaId("ph"), url:r.url, publicId:r.publicId||"", by:who.email, name:who.name, at:Date.now()};
+      await up(iid?{[itemPath(iid,"photos")]:FV.arrayUnion(ph)}:{photos:FV.arrayUnion(ph)}); } }); };
+  const delPhoto=(iid,ph)=>{ if(!window.confirm("Remove this photo?")) return; run("Remove photo", ()=>up(iid?{[itemPath(iid,"photos")]:FV.arrayRemove(ph)}:{photos:FV.arrayRemove(ph)})); };
+  const addComment=(iid,text)=>{ const t=(text||"").trim(); if(!t) return Promise.resolve(); const c={id:vaId("cm"), text:t, by:who.email, name:who.name, at:Date.now()};
+    return run("Comment", ()=>up(iid?{[itemPath(iid,"comments")]:FV.arrayUnion(c)}:{comments:FV.arrayUnion(c)})); };
+  const delComment=(iid,c)=>{ if(!window.confirm("Delete this comment?")) return; run("Delete comment", ()=>up(iid?{[itemPath(iid,"comments")]:FV.arrayRemove(c)}:{comments:FV.arrayRemove(c)})); };
+  const addFinding=(secId,text,critical)=>run("Add finding", ()=>{ const xid=vaId("x"); return up({["extra."+xid]:{id:xid, sec:secId, text, critical:!!critical, by:who.email, at:Date.now()}, [itemPath(xid,"result")]:"fix", [itemPath(xid,"scoredBy")]:{...who, at:Date.now()}}); });
+  const delFinding=(x)=>{ if(!window.confirm("Remove this finding?")) return; run("Remove finding", ()=>up({["extra."+x.id]:FV.delete(), ["items."+x.id]:FV.delete()})); };
+  const sign=(role,note,png)=>run("Sign", ()=>up({signoffs:FV.arrayUnion({id:vaId("sg"), role, note:(note||"").trim(), sig:png, email:who.email, name:who.name, at:Date.now()})})).then(()=>setSigning(false));
+  const delSign=(s)=>{ if(!window.confirm("Remove this signature?")) return; run("Remove signature", ()=>up({signoffs:FV.arrayRemove(s)})); };
+  const setStatus=(st)=>run(st==="closed"?"Close audit":"Reopen", ()=>up({status:st, closedAt:st==="closed"?Date.now():null, closedBy:st==="closed"?who:null}));
+  const delAudit=()=>{ if(!window.confirm("Delete this whole audit? Photos stay in Cloudinary; scores, comments and signatures are removed.")) return;
+    run("Delete", async()=>{ await col.doc("venue_audit_index").set({audits:{[id]:FV.delete()}},{merge:true}); await ref.delete(); onClose(); }); };
+  const mine=x=>x&&x.by===who.email;
+  const renderItem=(it,n)=>{ const r=(a.items||{})[it.id]||{}; const v=r.result||"";
+    return <div key={it.id} className={"it "+v}>
+      <div className="q"><b>{n}</b>&nbsp; {it.text}{it.critical && <span className="crit">CRITICAL</span>}{it.custom && <span className="sub"> · added finding</span>}</div>
+      {canEdit ? <div className="res" role="group" aria-label="Result">{[["pass","PASS"],["fix","FIX"],["na","N/A"]].map(([k,l])=><button key={k} type="button" data-v={k} aria-pressed={v===k} onClick={()=>setResult(it.id, v===k?"":k)}>{l}</button>)}</div>
+        : <div style={{margin:"6px 0 0"}}>{v?<span className={"pill "+(v==="pass"?"ok":v==="fix"?"bad":"mute")}>{v==="na"?"N/A":v}</span>:<span className="pill mute">Not scored</span>}</div>}
+      {r.scoredBy && v && <div className="who" style={{marginTop:3}}>scored by {r.scoredBy.name} · {vaFmtTime(r.scoredBy.at)}</div>}
+      {v==="fix" && <div className="act">
+        <div className="f"><span className="sub" style={{fontWeight:800}}>ACTION</span>
+          {canEdit ? <><input type="text" placeholder="Owner" defaultValue={r.owner||""} onBlur={e=>{ if(e.target.value!==(r.owner||"")) setField(it.id,"owner",e.target.value.trim()); }} style={{width:140}} />
+            <input type="date" defaultValue={r.due||""} onBlur={e=>{ if(e.target.value!==(r.due||"")) setField(it.id,"due",e.target.value); }} /></>
+            : <span>{r.owner?<b>{r.owner}</b>:<span className="sub">no owner</span>}{r.due && <> · due <b>{vaFmtDate(r.due)}</b></>}</span>}
+          {r.due && !r.checked && r.due<vaToday() && <span className="pill bad">Overdue</span>}
+        </div>
+        <div className="f">
+          <button type="button" className="tick" aria-pressed={!!r.done} disabled={closed} onClick={()=>toggleStamp(it.id,"done",!r.done)}>{r.done?"✓ DONE":"Mark DONE"}</button>
+          {r.done && <span className="who">{r.done.name} · {vaFmtTime(r.done.at)}</span>}
+          <button type="button" className="tick" aria-pressed={!!r.checked} disabled={!isMgr||closed||!r.done} title={!isMgr?"A manager checks it on the floor":!r.done?"Mark DONE first":""} onClick={()=>toggleStamp(it.id,"checked",!r.checked)}>{r.checked?"✓ CHECKED":"CHECKED"}</button>
+          {r.checked && <span className="who">{r.checked.name} · {vaFmtTime(r.checked.at)}</span>}
+        </div>
+      </div>}
+      <VAPhotos list={r.photos} closed={closed} onAdd={addPhoto(it.id)} onDel={ph=>delPhoto(it.id,ph)} canDel={ph=>isMgr||mine(ph)} onOpen={setLb} />
+      <VAComments list={r.comments} closed={closed} onAdd={t=>addComment(it.id,t)} onDel={c=>delComment(it.id,c)} canDel={c=>isMgr||mine(c)} />
+      {it.custom && canEdit && <div className="tools"><button type="button" className="btn sm" onClick={()=>delFinding(it)}>Remove finding</button></div>}
+    </div>; };
+  return vaPortal(<div className="va va-print-host"><VAStyle /><div className="va-fs">
+    <div className="top">
+      <div><div className="t">{a.venueName||bName(a.venue)} · {vaFmtDate(a.date)}</div><div className="s">Auditor {(a.auditor&&a.auditor.name)||"—"} · checklist {a.checklistVersion||""}{closed?" · CLOSED":""}</div></div>
+      <span style={{marginLeft:"auto"}}></span>
+      {busy && <span className="s">{busy}…</span>}
+      <button type="button" className="btn" onClick={()=>window.print()}>Print</button>
+      <button type="button" className="btn" onClick={onClose}>Close</button>
+    </div>
+    <div className="wrap">
+      {err && <div className="note" style={{margin:"0 0 12px",borderLeftColor:"var(--r)"}}>{err}</div>}
+      <div className="score">
+        <div className="big"><b>{sum.score==null?"—":sum.score+"%"}</b><span>Score · pass ÷ (pass + fix)</span></div>
+        <div className="big"><b>{sum.fix}</b><span>To fix{sum.critical>0?" · "+sum.critical+" critical":""}</span></div>
+        <div className="big"><b>{sum.openActions}</b><span>Open actions</span></div>
+        <div className="big"><b>{sum.unscored}</b><span>Not scored</span></div>
+      </div>
+      {fixes.length>0 && <div className="sec"><h3>Actions <span className="r">{fixes.length} · closes when DONE + CHECKED</span></h3>
+        <div style={{overflowX:"auto"}}><table><thead><tr><th>#</th><th>Action</th><th>Owner</th><th>Due</th><th>Done</th><th>Checked</th></tr></thead><tbody>
+          {fixes.map((it,i)=>{ const r=(a.items||{})[it.id]||{}; return <tr key={it.id}><td>{i+1}</td><td>{it.text}{it.critical && <span className="pill bad" style={{marginLeft:6}}>Critical</span>}</td><td>{r.owner||<span className="sub">—</span>}</td>
+            <td>{r.due?<span style={{color:(!r.checked&&r.due<vaToday())?"var(--r)":undefined,fontWeight:(!r.checked&&r.due<vaToday())?800:500}}>{vaFmtDate(r.due)}</span>:<span className="sub">—</span>}</td>
+            <td>{r.done?"✓":""}</td><td>{r.checked?"✓":""}</td></tr>; })}
+        </tbody></table></div></div>}
+      {secs.map((s,si)=>{ const its=(s.items||[]).map(x=>({...x, sec:s.id})).concat(extras.filter(x=>x.sec===s.id).map(x=>({...x, custom:true})));
+        const done=its.filter(it=>((a.items||{})[it.id]||{}).result).length; const f=its.filter(it=>((a.items||{})[it.id]||{}).result==="fix").length;
+        return <div key={s.id} className="sec"><h3 onClick={()=>setShut(o=>({...o,[s.id]:!o[s.id]}))}><span>{si+1} — {s.title}</span>{f>0 && <span className="pill bad">{f} fix</span>}<span className="r">{done}/{its.length} scored {shut[s.id]?"▸":"▾"}</span></h3>
+          {!shut[s.id] && <>{its.map((it,ii)=>renderItem(it,(si+1)+"."+(ii+1)))}
+            {canEdit && <div className="it"><button type="button" className="btn sm" onClick={()=>setAdding(s.id)}>+ Add finding</button></div>}</>}
+        </div>; })}
+      <div className="sec"><h3>Overall comments &amp; photos</h3><div className="it">
+        <VAPhotos list={a.photos} closed={closed} onAdd={addPhoto(null)} onDel={ph=>delPhoto(null,ph)} canDel={ph=>isMgr||mine(ph)} onOpen={setLb} />
+        <VAComments list={a.comments} closed={closed} onAdd={t=>addComment(null,t)} onDel={c=>delComment(null,c)} canDel={c=>isMgr||mine(c)} />
+      </div></div>
+      <div className="sec"><h3>Sign-off <span className="r">signed with your RCC login · {who.name} ({who.email})</span></h3>
+        <div className="sig">
+          {(a.signoffs||[]).length===0 && <div className="sub">No signatures yet.</div>}
+          {(a.signoffs||[]).map(s=><div key={s.id} className="s">{s.sig && <img src={s.sig} alt={"Signature of "+s.name} />}
+            <div><b>{s.name}</b> <span className="pill">{(VA_SIGN_ROLES.find(r=>r.id===s.role)||{}).label||s.role}</span></div>
+            <div className="who">{s.email} · {vaFmtTime(s.at)}</div>{s.note && <div style={{fontSize:13,marginTop:4}}>{s.note}</div>}
+            {(isMgr||s.email===who.email) && !closed && <button type="button" className="btn sm noprint" style={{marginTop:6}} onClick={()=>delSign(s)}>Remove</button>}</div>)}
+        </div>
+        {!closed && <div className="it noprint"><button type="button" className="btn k" onClick={()=>setSigning(true)}>Sign this audit</button></div>}
+      </div>
+      <div className="tools noprint">
+        {isMgr && !closed && <button type="button" className="btn p" disabled={!canClose} title={canClose?"":"Can't close yet: "+closeWhy} onClick={()=>setStatus("closed")}>Close audit</button>}
+        {isMgr && !closed && !canClose && <span className="sub" style={{alignSelf:"center"}}>Can't close yet — {closeWhy}.</span>}
+        {isMgr && closed && <button type="button" className="btn" onClick={()=>setStatus("open")}>Reopen</button>}
+        {isMgr && <button type="button" className="btn" style={{marginLeft:"auto"}} onClick={delAudit}>Delete audit</button>}
+      </div>
+    </div>
+    {signing && <VASignPad me={me} isMgr={isMgr} existing={a.signoffs||[]} onClose={()=>setSigning(false)} onSign={sign} />}
+    {adding && <VAAddFinding title={(secs.find(s=>s.id===adding)||{}).title} onClose={()=>setAdding(null)} onAdd={(t,c)=>{ addFinding(adding,t,c); setAdding(null); }} />}
+    {lb && <div className="va-lb" onClick={()=>setLb(null)}><img src={lb} alt="Audit photo" /></div>}
+  </div></div>);
+}
+function VAPhotos({list, closed, onAdd, onDel, canDel, onOpen}){
+  const ph=list||[];
+  return <div className="ph">
+    {ph.map(p=><div key={p.id} className="p" title={(p.name||"")+" · "+vaFmtTime(p.at)}><img src={p.url.replace("/upload/","/upload/c_fill,w_200,h_200,q_auto/")} alt="Audit photo" loading="lazy" onClick={()=>onOpen(p.url)} />{!closed && canDel(p) && <button type="button" aria-label="Remove photo" onClick={()=>onDel(p)}>×</button>}</div>)}
+    {!closed && <label>+ Photo<input type="file" accept="image/*" capture="environment" multiple onChange={onAdd} /></label>}
+  </div>;
+}
+function VAComments({list, closed, onAdd, onDel, canDel}){
+  const [t,setT]=React.useState(""); const cs=(list||[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  return <div className="cm">
+    {cs.map(c=><div key={c.id} className="c"><div className="h"><b>{c.name}</b><span>{vaFmtTime(c.at)}</span>{!closed && canDel(c) && <button type="button" onClick={()=>onDel(c)}>delete</button>}</div>{c.text}</div>)}
+    {!closed && <div className="add"><input type="text" placeholder="Add a comment" value={t} onChange={e=>setT(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"&&t.trim()){ onAdd(t); setT(""); } }} /><button type="button" className="btn sm" disabled={!t.trim()} onClick={()=>{ onAdd(t); setT(""); }}>Post</button></div>}
+  </div>;
+}
+function VAAddFinding({title, onClose, onAdd}){
+  const [t,setT]=React.useState(""); const [c,setC]=React.useState(false);
+  return <VAModal title={"Add finding — "+(title||"")} onClose={onClose}>
+    <label className="row2"><span>What did you find?</span><textarea value={t} onChange={e=>setT(e.target.value)} placeholder="e.g. Almond slices stored at room temperature, unlabelled" autoFocus /></label>
+    <label style={{display:"flex",gap:8,alignItems:"center",margin:"0 0 12px",fontSize:14}}><input type="checkbox" checked={c} onChange={e=>setC(e.target.checked)} /> Critical (food safety risk)</label>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn p" disabled={!t.trim()} onClick={()=>onAdd(t.trim(),c)}>Add as FIX</button></div>
+  </VAModal>;
+}
+function VASignPad({me, isMgr, existing, onClose, onSign}){
+  const who=vaWho(me); const roles=VA_SIGN_ROLES.filter(r=>isMgr||!r.mgrOnly);
+  const [role,setRole]=React.useState(isMgr?"auditor":"lead"); const [note,setNote]=React.useState(""); const [inked,setInked]=React.useState(false); const [busy,setBusy]=React.useState(false);
+  const cv=React.useRef(null); const drawing=React.useRef(false); const last=React.useRef(null);
+  React.useEffect(()=>{ const c=cv.current; if(!c) return; const r=c.getBoundingClientRect(); const k=window.devicePixelRatio||1; c.width=Math.round(r.width*k); c.height=Math.round(r.height*k);
+    const x=c.getContext("2d"); x.scale(k,k); x.lineWidth=2.4; x.lineCap="round"; x.lineJoin="round"; x.strokeStyle="#141312"; },[]);
+  const pt=e=>{ const r=cv.current.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
+  const down=e=>{ e.preventDefault(); drawing.current=true; last.current=pt(e); try{ cv.current.setPointerCapture&&cv.current.setPointerCapture(e.pointerId); }catch(x){} };
+  const move=e=>{ if(!drawing.current) return; e.preventDefault(); const p=pt(e); const x=cv.current.getContext("2d"); x.beginPath(); x.moveTo(last.current[0],last.current[1]); x.lineTo(p[0],p[1]); x.stroke(); last.current=p; if(!inked) setInked(true); };
+  const upE=()=>{ drawing.current=false; };
+  const clear=()=>{ const c=cv.current; c.getContext("2d").clearRect(0,0,c.width,c.height); setInked(false); };
+  const exportPng=()=>{ const c=cv.current; const o=document.createElement("canvas"); const w=480, h=Math.round(480*c.height/c.width); o.width=w; o.height=h; const x=o.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,w,h); x.drawImage(c,0,0,w,h); return o.toDataURL("image/png"); };
+  const dup=existing.some(s=>s.email===who.email&&s.role===role);
+  return <VAModal title="Sign this audit" onClose={onClose}>
+    <div className="row2"><span>Signing as</span><div><b>{who.name}</b> <span className="sub">{who.email} · from your RCC login</span></div></div>
+    <label className="row2"><span>Role</span><select value={role} onChange={e=>setRole(e.target.value)}>{roles.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
+    <div className="row2"><span>Signature</span><canvas ref={cv} className="pad" onPointerDown={down} onPointerMove={move} onPointerUp={upE} onPointerLeave={upE} onPointerCancel={upE} aria-label="Signature pad" />
+      <div style={{display:"flex",justifyContent:"space-between"}}><span className="sub">Sign with your finger or mouse</span><button type="button" className="btn sm" onClick={clear}>Clear</button></div></div>
+    <label className="row2"><span>Note (optional)</span><input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. Actions 2 and 5 agreed for Friday" /></label>
+    {dup && <div className="note" style={{margin:"0 0 12px"}}>You have already signed as this role — this adds a second signature.</div>}
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button type="button" className="btn" onClick={onClose}>Cancel</button>
+      <button type="button" className="btn p" disabled={!inked||busy} onClick={async()=>{ setBusy(true); await onSign(role,note,exportPng()); setBusy(false); }}>{busy?"Saving…":"Sign"}</button></div>
+  </VAModal>;
+}
+/* VENUE-AUDIT-END */
+
 /* AIV3-START — AI Invoice v3 (2026-09-11, Ju An: "가격동향 + 품목 업데이트를 더 똑똑하게")
    ════════════════════════════════════════════════════════════════════════════════════
    Four things on top of the 2026-09-09 v2 screen:

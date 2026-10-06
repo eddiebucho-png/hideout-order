@@ -4073,10 +4073,15 @@ body{
       if(!agentsEnabled || !agents.on || agBusy || busy || document.hidden || !aiAvail()) return;
       if(Date.now()-(agents.lastRun||0) < WEEK) return; // at most once a week
       agBusy=true;
-      try{ await ensureRcc(); await runAuditor(); await runLearner(); agents.lastRun=Date.now(); agSave(); }catch(e){}
+      /* 2026-10-06 cost fix: stamp lastRun BEFORE the calls. It used to be written only after auditor+learner both
+         succeeded, so any failure re-ran the ~56K-token Sonnet audit every hour on every open tablet (drained the API credit). */
+      agents.lastRun=Date.now(); agSave();
+      try{ await ensureRcc(); await runAuditor(); await runLearner(); }catch(e){}
       agBusy=false;
     }
-    if(agentsEnabled){ setInterval(agentStep, 3600000); setTimeout(agentStep, 12000); }
+    /* 2026-10-06: background auto-check switched off (Ju An). Insights "Run now" still works on demand. */
+    var AUTO_AGENTS=false;
+    if(agentsEnabled && AUTO_AGENTS){ setInterval(agentStep, 3600000); setTimeout(agentStep, 12000); }
     async function runNow(btn){
       if(agRunning||!aiAvail()) return; agRunning=true; var t0=btn.textContent; btn.textContent="Checking\u2026";
       try{ await ensureRcc(); await runAuditor(); await runLearner(); agents.lastRun=Date.now(); agSave(); }catch(e){}
@@ -5697,6 +5702,36 @@ function App(){
   const botMounted=useRef(false);
   // AUTH GATE (2026-07-24): flag the document authed + mount the AI chatbot only once the user is an allowed, signed-in staff member (me is a valid object, not null/"denied"/"error"). Fires when me changes; never re-mounts.
   useEffect(()=>{ const ok=!!(me&&typeof me==="object"); try{ document.documentElement.classList.toggle("hideout-authed", ok); document.dispatchEvent(new Event("hideout-authed")); }catch(e){} if(ok && !botMounted.current && window.HideoutBot){ botMounted.current=true; window.HideoutBot.mount({ source:"rcc", logo:()=>window.HIDEOUT_LOGO, backendUrl:()=>{ const DEF="https://script.google.com/macros/s/AKfycbyT4pJ5QuF1HwLCBzbSS2eXcQoAwCNjeE2WqNucJcG20JQ5hlG3BBuBLWDA50llNZCh/exec"; try{ return (JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}").backendUrl)||DEF; }catch(e){ return DEF; } }, token:()=>{ try{ return (JSON.parse(localStorage.getItem("hideout_rcc_conn")||"{}").token)||""; }catch(e){ return ""; } }, greeting:"Ask me about any dish \u2014 ingredients, method, allergens or cost. Or say \u201cmake a recipe for\u2026\u201d and I\u2019ll draft one you can save." }); } }, [me]);
+  // KV-THROTTLE 2026-10-07: the two KV mirrors below used to fire ~45 + ~33 parallel GETs on EVERY open device
+  // whenever recipes/ingredients/meetings changed (an invoice write reached every device at once). That burnt the
+  // backend's daily UrlFetch quota and tripped "too many scripts running simultaneously". Now: at most one push per
+  // key per device every 10 min (trailing), nothing if this device already pushed the same text, nothing if the
+  // backend already holds it (one GET of <key>_hash), and the chunk writes go one at a time.
+  const KV_MIN_GAP=600000;
+  const kvHash=(s)=>{ let h=0x811c9dc5; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); } return (h>>>0).toString(36)+"_"+s.length; };
+  const kvDelay=(base)=>{ let at=0; try{ at=Number(localStorage.getItem(base+"_pushedAt"))||0; }catch(e){} return Math.max(8000, at+KV_MIN_GAP-Date.now()); };
+  const kvPushChunked=async(DEF,tk,base,txt,keepSingleChunks)=>{
+    const h=kvHash(txt); let mine=""; try{ mine=localStorage.getItem(base+"_hash")||""; }catch(e){}
+    if(mine===h) return;
+    const q=(a)=>fetch(DEF+"?"+a+"&token="+tk).then(r=>r.json()).catch(()=>null);
+    const srv=await q("action=get&key="+encodeURIComponent(base+"_hash"));
+    const done=()=>{ try{ localStorage.setItem(base+"_hash",h); localStorage.setItem(base+"_pushedAt",String(Date.now())); }catch(e){} };
+    if(srv && srv.value===h){ done(); return; }
+    const CH=1400, n=Math.ceil(txt.length/CH)||1;
+    let prevN=0; try{ prevN=Number(localStorage.getItem(base+"_chunks"))||0; }catch(e){}
+    const set=(k,v)=>q("action=set&key="+encodeURIComponent(k)+"&value="+encodeURIComponent(v));
+    const del=(k)=>q("action=delete&key="+encodeURIComponent(k));
+    if(n<=1){ await set(base,txt); if(!keepSingleChunks) await del(base+"_chunk_count"); }
+    else{
+      for(let ci=0;ci<n;ci++){ await set(base+"_chunk_"+ci, txt.slice(ci*CH,(ci+1)*CH)); }
+      await set(base+"_chunk_count", String(n));
+      await del(base);
+    }
+    for(let ci=(keepSingleChunks?Math.max(n,2):n);ci<prevN;ci++){ await del(base+"_chunk_"+ci); }
+    try{ localStorage.setItem(base+"_chunks", String(n)); }catch(e){}
+    await set(base+"_hash", h);
+    done();
+  };
   useEffect(()=>{ // Push a compact live snapshot to the IOS backend so BOTH chatbots see recipe/cost data (fire-and-forget)
     if(cloud.status==="on" && !hydrated.current) return; // don't overwrite KV with pre-hydration (possibly empty) state
     const t=setTimeout(()=>{ try{
@@ -5719,17 +5754,8 @@ function App(){
         +lines.join("\n"));
       // GPT review 2026-09-09: never cut a recipe in half - trim on a line boundary and tell the model it is partial
       const snapTxt=snapFull.length<=60000 ? snapFull : (snapFull.slice(0, snapFull.lastIndexOf("\n", 59800))+"\n(truncated: the list above is partial - "+lines.length+" recipes exist in total)");
-      const CH=1400, n=Math.ceil(snapTxt.length/CH);
-      let prevN=0; try{ prevN=Number(localStorage.getItem("rcc_snapshot_chunks"))||0; }catch(e){}
-      if(n<=1){ fetch(DEF+"?action=set&token="+tk+"&key=rcc_snapshot&value="+encodeURIComponent(snapTxt)); }
-      else{
-        for(let ci=0;ci<n;ci++){ fetch(DEF+"?action=set&token="+tk+"&key=rcc_snapshot_chunk_"+ci+"&value="+encodeURIComponent(snapTxt.slice(ci*CH,(ci+1)*CH))); }
-        fetch(DEF+"?action=set&token="+tk+"&key=rcc_snapshot_chunk_count&value="+n);
-        fetch(DEF+"?action=delete&token="+tk+"&key=rcc_snapshot");
-      }
-      for(let ci=Math.max(n,2);ci<prevN;ci++){ fetch(DEF+"?action=delete&token="+tk+"&key=rcc_snapshot_chunk_"+ci); } // clean up orphaned chunks
-      try{ localStorage.setItem("rcc_snapshot_chunks", String(n)); }catch(e){}
-    }catch(e){} }, 8000);
+      kvPushChunked(DEF,tk,"rcc_snapshot",snapTxt,true);
+    }catch(e){} }, kvDelay("rcc_snapshot"));
     return ()=>clearTimeout(t);
   }, [state.recipes, state.ingredients, state.botMemory, cloud.status]);
   useEffect(()=>{ // Push a compact team-meeting snapshot to the IOS backend KV so the reporting agent can read it (fire-and-forget)
@@ -5746,17 +5772,8 @@ function App(){
         return mm.date+" "+(mm.time||"")+" @ "+(bn[mm.branchId]||mm.branchId)+" | run by "+(mm.facilitator||"?")+(mm.attendees?" | attendees: "+mm.attendees:"")+(mm.absent?" | absent: "+mm.absent:"")+(acts?" | ACTIONS: "+acts:" | ACTIONS: none")+(notes?" | NOTES: "+notes:"");
       });
       const txt=("KITCHEN TEAM MEETINGS (latest "+lines.length+"):\n"+lines.join("\n")).slice(0,45000);
-      const CH=1400, n=Math.ceil(txt.length/CH)||1;
-      let prevN=0; try{ prevN=Number(localStorage.getItem("rcc_meetings_chunks"))||0; }catch(e){}
-      if(n<=1){ fetch(DEF+"?action=set&token="+tk+"&key=rcc_meetings&value="+encodeURIComponent(txt)); fetch(DEF+"?action=delete&token="+tk+"&key=rcc_meetings_chunk_count"); }
-      else{
-        for(let ci=0;ci<n;ci++){ fetch(DEF+"?action=set&token="+tk+"&key=rcc_meetings_chunk_"+ci+"&value="+encodeURIComponent(txt.slice(ci*CH,(ci+1)*CH))); }
-        fetch(DEF+"?action=set&token="+tk+"&key=rcc_meetings_chunk_count&value="+n);
-        fetch(DEF+"?action=delete&token="+tk+"&key=rcc_meetings");
-      }
-      for(let ci=n;ci<prevN;ci++){ fetch(DEF+"?action=delete&token="+tk+"&key=rcc_meetings_chunk_"+ci); } // clean up orphaned chunks when the snapshot shrinks
-      try{ localStorage.setItem("rcc_meetings_chunks", String(n)); }catch(e){}
-    }catch(e){} }, 8000);
+      kvPushChunked(DEF,tk,"rcc_meetings",txt,false);
+    }catch(e){} }, kvDelay("rcc_meetings"));
     return ()=>clearTimeout(t);
   }, [state.teamMeetings, cloud.status]);
   useEffect(()=>{ if(!cloud.config || fbRef.current) return;

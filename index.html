@@ -642,6 +642,15 @@ function itemCost(it){
   }
   return Number(it && it.cost)||0;
 }
+/* ---- 품목 알러전 (2026-10-09 — RCC 연결) ----
+   가격과 같은 규칙: RCC 에 연결돼 있고 RCC 가 알러전을 알고 있으면 RCC 값이 이긴다.
+   rcc_prices 의 a = 'Egg, Dairy' | 'None' | (없음 = RCC 에 기록 없음). 기록이 없을 땐
+   '알러전 없음'으로 읽지 않고 IOS 에 적힌 값을 그대로 쓴다 — 빈칸이 안전으로 둔갑하면 안 된다. */
+function rccAllergens(it){
+  if(it && it.rccId && cfg.rccPriceMap && cfg.rccPriceMap[it.rccId]){ const a=cfg.rccPriceMap[it.rccId].a; if(typeof a==='string') return a; }
+  return null;
+}
+function itemAllergens(it){ const a=rccAllergens(it); return a!=null ? a : ((it && it.allergens)||''); }
 
 /* ---- direct Firestore REST (fast path; bypasses Apps Script) ---- */
 function fsBase(){ return 'https://firestore.googleapis.com/v1/projects/'+cfg.fsProjectId+'/databases/(default)/documents'; }
@@ -911,7 +920,7 @@ window.OrderCore = {
   cacheGet, cacheGetStale, cachePut, cacheClearPrefix, clearCache, hasArtifactStorage, isConnected, withRetry, probeFsDirect,
   kvGet, kvGetFresh, kvSet, kvDelete, kvListPrefix, kvGetBatch, kvSetChunked, kvGetChunkedBatch, kvSetLongText, kvGetLongText,
   loadOrder, saveOrder, loadAllOrdersForDate, stockKey, loadStockTake, saveStockTake, listStockTakeDatesForLocation, listOrderDates,
-  setKey, getKey, itemCost,
+  setKey, getKey, itemCost, itemAllergens, rccAllergens,
 };
 })();
 
@@ -2554,7 +2563,7 @@ function ItemsCard({ctx}){
       if(catFilter==="none"){ if(ctx.categories.some(c=>c.id===i.cat)) return false; }
       else if(catFilter!=="all" && (i.cat||"")!==catFilter) return false;
       if(!needle) return true;
-      return [i.name,i.unit,catLabel(i.cat),i.groupLabel,i.allergens,i.perishable?"daily":""].some(v=>String(v||"").toLowerCase().includes(needle));
+      return [i.name,i.unit,catLabel(i.cat),i.groupLabel,C.itemAllergens(i),i.perishable?"daily":""].some(v=>String(v||"").toLowerCase().includes(needle));
     });
   },[ctx.items,ctx.categories,q,catFilter]);
 
@@ -2585,9 +2594,70 @@ function ItemsCard({ctx}){
 
   const removeItem=(it)=>{ if(!confirm(`Delete "${it.name}"? This can't be undone.`)) return; ctx.saveItems(ctx.items.filter(x=>x.id!==it.id)); setSel(s=>{ const n={...s}; delete n[it.id]; return n; }); toast("Deleted ✓"); };
   const removeSelected=()=>{ if(!selIds.length) return; if(!confirm(`Delete ${selIds.length} item${selIds.length>1?"s":""}? This can't be undone.`)) return; const kill=new Set(selIds); ctx.saveItems(ctx.items.filter(x=>!kill.has(x.id))); setSel({}); toast(`Deleted ${selIds.length} ✓`); };
+  /* ── Archive (2026-10-09, 주안: "delete 말고 archive 는 없어?") ──────────────────────────
+     Archived items live in their own list; the live `items` list just stops carrying them, so
+     every screen and the backend keep working unchanged. Order of writes: a failure duplicates,
+     never loses (see patches\apply_items_archive.py). */
+  const arKey=()=>C.deptPrefix()+"items_archived";
+  const [arch,setArch]=useState(null);          // null = not loaded yet
+  const [showArch,setShowArch]=useState(false);
+  const [archQ,setArchQ]=useState("");
+  const [archBusy,setArchBusy]=useState(false);
+  const loadArch=async(fresh)=>{
+    if(fresh){ try{ Object.keys(C.cfg.cache||{}).forEach(k=>{ if(k.indexOf("kv:"+arKey())===0) delete C.cfg.cache[k]; }); }catch(e){} }
+    const v=await C.kvGetChunkedBatch([arKey()]);
+    const a=Array.isArray(v&&v[arKey()])? v[arKey()] : [];
+    setArch(a); return a;
+  };
+  React.useEffect(()=>{ loadArch(false).catch(()=>setArch([])); },[ctx.department]);
+  const archiveItems=async(list)=>{
+    if(!list.length||archBusy) return;
+    const label=list.length===1? `"${list[0].name}"` : `${list.length} items`;
+    if(!confirm(`Archive ${label}?\n\nThey disappear from ordering, stock take and the daily summary. Nothing is lost — restore them any time from Archived.`)) return;
+    setArchBusy(true);
+    try{
+      const cur=await loadArch(true);
+      const have=new Set(cur.map(x=>x.id));
+      const stamp=new Date().toISOString();
+      const next=cur.concat(list.filter(x=>!have.has(x.id)).map(x=>({...x,archivedAt:stamp})));
+      await C.kvSetChunked(arKey(), next, next.length===0);          // 1) into the archive
+      setArch(next);
+      const kill=new Set(list.map(x=>x.id));
+      await ctx.saveItems(ctx.items.filter(x=>!kill.has(x.id)));       // 2) out of the live list
+      setSel(s=>{ const n={...s}; kill.forEach(id=>delete n[id]); return n; });
+      toast(`Archived ${list.length} ✓ — restore from Archived`);
+    }catch(e){ toast("Archive failed — "+((e&&e.message)||e)+". Nothing was removed.", true); }
+    setArchBusy(false);
+  };
+  const restoreItem=async(it)=>{
+    if(archBusy) return;
+    setArchBusy(true);
+    try{
+      const {archivedAt, ...back}=it;
+      if(!ctx.items.some(x=>x.id===it.id)) await ctx.saveItems([...ctx.items, back]);   // 1) back into the live list
+      const cur=await loadArch(true);
+      const next=cur.filter(x=>x.id!==it.id);
+      await C.kvSetChunked(arKey(), next, next.length===0);                              // 2) out of the archive
+      setArch(next);
+      toast(`Restored "${it.name}" ✓`);
+    }catch(e){ toast("Restore failed — "+((e&&e.message)||e), true); }
+    setArchBusy(false);
+  };
+  const deleteForever=async(it)=>{
+    if(archBusy) return;
+    if(!confirm(`Delete "${it.name}" for good?\n\nThis one can't be undone. Past orders that used it will show it as an unknown item.`)) return;
+    setArchBusy(true);
+    try{
+      const cur=await loadArch(true);
+      const next=cur.filter(x=>x.id!==it.id);
+      await C.kvSetChunked(arKey(), next, next.length===0);
+      setArch(next); toast("Deleted ✓");
+    }catch(e){ toast("Delete failed — "+((e&&e.message)||e), true); }
+    setArchBusy(false);
+  };
 
   const blank=()=>({id:uid("i"),name:"",unit:"ea",cat:ctx.categories[0]?.id||"",allergens:"",cost:"",minOrderQty:null,groupLabel:"",perishable:false,parLevels:{}});
-  const commit=(it)=>{ if(!it.name.trim()){ toast("Name required",true); return; } let next; if(ctx.items.find(x=>x.id===it.id)) next=ctx.items.map(x=>x.id===it.id?it:x); else next=[...ctx.items,it]; ctx.saveItems(next); setEdit(null); setAdding(false); toast("Saved ✓"); };
+  const commit=(it)=>{ if(!it.name.trim()){ toast("Name required",true); return; } it={...it,allergens:C.itemAllergens(it)}; let next; if(ctx.items.find(x=>x.id===it.id)) next=ctx.items.map(x=>x.id===it.id?it:x); else next=[...ctx.items,it]; ctx.saveItems(next); setEdit(null); setAdding(false); toast("Saved ✓"); };
 
   const sortTh=(k,label,extra)=>{
     const on=sort.key===k;
@@ -2617,7 +2687,7 @@ function ItemsCard({ctx}){
     const score=g=>{ const n=g.n.toLowerCase(); const i=n.indexOf(q); if(i<0) return -1; return (g.k==="r"?200:0)+(i===0?100:0)+(50-Math.min(50,i)); };
     return rccOpts.map(g=>({g,s:score(g)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).slice(0,12).map(x=>x.g);
   },[rccQ,rccOpts]);
-  const linkRcc=(g)=>{ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(g.k==="r"||Number(g.q)>1)?"unit":"pack"}); setRccQ(""); };
+  const linkRcc=(g)=>{ setEdit({...edit,rccId:g.i,rccQtyPerUnit:1,rccMode:(g.k==="r"||Number(g.q)>1)?"unit":"pack",...(typeof g.a==="string"?{allergens:g.a}:{})}); setRccQ(""); };
 
   return <div className="screen" style={{border:"3px solid var(--color-ink)"}}>
     <div className="bar2">
@@ -2628,7 +2698,8 @@ function ItemsCard({ctx}){
         <option value="none">Uncategorised</option>
       </select>
       <span className="cnt" style={{color:"var(--color-ink-muted-80)",whiteSpace:"nowrap"}}>{total===ctx.items.length?total:total+" / "+ctx.items.length} items</span>
-      {selIds.length>0&&<button type="button" className="btn2" style={{borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={removeSelected}>Delete {selIds.length}</button>}
+      {selIds.length>0&&<button type="button" className="btn2" disabled={archBusy} onClick={()=>archiveItems(ctx.items.filter(x=>sel[x.id]))}>Archive {selIds.length}</button>}
+      <button type="button" className="btn2" onClick={()=>{ setShowArch(true); setArchQ(""); loadArch(true).catch(()=>{}); }}>Archived{arch&&arch.length?` (${arch.length})`:""}</button>
       <button type="button" className="btn2 p" onClick={()=>{ setEdit(blank()); setAdding(true); }}>+ Add item</button>
     </div>
     <div className="chips2"><button type="button" className="chip2" aria-pressed={catFilter==="all"} onClick={()=>setCatFilter("all")}>All <span className="n">{ctx.items.length}</span></button>{ctx.categories.map(c=>{ const n=(ctx.items||[]).filter(i=>i.cat===c.id).length; return <button key={c.id} type="button" className="chip2" aria-pressed={catFilter===c.id} onClick={()=>setCatFilter(catFilter===c.id?"all":c.id)}><span className="sh s" style={{background:c.color||"var(--color-primary)"}}></span>{c.label} <span className="n">{n}</span></button>; })}{(ctx.items||[]).some(i=>!ctx.categories.some(c=>c.id===i.cat)) && <button type="button" className="chip2" aria-pressed={catFilter==="none"} onClick={()=>setCatFilter(catFilter==="none"?"all":"none")}><span className="sh t"></span>Uncategorised <span className="n hot">{(ctx.items||[]).filter(i=>!ctx.categories.some(c=>c.id===i.cat)).length}</span></button>}</div>
@@ -2642,10 +2713,10 @@ function ItemsCard({ctx}){
       </tr></thead>
       <tbody>{view.map(it=>(<tr key={it.id} style={sel[it.id]?{background:"var(--color-canvas-parchment)"}:null}>
         <td style={{...td,paddingRight:0}}><input type="checkbox" checked={!!sel[it.id]} onChange={()=>toggleOne(it.id)} style={{cursor:"pointer",width:15,height:15}} /></td>
-        <td style={{...td,cursor:"pointer"}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}><div style={{fontWeight:700,display:"flex",alignItems:"center",gap:8}}>{it.name}{it.perishable?<span className="badge2 warn" style={{fontSize:10,minHeight:20}} title="Daily item — leftovers are binned and counted as waste">daily</span>:null}{it.rccId?<span className="badge2 dim" style={{fontSize:10,minHeight:20}} title="Price follows RCC">RCC $</span>:null}</div>{it.allergens&&<div style={{fontSize:13,color:"var(--color-ink-muted-80)"}}><span className="sh t" style={{borderLeftWidth:5,borderRightWidth:5,borderBottomWidth:9,marginRight:5}}></span>{it.allergens}</div>}</td>
+        <td style={{...td,cursor:"pointer"}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}><div style={{fontWeight:700,display:"flex",alignItems:"center",gap:8}}>{it.name}{it.perishable?<span className="badge2 warn" style={{fontSize:10,minHeight:20}} title="Daily item — leftovers are binned and counted as waste">daily</span>:null}{it.rccId?<span className="badge2 dim" style={{fontSize:10,minHeight:20}} title="Price follows RCC">RCC $</span>:null}</div>{C.itemAllergens(it)&&<div style={{fontSize:13,color:"var(--color-ink-muted-80)"}}><span className="sh t" style={{borderLeftWidth:5,borderRightWidth:5,borderBottomWidth:9,marginRight:5}}></span>{C.itemAllergens(it)}</div>}</td>
         <td style={{...td,color:"var(--color-ink-muted-80)"}}>{it.unit}</td>
         <td style={{...td,color:"var(--color-ink-muted-80)"}}>{(()=>{ const c=ctx.categories.find(c=>c.id===it.cat); return c?<span><span className="sh s" style={{background:c.color||"var(--color-primary)",marginRight:6,width:10,height:10}}></span>{c.label}</span>:<span className="badge2 bad">▲ none</span>; })()}</td>
-        <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,marginRight:6}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}>Edit</button><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={()=>removeItem(it)}>Delete</button></td>
+        <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40,marginRight:6}} onClick={()=>{ setEdit({...it,parLevels:it.parLevels||{}}); setAdding(false); }}>Edit</button><button type="button" className="btn2" style={{padding:"6px 10px",minHeight:40}} disabled={archBusy} onClick={()=>archiveItems([it])} title="Hide from ordering — restore any time from Archived">Archive</button></td>
       </tr>))}</tbody>
     </table></HScroll>
     {total===0 && <Empty>{ctx.items.length?"No items match this search.":"No items."}</Empty>}
@@ -2662,6 +2733,22 @@ function ItemsCard({ctx}){
         </React.Fragment>}
       </div>
     </div>}
+    {showArch && <Modal wide title={"Archived items"+(arch?` (${arch.length})`:"")} onClose={()=>setShowArch(false)} footer={<Btn tone="ghost" onClick={()=>setShowArch(false)}>Close</Btn>}>
+      <div style={{fontSize:13,color:"var(--color-ink-muted-80)",marginBottom:12}}>Not shown in ordering, stock take or the daily summary. Restore puts an item back exactly as it was — par levels, RCC link and all.</div>
+      <input value={archQ} onChange={e=>setArchQ(e.target.value)} placeholder="Search archived items…" style={{...inp,marginBottom:10}} autoComplete="off" />
+      {arch===null ? <div style={{padding:"14px 0",color:"var(--color-ink-muted-48)"}}>Loading…</div>
+       : (()=>{ const q=archQ.trim().toLowerCase(); const rows=arch.filter(i=>!q||String(i.name||"").toLowerCase().includes(q)).slice().sort((a,b)=>String(b.archivedAt||"").localeCompare(String(a.archivedAt||"")));
+          if(!rows.length) return <div style={{padding:"14px 0",color:"var(--color-ink-muted-48)"}}>{arch.length?"No archived item matches.":"Nothing archived yet."}</div>;
+          return <div style={{border:"2px solid var(--color-ink)",background:"#fff"}}>{rows.map(it=>(
+            <div key={it.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--color-hairline)",flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 200px",minWidth:0}}>
+                <div style={{fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}</div>
+                <div style={{fontSize:12,color:"var(--color-ink-muted-48)"}}>{[it.unit,(ctx.categories.find(c=>c.id===it.cat)||{}).label,it.archivedAt?("archived "+String(it.archivedAt).slice(0,10)):""].filter(Boolean).join(" · ")}</div>
+              </div>
+              <button type="button" className="btn2" disabled={archBusy} style={{padding:"6px 10px",minHeight:40}} onClick={()=>restoreItem(it)}>Restore</button>
+              <button type="button" className="btn2" disabled={archBusy} style={{padding:"6px 10px",minHeight:40,borderColor:"var(--color-danger-text)",color:"var(--color-danger-text)"}} onClick={()=>deleteForever(it)}>Delete forever</button>
+            </div>))}</div>; })()}
+    </Modal>}
     {edit && <Modal title={adding?"Add item":"Edit item"} onClose={()=>{setEdit(null);setAdding(false);}} footer={<><Btn tone="ghost" onClick={()=>{setEdit(null);setAdding(false);}}>Cancel</Btn><Btn onClick={()=>commit(edit)}>Save</Btn></>}>
       <div style={{display:"grid",gap:12}}>
         <Field label="Name"><input value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})} style={inp} autoFocus /></Field>
@@ -2725,7 +2812,10 @@ function ItemsCard({ctx}){
           <input type="checkbox" checked={!!edit.perishable} onChange={e=>setEdit({...edit,perishable:e.target.checked})} style={{cursor:"pointer",width:16,height:16,marginTop:1}} />
           <span><span style={{fontSize:13,fontWeight:700,color:"var(--color-ink)"}}>Daily use item (dispose)</span><br /><span style={{fontSize:11.5,color:"var(--color-ink-muted-48)"}}>Binned if unsold — danish, almond croissant. Leftovers counted at ordering are logged as waste in Trends. Leave off for anything that keeps.</span></span>
         </label>
-        <Field label="Allergens (comma separated)"><input value={edit.allergens||""} onChange={e=>setEdit({...edit,allergens:e.target.value})} style={inp} placeholder={C.ALLERGEN_OPTIONS.slice(0,4).join(", ")} /></Field>
+        {(()=>{ const ra=C.rccAllergens(edit);
+          if(ra!=null) return <Field label="Allergens (auto from RCC)"><input value={ra} readOnly title="Comes from the linked RCC card — change it in RCC, then press Refresh" style={{...inp,background:"var(--color-canvas-parchment)",color:"var(--color-ink-muted-80)"}} /></Field>;
+          return <Field label="Allergens (comma separated)"><input value={edit.allergens||""} onChange={e=>setEdit({...edit,allergens:e.target.value})} style={inp} placeholder={C.ALLERGEN_OPTIONS.slice(0,4).join(", ")} />
+            {edit.rccId?<span style={{fontSize:11.5,fontWeight:500,textTransform:"none",letterSpacing:0,color:"#b45309"}}>RCC has no allergen info on the linked card yet — add it in RCC, then press ↻ Refresh. Until then this box is used.</span>:null}</Field>; })()}
         <Field label={'Group (combines totals — e.g. "Croissant dough")'}><input value={edit.groupLabel||""} onChange={e=>setEdit({...edit,groupLabel:e.target.value})} style={inp} list="ord-group-options" placeholder="Optional — items sharing this label are summed in Today" /><datalist id="ord-group-options">{Array.from(new Set((ctx.items||[]).map(i=>(i.groupLabel||"").trim()).filter(Boolean))).map(g=><option key={g} value={g} />)}</datalist></Field>
       </div>
     </Modal>}
@@ -3154,7 +3244,7 @@ function AiWidget({ctx}){
   const buildContext=()=>{
     const L=[]; L.push(`You are the assistant for The Hideout Specialty Coffee inter-branch ordering app. Answer briefly and practically for cafe staff. Today: ${C.localISO(new Date())} (${C.DAY_LABELS[C.dayKeyForDate(C.localISO(new Date()))]}). Department: ${ctx.department}.`);
     L.push("Branches: "+ctx.locations.map(l=>l.name).join(", ")+".");
-    L.push("Items: "+(ctx.items||[]).map(i=>i.name+(i.allergens?` (allergens: ${i.allergens})`:"")).slice(0,120).join("; ")+".");
+    L.push("Items: "+(ctx.items||[]).map(i=>i.name+(C.itemAllergens(i)?` (allergens: ${C.itemAllergens(i)})`:"")).slice(0,120).join("; ")+".");
     const dp=ctx.deliveryOverrides[C.localISO(new Date())]||ctx.weeklyDeliveryInfo[C.dayKeyForDate(C.localISO(new Date()))]; if(dp) L.push("Delivery today: "+dp+".");
     if((ctx.qcNotes||[]).length){ L.push("\nQuality-control knowledge:"); ctx.qcNotes.forEach(n=>{ if(n.question) L.push(`Q: ${n.question}\nA: ${n.answer}`); }); }
     return L.join("\n");
@@ -3502,7 +3592,7 @@ function App(){
 
   const ctx={
     ...core, department, branch,
-    saveItems:(next)=>{ setCore(c=>({...c,items:next})); C.kvSetChunked(C.deptPrefix()+"items",next,next.length===0).then(()=>setSync({ok:true,err:""})).catch(e=>{ toast("Save failed: "+e.message,true); setSync({ok:false,err:e.message}); }); },
+    saveItems:(next)=>{ setCore(c=>({...c,items:next})); const p=C.kvSetChunked(C.deptPrefix()+"items",next,next.length===0); p.then(()=>setSync({ok:true,err:""})).catch(e=>{ toast("Save failed: "+e.message,true); setSync({ok:false,err:e.message}); }); return p; },
     saveCategories:(next)=>persist(C.deptPrefix()+"categories",JSON.stringify(next),"categories",next),
     saveLocations:(next)=>{ setLocations(next); persist("locations",JSON.stringify(next),"locations",next); },
     saveSuppliers:(next)=>persist("suppliers",JSON.stringify(next),"suppliers",next),
@@ -3529,7 +3619,7 @@ function App(){
 
   const refresh=()=>{ C.clearCache(); loadCore(department).then(()=>toast("Refreshed ✓")); };
 
-  window.__ORD_CFG={locations:locations, items:core.items, qcNotes:core.qcNotes, weeklyDeliveryInfo:core.weeklyDeliveryInfo, deliveryOverrides:core.deliveryOverrides, department:department};
+  window.__ORD_CFG={locations:locations, items:(core.items||[]).map(i=>i&&i.rccId?{...i,allergens:C.itemAllergens(i)}:i), qcNotes:core.qcNotes, weeklyDeliveryInfo:core.weeklyDeliveryInfo, deliveryOverrides:core.deliveryOverrides, department:department};
   return <div key={tick}>
     {/* header v2 (2026-09-09): app switcher · logo · branch+department button · sync · More ▾; tabs on
         desktop, a fixed bottom nav (Today · Order · Stock · More) on phones. Board/Refresh/Period/Trends/

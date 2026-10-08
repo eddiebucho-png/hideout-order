@@ -1661,16 +1661,16 @@ function Btn({children,onClick,tone,size,disabled,style,type}){
   return <button type={type||"button"} disabled={disabled} onClick={onClick} className={"vbtn-card"+(disabled?"":" lift")} style={{...base,...(sizes[size]||sizes.md),...(tones[tone]||tones.primary),...style}}>{children}</button>;
 }
 function Card({children,style,className,onClick}){ return <div onClick={onClick} className={cx("card",className)} style={{padding:18,...style}}>{children}</div>; }
-function Field({label,children,style}){ return <label style={{display:"flex",flexDirection:"column",gap:6,fontSize:12,color:"var(--color-ink-muted-80)",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",...style}}>{label}{children}</label>; }
+function Field({label,children,style}){ return <label style={{display:"flex",flexDirection:"column",gap:6,minWidth:0,fontSize:12,color:"var(--color-ink-muted-80)",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",...style}}>{label}{children}</label>; }
 function Modal({title,children,onClose,wide,footer}){
   return ReactDOM.createPortal(
     <div className="fixed inset-0 flex items-start justify-center p-4 overflow-auto" style={{background:"rgba(20,12,6,.44)",zIndex:120}}>
-      <div className="modal-pop" onClick={e=>e.stopPropagation()} style={{background:"#f3f1ec",border:"3px solid var(--color-ink)",boxShadow:"var(--shadow-hard)",width:"100%",maxWidth:wide?860:560,marginTop:28,marginBottom:28}}>
+      <div className="modal-pop" onClick={e=>e.stopPropagation()} style={{background:"#f3f1ec",border:"3px solid var(--color-ink)",boxShadow:"var(--shadow-hard)",width:"100%",minWidth:0,maxWidth:wide?860:560,marginTop:28,marginBottom:28}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"3px solid var(--color-ink)",background:"#fff"}}>
           <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:20,color:"var(--color-ink)"}}>{title}</div>
           <button onClick={onClose} aria-label="Close" style={{background:"#fff",border:"3px solid var(--color-ink)",width:44,height:44,fontSize:20,fontWeight:700,lineHeight:1,color:"var(--color-ink)",cursor:"pointer"}}>✕</button>
         </div>
-        <div style={{padding:20}}>{children}</div>
+        <div style={{padding:20,minWidth:0}}>{children}</div>
         {footer && <div style={{padding:"14px 18px",borderTop:"3px solid var(--color-ink)",display:"flex",justifyContent:"flex-end",gap:10}}>{footer}</div>}
       </div>
     </div>, document.body);
@@ -2542,6 +2542,7 @@ function ItemsCard({ctx}){
   const [sel,setSel]=useState({});                     // {itemId:true} — bulk delete
   const [edit,setEdit]=useState(null); const [adding,setAdding]=useState(false);
   const [rccQ,setRccQ]=useState("");                 // RCC link search text
+  const [rccBusy,setRccBusy]=useState(false);        // refresh in flight
 
   const catLabel=id=>{ const c=ctx.categories.find(c=>c.id===id); return c?c.label:"—"; };
   const catRank=id=>{ const i=ctx.categories.findIndex(c=>c.id===id); return i<0?9999:i; };  // uncategorised sinks to the bottom
@@ -2696,15 +2697,25 @@ function ItemsCard({ctx}){
                 circular sub-recipe). The number below is therefore too LOW, never too high. */}
             {g&&g.b?<div style={{fontSize:11.5,color:"#b45309"}}>RCC can’t cost every line of this recipe yet, so this price is too low. Fix the recipe in RCC — the number here follows it.</div>:null}
           </div>; })() : <React.Fragment>
+            <div style={{display:"flex",gap:8,alignItems:"stretch",minWidth:0}}>
             <input value={rccQ} onChange={e=>setRccQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"&&rccHits.length){ e.preventDefault(); linkRcc(rccHits[0]); } if(e.key==="Escape") setRccQ(""); }}
-                   placeholder={rccOpts.length?("Search "+rccOpts.length+" RCC ingredients & recipes…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} style={inp} autoComplete="off" />
-            {rccQ.trim()!=="" && <div style={{border:"1px solid var(--color-hairline-alpha)",borderRadius:10,background:"#fff",marginTop:6,maxHeight:300,overflowY:"auto"}}>
+                   placeholder={rccOpts.length?("Search "+rccOpts.length+" RCC ingredients & recipes…"):"Price list not loaded yet — run buildRccPriceMap in the backend first"} style={{...inp,flex:"1 1 auto",minWidth:0}} autoComplete="off" />
+            <button type="button" disabled={rccBusy} title="Pull what RCC has right now — use this straight after making a new ingredient or recipe there"
+              onClick={async()=>{ setRccBusy(true);
+                try{ const n=await ctx.refreshRccPrices(); toast("RCC list refreshed \u2014 "+n+" ingredients & recipes"); }
+                catch(e){ toast("Could not refresh from RCC: "+((e&&e.message)||e), true); }
+                setRccBusy(false); }}
+              style={{flex:"0 0 auto",background:"#fff",border:"3px solid var(--color-ink)",padding:"0 12px",fontFamily:"inherit",fontSize:13,fontWeight:700,color:"var(--color-ink)",cursor:rccBusy?"wait":"pointer",opacity:rccBusy?.5:1}}>
+              {rccBusy?"\u2026":"\u21bb Refresh"}
+            </button>
+            </div>
+            {rccQ.trim()!=="" && <div style={{border:"1px solid var(--color-hairline-alpha)",borderRadius:10,background:"#fff",marginTop:6,maxHeight:300,overflowY:"auto",width:"100%",minWidth:0}}>
               {rccHits.length===0 ? <div style={{padding:"10px 12px",fontSize:13,color:"var(--color-ink-muted-48)"}}>No RCC ingredient or recipe matches “{rccQ}”.</div>
               : rccHits.map(g=>(<button key={g.i} type="button" onClick={()=>linkRcc(g)} className="row-live"
                   style={{display:"flex",width:"100%",alignItems:"center",gap:10,padding:"9px 12px",background:"none",border:"none",borderBottom:"1px solid var(--color-hairline-alpha)",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                   {g.k==="r"?<span style={{fontSize:9.5,fontWeight:700,color:"var(--color-primary)",border:"1px solid var(--color-primary)",borderRadius:4,padding:"1px 4px",flex:"0 0 auto"}}>RECIPE</span>:null}
                   <span style={{flex:"1 1 auto",minWidth:0,fontSize:14,fontWeight:600,color:"var(--color-ink)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.n}</span>
-                  <span style={{flex:"0 0 auto",fontSize:12,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap"}}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}{g.b?<span style={{color:"#b45309"}}> · cost incomplete</span>:null}</span>
+                  <span style={{flex:"0 1 auto",minWidth:0,fontSize:12,color:"var(--color-ink-muted-48)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{"$"+g.p+(g.q?(" / "+g.q+(g.u||"")):"")}{g.b?<span style={{color:"#b45309"}}> · cost incomplete</span>:null}</span>
                 </button>))}
               {rccHits.length===12 && <div style={{padding:"6px 12px",fontSize:11,color:"var(--color-ink-muted-48)"}}>Showing the 12 best matches — keep typing to narrow.</div>}
             </div>}
@@ -3498,6 +3509,21 @@ function App(){
     saveWeeklyDeliveryInfo:(next)=>persist("weeklyDeliveryInfo",JSON.stringify(next),"weeklyDeliveryInfo",next),
     saveDeliveryOverrides:(next)=>persist("deliveryOverrides",JSON.stringify(next),"deliveryOverrides",next),
     saveQcNotes:(next)=>persist("qcNotes",JSON.stringify(next),"qcNotes",next),
+    /* "바로 rcc에서 ingredients 카드나 recipe 카드를 만들고 바로 ios items 에서 연결" (2026-10-09).
+       rcc_prices is an hourly bake; this asks the backend to re-bake it now and re-reads it
+       past the kv cache. One Firestore read in the backend, so it is safe to press. */
+    refreshRccPrices:async ()=>{
+      if(C.cfg.backendUrl){
+        const res=await fetch(C.withAuth(C.cfg.backendUrl+"?action=rccPriceRefresh"),{cache:"no-store"});
+        const j=await res.json().catch(()=>null);
+        if(j&&j.error) throw new Error(j.error);
+      }
+      const raw=await C.kvGetFresh("rcc_prices");
+      let list=[]; try{ list=JSON.parse(raw||"[]"); }catch(e){ list=[]; }
+      C.cfg.rccPriceMap={}; list.forEach(g=>{ C.cfg.rccPriceMap[g.i]=g; });
+      setCore(c=>({...c, rccPrices:list}));
+      return list.length;
+    },
     saveDailySummary:async (d)=>{ try{ await C.kvSet("dailySummaryRecipient",d.recipient); await C.kvSet("dailySummarySendTime",d.sendTime); await C.kvSet("dailySummaryChefEnabled",d.chef?"true":"false"); await C.kvSet("dailySummaryBaristaEnabled",d.barista?"true":"false"); await C.kvSet("senderName",d.sender); await C.kvSet("fromDisplayName",d.from); setCore(c=>({...c,dailySummaryRecipient:d.recipient,dailySummarySendTime:d.sendTime,dailySummaryChefEnabled:d.chef,dailySummaryBaristaEnabled:d.barista,senderName:d.sender,fromDisplayName:d.from})); }catch(e){ toast("Save failed: "+e.message,true); } },
   };
 

@@ -8978,10 +8978,10 @@ function VACreate({kind, venues, defVenue, me, onClose, onCreate}){
 function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
   const ref=col.doc("venue_audit_"+id);
   const [a,setA]=React.useState(null); const [err,setErr]=React.useState(""); const [busy,setBusy]=React.useState("");
-  const [shut,setShut]=React.useState({}); const [lb,setLb]=React.useState(null); const [signing,setSigning]=React.useState(false); const [adding,setAdding]=React.useState(null);
+  const [shut,setShut]=React.useState({}); const [lb,setLb]=React.useState(null); const [signing,setSigning]=React.useState(false); const [adding,setAdding]=React.useState(null); const [editSign,setEditSign]=React.useState(null);
   const who=vaWho(me); const FV=vaFV();
   React.useEffect(()=>ref.onSnapshot(s=>{ if(!s.exists){ setErr("This audit was deleted."); setA(null); return; } setA(s.data()); setErr(""); }, e=>setErr("Could not load — "+(e.message||e))),[id]);
-  React.useEffect(()=>{ const h=e=>{ if(e.key==="Escape" && !signing && !adding && !lb) onClose(); }; window.addEventListener("keydown",h); const o=document.body.style.overflow; document.body.style.overflow="hidden"; return ()=>{ window.removeEventListener("keydown",h); document.body.style.overflow=o; }; },[signing,adding,lb]);
+  React.useEffect(()=>{ const h=e=>{ if(e.key==="Escape" && !signing && !adding && !lb && !editSign) onClose(); }; window.addEventListener("keydown",h); const o=document.body.style.overflow; document.body.style.overflow="hidden"; return ()=>{ window.removeEventListener("keydown",h); document.body.style.overflow=o; }; },[signing,adding,lb,editSign]);
   /* keep the list row in step with the doc — idempotent, so several open tablets settle on the same value */
   React.useEffect(()=>{ if(!a) return; const s=vaSummary(a); const cur=indexEntry||{}; const keys=Object.keys(s).filter(k=>k!=="updatedAt");
     if(keys.some(k=>JSON.stringify(s[k])!==JSON.stringify(cur[k]))) col.doc("venue_audit_index").set({audits:{[id]:s}},{merge:true}).catch(()=>{}); },[a]);
@@ -9012,6 +9012,11 @@ function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
   const addFinding=(secId,text,critical)=>run("Add finding", ()=>{ const xid=vaId("x"); return up({["extra."+xid]:{id:xid, sec:secId, text, critical:!!critical, by:who.email, at:Date.now()}, [itemPath(xid,"result")]:"fix", [itemPath(xid,"scoredBy")]:{...who, at:Date.now()}}); });
   const delFinding=(x)=>{ if(!window.confirm("Remove this finding?")) return; run("Remove finding", ()=>up({["extra."+x.id]:FV.delete(), ["items."+x.id]:FV.delete()})); };
   const sign=(role,note,png)=>run("Sign", ()=>up({signoffs:FV.arrayUnion({id:vaId("sg"), role, note:(note||"").trim(), sig:png, email:who.email, name:who.name, at:Date.now()})})).then(()=>setSigning(false));
+  /* SIGN-EDIT 2026-10-16 (Ju An: "사인하는 사람을 잘못 선택했는데 변경을 못해") — fix the name / role / note on a signature.
+     The drawn signature, login email and time stay; the edit is stamped so the record shows who changed it. */
+  const saveSign=(s0,patch)=>run("Edit signature", async()=>{ const snap=await ref.get(); const list=((snap.exists&&snap.data().signoffs)||[]);
+    if(!list.some(x=>x.id===s0.id)) throw new Error("signature no longer exists");
+    await up({signoffs:list.map(x=>x.id!==s0.id?x:{...x, ...patch, origName:x.origName||x.name, origRole:x.origRole||x.role, editedBy:{...who, at:Date.now()}})}); }).then(()=>setEditSign(null));
   const delSign=(s)=>{ if(!window.confirm("Remove this signature?")) return; run("Remove signature", ()=>up({signoffs:FV.arrayRemove(s)})); };
   const setStatus=(st)=>run(st==="closed"?"Close audit":"Reopen", ()=>up({status:st, closedAt:st==="closed"?Date.now():null, closedBy:st==="closed"?who:null}));
   const delAudit=()=>{ if(!window.confirm("Delete this whole audit? Photos stay in Cloudinary; scores, comments and signatures are removed.")) return;
@@ -9083,7 +9088,10 @@ function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
           {(a.signoffs||[]).map(s=><div key={s.id} className="s">{s.sig && <img src={s.sig} alt={"Signature of "+s.name} />}
             <div><b>{s.name}</b> <span className="pill">{(VA_SIGN_ROLES.find(r=>r.id===s.role)||{}).label||s.role}</span></div>
             <div className="who">{s.email} · {vaFmtTime(s.at)}</div>{s.note && <div style={{fontSize:13,marginTop:4}}>{s.note}</div>}
-            {(isMgr||s.email===who.email) && !closed && <button type="button" className="btn sm noprint" style={{marginTop:6}} onClick={()=>delSign(s)}>Remove</button>}</div>)}
+            {s.editedBy && <div className="who" style={{marginTop:3}}>edited by {s.editedBy.name} · {vaFmtTime(s.editedBy.at)}{s.origName&&s.origName!==s.name?" · was "+s.origName:""}</div>}
+            {(isMgr||(s.email===who.email&&!closed)) && <div className="noprint" style={{display:"flex",gap:6,marginTop:6}}>
+              <button type="button" className="btn sm" onClick={()=>setEditSign(s)}>Edit</button>
+              {!closed && <button type="button" className="btn sm" onClick={()=>delSign(s)}>Remove</button>}</div>}</div>)}
         </div>
         {!closed && <div className="it noprint"><button type="button" className="btn k" onClick={()=>setSigning(true)}>Sign this audit</button></div>}
       </div>
@@ -9094,6 +9102,7 @@ function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
         {isMgr && <button type="button" className="btn" style={{marginLeft:"auto"}} onClick={delAudit}>Delete audit</button>}
       </div>
     </div>
+    {editSign && <VASignEdit s={editSign} isMgr={isMgr} onClose={()=>setEditSign(null)} onSave={p=>saveSign(editSign,p)} />}
     {signing && <VASignPad me={me} isMgr={isMgr} existing={a.signoffs||[]} onClose={()=>setSigning(false)} onSign={sign} />}
     {adding && <VAAddFinding title={(secs.find(s=>s.id===adding)||{}).title} onClose={()=>setAdding(null)} onAdd={(t,c)=>{ addFinding(adding,t,c); setAdding(null); }} />}
     {lb && <div className="va-lb" onClick={()=>setLb(null)}><img src={lb} alt="Audit photo" /></div>}
@@ -9119,6 +9128,19 @@ function VAAddFinding({title, onClose, onAdd}){
     <label className="row2"><span>What did you find?</span><textarea value={t} onChange={e=>setT(e.target.value)} placeholder="e.g. Almond slices stored at room temperature, unlabelled" autoFocus /></label>
     <label style={{display:"flex",gap:8,alignItems:"center",margin:"0 0 12px",fontSize:14}}><input type="checkbox" checked={c} onChange={e=>setC(e.target.checked)} /> Critical (food safety risk)</label>
     <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn p" disabled={!t.trim()} onClick={()=>onAdd(t.trim(),c)}>Add as FIX</button></div>
+  </VAModal>;
+}
+function VASignEdit({s, isMgr, onClose, onSave}){
+  const [name,setName]=React.useState(s.name||""); const [role,setRole]=React.useState(s.role||"lead"); const [note,setNote]=React.useState(s.note||""); const [busy,setBusy]=React.useState(false);
+  const roles=VA_SIGN_ROLES.filter(r=>isMgr||!r.mgrOnly||r.id===s.role);
+  return <VAModal title="Edit signature" onClose={onClose}>
+    {s.sig && <img src={s.sig} alt="Signature" style={{width:"100%",height:90,objectFit:"contain",border:"2px solid var(--ink)",background:"#fafafa",margin:"0 0 12px"}} />}
+    <label className="row2"><span>Signed by (name)</span><input type="text" value={name} onChange={e=>setName(e.target.value)} autoFocus /></label>
+    <label className="row2"><span>Role</span><select value={role} onChange={e=>setRole(e.target.value)}>{roles.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
+    <label className="row2"><span>Note (optional)</span><input type="text" value={note} onChange={e=>setNote(e.target.value)} /></label>
+    <div className="sub" style={{margin:"0 0 12px"}}>Signed on {s.email}'s login · {vaFmtTime(s.at)}. The drawn signature stays; this edit is recorded.</div>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button type="button" className="btn" onClick={onClose}>Cancel</button>
+      <button type="button" className="btn p" disabled={!name.trim()||busy} onClick={async()=>{ setBusy(true); await onSave({name:name.trim(), role, note:note.trim()}); setBusy(false); }}>{busy?"Saving…":"Save"}</button></div>
   </VAModal>;
 }
 function VASignPad({me, isMgr, existing, onClose, onSign}){

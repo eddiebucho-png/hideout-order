@@ -8788,6 +8788,8 @@ const VA_CSS = `
   .va-modal .row2{display:grid;gap:6px;margin:0 0 12px} .va-modal .row2>span{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
   .va-lb{position:fixed;inset:0;z-index:180;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:zoom-out}
   .va-lb img{max-width:96vw;max-height:92vh}
+  /* FAB-HIDE 2026-10-16 (Ju An: "엽서랑 챗봇 버튼 겹치는 것도 고쳐줘") — postcards (#pc-fab) and assistant (#hb-fab) float at z 99998+ over the audit popup; hide them only while it is open */
+  body:has(.va-fs) #pc-fab, body:has(.va-fs) #hb-fab{display:none!important}
   .va .kinds{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;max-width:820px;margin:8px auto}
   .va .kind{background:#fff;border:3px solid var(--ink);padding:22px 20px;text-align:left;font:inherit;color:var(--ink);cursor:pointer;display:grid;gap:8px}
   .va .kind:hover,.va .kind:focus-visible{background:#fbf6dc}

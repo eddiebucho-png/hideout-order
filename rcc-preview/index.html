@@ -8824,7 +8824,7 @@ function vaSummary(a){
     s.result=crit>0?"fail":uns>0||score==null?"":(score>=K.passMark?"pass":"fail");
     const secFix={}; const actions=[];
     vaNumbered(a).forEach(it=>{ const r=(a.items||{})[it.id]||{}; if(r.result!=="fix") return; secFix[it.sec]=(secFix[it.sec]||0)+1;
-      actions.push({ code:it.code, text:it.text, critical:!!it.critical, owner:r.owner||"", due:r.due||"", found:(r.scoredBy&&r.scoredBy.at)||0, done:!!r.done, checked:!!r.checked }); });
+      actions.push({ code:it.code, text:it.text, critical:!!it.critical, owner:r.owner||"", due:r.due||"", found:(r.scoredBy&&r.scoredBy.at)||0, done:!!r.done, checked:!!r.checked, proof:(r.proof||[]).length }); });
     s.secFix=secFix; s.actions=actions;
   }
   return s;
@@ -8959,7 +8959,7 @@ function VAActionLog({rows, bName, onOpen}){
         <td>{x.found?new Date(x.found).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):vaFmtDate(x.date)}</td><td>{x.venue}</td><td><b>{x.code}</b></td>
         <td>{x.text}{x.critical && <span className="pill bad" style={{marginLeft:6}}>Food safety</span>}</td><td>{x.owner||<span className="sub">—</span>}</td>
         <td>{x.due?<span style={{color:over?"var(--r)":undefined,fontWeight:over?800:500}}>{vaFmtDate(x.due)}</span>:<span className="sub">—</span>}</td>
-        <td>{x.checked?<span className="pill ok">Checked</span>:x.done?<span className="pill warn">Done</span>:<span className="sub">—</span>}</td></tr>; })}
+        <td>{x.checked?<span className="pill ok">Checked</span>:x.done?<span className="pill warn">Done</span>:<span className="sub">—</span>}{x.proof>0 && <div className="sub">{x.proof} proof photo{x.proof===1?"":"s"}</div>}</td></tr>; })}
     </tbody></table></div></>;
 }
 function VACreate({kind, venues, defVenue, me, onClose, onCreate}){
@@ -9001,11 +9001,15 @@ function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
     return run("Save", ()=>up(p)); };
   const setField=(iid,f,v)=>run("Save", ()=>up({[itemPath(iid,f)]:v}));
   const toggleStamp=(iid,f,on)=>run("Save", ()=>up({[itemPath(iid,f)]: on?{...who, at:Date.now()}:FV.delete()}));
-  const addPhoto=(iid)=>async(e)=>{ const files=[...(e.target.files||[])]; e.target.value=""; if(!files.length) return;
-    await run("Photo upload", async()=>{ for(const f of files){ const blob=await vaDownscale(f,1600); const r=await cloudinaryUpload(blob,"venue_audit");
+  /* PROOF-PHOTO 2026-10-16 (Ju An: "직원이 완료 시 완료했단 증거로 사진") — field "proof" on a FIX line = after-photo of the fix;
+     the first proof photo also stamps DONE (by the uploader) if nobody has yet */
+  const addPhoto=(iid,field)=>async(e)=>{ const fld=field||"photos"; const files=[...(e.target.files||[])]; e.target.value=""; if(!files.length) return;
+    await run(fld==="proof"?"Proof upload":"Photo upload", async()=>{ for(const f of files){ const blob=await vaDownscale(f,1600); const r=await cloudinaryUpload(blob,"venue_audit");
       const ph={id:vaId("ph"), url:r.url, publicId:r.publicId||"", by:who.email, name:who.name, at:Date.now()};
-      await up(iid?{[itemPath(iid,"photos")]:FV.arrayUnion(ph)}:{photos:FV.arrayUnion(ph)}); } }); };
-  const delPhoto=(iid,ph)=>{ if(!window.confirm("Remove this photo?")) return; run("Remove photo", ()=>up(iid?{[itemPath(iid,"photos")]:FV.arrayRemove(ph)}:{photos:FV.arrayRemove(ph)})); };
+      const patch=iid?{[itemPath(iid,fld)]:FV.arrayUnion(ph)}:{photos:FV.arrayUnion(ph)};
+      if(iid && fld==="proof" && !(((a.items||{})[iid]||{}).done)) patch[itemPath(iid,"done")]={...who, at:Date.now()};
+      await up(patch); } }); };
+  const delPhoto=(iid,ph,field)=>{ const fld=field||"photos"; if(!window.confirm("Remove this photo?")) return; run("Remove photo", ()=>up(iid?{[itemPath(iid,fld)]:FV.arrayRemove(ph)}:{photos:FV.arrayRemove(ph)})); };
   const addComment=(iid,text)=>{ const t=(text||"").trim(); if(!t) return Promise.resolve(); const c={id:vaId("cm"), text:t, by:who.email, name:who.name, at:Date.now()};
     return run("Comment", ()=>up(iid?{[itemPath(iid,"comments")]:FV.arrayUnion(c)}:{comments:FV.arrayUnion(c)})); };
   const delComment=(iid,c)=>{ if(!window.confirm("Delete this comment?")) return; run("Delete comment", ()=>up(iid?{[itemPath(iid,"comments")]:FV.arrayRemove(c)}:{comments:FV.arrayRemove(c)})); };
@@ -9042,6 +9046,8 @@ function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
           <button type="button" className="tick" aria-pressed={!!r.checked} disabled={!isMgr||closed||!r.done} title={!isMgr?"A manager checks it on the floor":!r.done?"Mark DONE first":""} onClick={()=>toggleStamp(it.id,"checked",!r.checked)}>{r.checked?"✓ CHECKED":"CHECKED"}</button>
           {r.checked && <span className="who">{r.checked.name} · {vaFmtTime(r.checked.at)}</span>}
         </div>
+        <div className="f"><span className="sub" style={{fontWeight:800}}>PROOF OF FIX</span><span className="sub">{(r.proof||[]).length?(r.proof||[]).length+" photo"+((r.proof||[]).length===1?"":"s"):"photo of the fixed item — uploading one marks it DONE"}</span></div>
+        <VAPhotos list={r.proof} closed={closed} onAdd={addPhoto(it.id,"proof")} onDel={ph=>delPhoto(it.id,ph,"proof")} canDel={ph=>isMgr||mine(ph)} onOpen={setLb} />
       </div>}
       <VAPhotos list={r.photos} closed={closed} onAdd={addPhoto(it.id)} onDel={ph=>delPhoto(it.id,ph)} canDel={ph=>isMgr||mine(ph)} onOpen={setLb} />
       <VAComments list={r.comments} closed={closed} onAdd={t=>addComment(it.id,t)} onDel={c=>delComment(it.id,c)} canDel={c=>isMgr||mine(c)} />
@@ -9070,7 +9076,7 @@ function VADetail({id, col, me, isMgr, bName, indexEntry, onClose}){
         <div style={{overflowX:"auto"}}><table><thead><tr><th>#</th><th>Action</th><th>Owner</th><th>Due</th><th>Done</th><th>Checked</th></tr></thead><tbody>
           {fixes.map((it,i)=>{ const r=(a.items||{})[it.id]||{}; return <tr key={it.id}><td>{it.code||i+1}</td><td>{it.text}{it.critical && <span className="pill bad" style={{marginLeft:6}}>{K.passMark?"Food safety":"Critical"}</span>}</td><td>{r.owner||<span className="sub">—</span>}</td>
             <td>{r.due?<span style={{color:(!r.checked&&r.due<vaToday())?"var(--r)":undefined,fontWeight:(!r.checked&&r.due<vaToday())?800:500}}>{vaFmtDate(r.due)}</span>:<span className="sub">—</span>}</td>
-            <td>{r.done?"✓":""}</td><td>{r.checked?"✓":""}</td></tr>; })}
+            <td>{r.done?"✓":""}{(r.proof||[]).length>0 && <span className="sub"> · {(r.proof||[]).length} photo{(r.proof||[]).length===1?"":"s"}</span>}</td><td>{r.checked?"✓":""}</td></tr>; })}
         </tbody></table></div></div>}
       {secs.map((s,si)=>{ const its=(s.items||[]).map(x=>({...x, sec:s.id})).concat(extras.filter(x=>x.sec===s.id).map(x=>({...x, custom:true})));
         const done=its.filter(it=>((a.items||{})[it.id]||{}).result).length; const f=its.filter(it=>((a.items||{})[it.id]||{}).result==="fix").length;

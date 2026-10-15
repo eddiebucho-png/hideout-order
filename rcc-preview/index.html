@@ -9112,7 +9112,9 @@ function VAPhotos({list, closed, onAdd, onDel, canDel, onOpen}){
   const ph=list||[];
   return <div className="ph">
     {ph.map(p=><div key={p.id} className="p" title={(p.name||"")+" · "+vaFmtTime(p.at)}><img src={p.url.replace("/upload/","/upload/c_fill,w_200,h_200,q_auto/")} alt="Audit photo" loading="lazy" onClick={()=>onOpen(p.url)} />{!closed && canDel(p) && <button type="button" aria-label="Remove photo" onClick={()=>onDel(p)}>×</button>}</div>)}
-    {!closed && <label>+ Photo<input type="file" accept="image/*" capture="environment" multiple onChange={onAdd} /></label>}
+    {/* PHOTO-PICK 2026-10-16 (Ju An: "폰에서 바로 업로드하는 건 없어") — capture forces the camera, so the gallery gets its own button */}
+    {!closed && <label>+ Camera<input type="file" accept="image/*" capture="environment" multiple onChange={onAdd} /></label>}
+    {!closed && <label>+ Upload<input type="file" accept="image/*" multiple onChange={onAdd} /></label>}
   </div>;
 }
 function VAComments({list, closed, onAdd, onDel, canDel}){
